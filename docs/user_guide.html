@@ -1,0 +1,746 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>RNA_lexis User Guide</title>
+<style>
+body{font-family:sans-serif;max-width:960px;margin:2em auto;padding:0 1.5em;line-height:1.6;color:#222;}
+h1,h2,h3,h4{color:#1a4a7a;}
+h2{border-bottom:1px solid #ccc;padding-bottom:0.2em;}
+table{border-collapse:collapse;margin:1em 0;width:100%;}
+th,td{border:1px solid #bbb;padding:6px 12px;text-align:left;}
+th{background:#f0f4f8;}
+code{background:#f4f4f4;padding:2px 5px;border-radius:3px;font-size:0.92em;}
+pre{background:#f4f4f4;padding:1em;border-radius:5px;overflow-x:auto;}
+pre code{background:none;padding:0;}
+hr{border:none;border-top:1px solid #ddd;margin:2em 0;}
+p img{display:block;margin:0 auto;}
+blockquote{border-left:4px solid #ccc;margin:1em 0;padding:0.5em 1em;color:#555;}
+</style></head><body><h1>RNA_lexis -- User Guide</h1>
+<p style="text-align:center"><img src="RNAlexisLogo.png" width="200" alt="RNA_lexis Logo"/></p>
+
+<p><strong>Authors:</strong> Haim Bar (<a href="mailto:haim.bar@uconn.edu">haim.bar@uconn.edu</a>) and Assaf Bester (<a href="mailto:bestera@technion.ac.il">bestera@technion.ac.il</a>)</p>
+<hr />
+<h2>Overview</h2>
+<p><strong>RNA_lexis</strong> is an interactive command-line tool for exploring RNA (or DNA) sequence data. Starting from a nucleotide sequence, it automatically identifies repeating subsequences called <strong>xmotifs</strong> and extracts their shorter conserved cores. From there you can visualize the neighbourhood of any core, study k-mer statistics, generate sequence logos, inspect coverage, and compare subsequences -- all from a hierarchical menu driven by numbered choices.</p>
+<hr />
+<h2>Launching the Application</h2>
+<pre><code class="language-bash">rna_lexis           # after pip install (console script)
+python -m rna_lexis # without installing
+</code></pre>
+<p>At startup the tool checks the <strong>current working directory</strong> for saved session files (<code>.json</code>):</p>
+<ul>
+<li>If <strong>exactly one</strong> valid session file is found, it is loaded automatically — no prompt is shown.</li>
+<li>If <strong>more than one</strong> valid session file is found, a numbered menu lets you choose which one to load.</li>
+<li>If <strong>no</strong> valid session file is found in the current directory, you will be prompted to choose a <strong>data directory</strong> via a folder-browser dialog. The same auto-detection is then applied to the chosen directory.</li>
+</ul>
+<p>The data directory is the folder where session files and output files are saved. You can change it later under <em>Change setting</em> (see below).</p>
+<p>It is recommended that each sequence analysed be stored in its own directory, since output files are stored in the same directory as the sequence, as well as the saved-session JSON file.</p>
+<hr />
+<h2>Choosing Input</h2>
+<p>Every session starts by loading a sequence. Four input methods are available:</p>
+<pre><code>--- Choose Input ---
+1. Load from local file
+2. Fetch by Ensembl transcript ID (ENST)
+3. Paste sequence
+4. Python prompt
+</code></pre>
+<h3>1 - Load from local file</h3>
+<p>A file-selector dialog opens. Select any plain-text file containing a nucleotide sequence (letters only; spaces and punctuation are stripped automatically). If you select a <strong><code>.json</code></strong> session file that was saved by a previous run, that session is restored instantly -- no re-processing required.</p>
+<h3>2 - Fetch by Ensembl transcript ID</h3>
+<p>Enter an Ensembl transcript identifier (e.g. <code>ENST00000456328</code> or <code>ENST00000456328.2</code>). The tool:</p>
+<ol>
+<li>Checks whether a cached session for that transcript already exists in your data directory; if so, loads it immediately.</li>
+<li>Otherwise, queries the Ensembl REST API for the cDNA sequence, displays the transcript name and length, and asks you to choose a folder in which to save the data.</li>
+</ol>
+<p>The fetched sequence is stored in a JSON file in the chosen directory and the file name contains the transcript number and name (e.g., ENST00000419829_XIST-204.json).</p>
+<blockquote>
+<p><strong>Note:</strong> an active internet connection is required for live fetching.</p>
+</blockquote>
+<h3>3 - Paste sequence</h3>
+<p>Paste one or more lines of sequence text directly into the terminal and press <strong>Enter on an empty line</strong> to finish. You will be prompted for a name for the sequence and a folder in which to save results.</p>
+<h3>4 - Python prompt</h3>
+<p>Returns control to the Python interpreter.</p>
+<hr />
+<h2>Session Management</h2>
+<p>After loading a sequence the tool automatically:</p>
+<ul>
+<li><strong>Parses</strong> the text to find xmotifs and cores.</li>
+<li><strong>Saves a session file</strong> (<code>&lt;name&gt;.json</code>) containing the sequence, xmotifs, cores, and summary statistics. On the next run, if this is the only session file in the directory, it is loaded automatically and the parsing step is skipped.</li>
+<li><strong>Creates a summary CSV</strong> (<code>&lt;name&gt;_init.csv</code>) with per-sequence statistics (length, occurrence count, mutation rate, etc.) and opens it in your default spreadsheet application.</li>
+</ul>
+<p>To re-open that CSV at any time, use <strong>Open Core file</strong> from the main menu. See below, in the Main Menu section.</p>
+<hr />
+<h2>Main Menu</h2>
+<pre><code>--- Main Menu ---
+1. Plots
+2. Sequence operations
+3. Open Core file
+4. Summary statistics
+5. Show settings
+6. Change setting
+7. Open User Guide
+8. Load new input
+9. Quit
+</code></pre>
+<p>Navigate by typing the option number and pressing <strong>Enter</strong>.
+Press <strong>Ctrl+D</strong> at any prompt to cancel the current operation and return to the main menu.
+Press <strong>Ctrl+C</strong> to exit the program immediately.</p>
+<hr />
+<h3>1 - Plots</h3>
+<p>Opens the Plots submenu:</p>
+<pre><code>--- Plots ---
+1. Core neighbors
+2. K-mers
+3. Logo
+4. Coverage
+5. Motif Match/Mutation
+6. Back
+</code></pre>
+<h4>1.1 Core neighbors</h4>
+<p>Visualises how a chosen core sequence co-occurs with its neighbours across the full text.</p>
+<p><strong>Prompts:</strong></p>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">Prompt</th>
+<th style="text-align: center;">Default</th>
+<th style="text-align: left;">Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;">Sequence to analyse</td>
+<td style="text-align: center;">no default</td>
+<td style="text-align: left;">Must be present in the text</td>
+</tr>
+<tr>
+<td style="text-align: left;">Neighbourhood width</td>
+<td style="text-align: center;">40</td>
+<td style="text-align: left;">Number of positions on each side of the sequence</td>
+</tr>
+<tr>
+<td style="text-align: left;">Strings to include</td>
+<td style="text-align: center;">1 (cores)</td>
+<td style="text-align: left;">1 = cores, 2 = xmotifs</td>
+</tr>
+<tr>
+<td style="text-align: left;">Plot title</td>
+<td style="text-align: center;"><code>&lt;file&gt; &lt;sequence&gt;</code></td>
+<td style="text-align: left;">Free text</td>
+</tr>
+<tr>
+<td style="text-align: left;">Output file name</td>
+<td style="text-align: center;"><em>(screen only)</em></td>
+<td style="text-align: left;">Leave blank to display interactively</td>
+</tr>
+<tr>
+<td style="text-align: left;">Output format</td>
+<td style="text-align: center;">1 (PNG standard)</td>
+<td style="text-align: left;">1 = PNG, 2 = PNG high-res (3×), 3 = SVG, 4 = HTML</td>
+</tr>
+<tr>
+<td style="text-align: left;">X-axis range</td>
+<td style="text-align: center;"><em>(full range)</em></td>
+<td style="text-align: left;"><code>min, max</code> e.g. <code>100, 500</code></td>
+</tr>
+</tbody>
+</table>
+<p>The interactive HTML plot is always shown on screen. If an output file name is given, the plot is also saved to disk in the chosen format.</p>
+<p><strong>Reading the plot:</strong></p>
+<ul>
+<li>The reference sequence (s0) sits at <strong>y = 0</strong>.</li>
+<li><strong>Neighbouring cores</strong> are shown above (y = 1, 2, ...), sorted by how much they overlap with s0. Purple squares = cores that share no positions with s0; green squares/triangles = partial or full overlap.</li>
+<li><strong>Mutations</strong> of s0 (if any) appear below the axis (y = -1, -2, ...), with the closest mutation to s0 (highest occurrence count) nearest to the axis.</li>
+<li>Triangle direction indicates which end of the neighbour extends beyond s0: <strong>&gt;</strong> extends to the right, <strong>&lt;</strong> extends to the left.</li>
+<li>A legend at the bottom of the plot explains all symbols and colours.</li>
+</ul>
+<h4>1.2 K-mers</h4>
+<p>Analyses the frequency distribution of all substrings of a given length k.</p>
+<p><strong>Prompts:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Prompt</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>k-mer length</td>
+<td>5</td>
+</tr>
+</tbody>
+</table>
+<p>Then choose a plot type:</p>
+<pre><code>1. Z-score
+2. Robust Z-score 
+3. Abundance histogram
+4. Rank-frequency
+5. Return to plots
+</code></pre>
+<p>The Z-score plot highlights over/under-represented k-mers. The robust version uses a median-based statistics.
+For Z-score plots you will also be asked for a <strong>threshold</strong> (default 1.96).</p>
+<p>The abundance histogram shows the total number of k-mer occurrences in the text.</p>
+<p>The Rank-frequency plot shows the log of the rank of each score vs. the log of the number of occurrences. This plot is often used to check whether the distribution of k-mers follows Zipf's law.</p>
+<p>After the plot-specific parameters, you will be prompted for an <strong>output file name</strong> and <strong>format</strong> (PNG standard, PNG high-res 3×, or SVG). Leave the file name blank to display on screen only.</p>
+<h4>1.3 Logo</h4>
+<p>Generates a sequence logo centred on all occurrences of a chosen sequence.</p>
+<p><strong>Prompts:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Prompt</th>
+<th style="text-align: center;">Default</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Sequence to analyse</td>
+<td style="text-align: center;">no default</td>
+<td>Must be present in the text</td>
+</tr>
+<tr>
+<td>Bases on each side</td>
+<td style="text-align: center;">0</td>
+<td>Flanking context to include</td>
+</tr>
+<tr>
+<td>Max mutations</td>
+<td style="text-align: center;">0</td>
+<td>Fuzzy matching; capped at len/6</td>
+</tr>
+<tr>
+<td>Format</td>
+<td style="text-align: center;">pdf</td>
+<td><code>pdf</code> or <code>svg</code></td>
+</tr>
+<tr>
+<td>Output file name</td>
+<td style="text-align: center;"><code>&lt;seq&gt;_logo</code></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h4>1.4 Coverage</h4>
+<p>Shows how much of the text is covered by cores or xmotifs, weighted by a power law.</p>
+<p><strong>Prompts:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Prompt</th>
+<th>Default</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Strings to include</td>
+<td>1 (cores)</td>
+<td>1 = cores, 2 = xmotifs</td>
+</tr>
+<tr>
+<td>Exponent <em>a</em></td>
+<td>1.2</td>
+<td>Score = length^a times occurrences</td>
+</tr>
+<tr>
+<td>Output file name</td>
+<td><em>(screen only)</em></td>
+<td>Leave blank to display interactively</td>
+</tr>
+<tr>
+<td>Output format</td>
+<td>1 (PNG standard)</td>
+<td>1 = PNG, 2 = PNG high-res (3×), 3 = SVG</td>
+</tr>
+</tbody>
+</table>
+<h4>1.5 Motif Match/Mutation</h4>
+<p>Plots the positions of up to three user-supplied sequences along the full text as colored rectangles stacked in separate horizontal lanes: sequence 1 at the bottom, sequence 2 above it, and sequence 3 at the top.</p>
+<p><strong>Prompts:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Prompt</th>
+<th style="text-align: center;">Default</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Sequence 1 / 2 / 3</td>
+<td style="text-align: center;"></td>
+<td>Leave blank to stop after fewer than 3</td>
+</tr>
+<tr>
+<td>Mutation rate: 1 per N letters</td>
+<td style="text-align: center;">6</td>
+<td>Sets the maximum number of mismatches per sequence: <code>floor(L / N)</code></td>
+</tr>
+<tr>
+<td>Output file</td>
+<td style="text-align: center;"><em>(screen only)</em></td>
+<td>Leave blank to display interactively</td>
+</tr>
+<tr>
+<td>Output format</td>
+<td style="text-align: center;">1 (PNG)</td>
+<td>1 = PNG, 2 = PNG high-res (3×), 3 = SVG, 4 = HTML</td>
+</tr>
+<tr>
+<td>Condense x-axis?</td>
+<td style="text-align: center;">N</td>
+<td>If <code>y</code>, large empty regions on the x-axis are compressed</td>
+</tr>
+<tr>
+<td>Minimum gap size to compress</td>
+<td style="text-align: center;">1000</td>
+<td>Only gaps wider than this many positions are compressed (shown only when condensing)</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Reading the plot:</strong></p>
+<ul>
+<li>Each sequence occupies its own lane, drawn in a distinct color: <strong>blue</strong> (seq 1, bottom), <strong>orange</strong> (seq 2, middle), <strong>green</strong> (seq 3, top).</li>
+<li><strong>Exact matches</strong> are solid rectangles.</li>
+<li><strong>Approximate matches</strong> (within the mutation allowance) carry thin <strong>red vertical lines</strong> at each mismatched character position inside the rectangle.</li>
+<li>The legend shows each sequence with its exact and approximate match counts, plus entries explaining the red line and (if condensed) the dashed separator.</li>
+<li>When condensing is active, gaps exceeding the threshold are replaced by a short stub and a <strong>gray dashed vertical line</strong> marks each compression point. The x-axis ticks show original sequence positions at cluster boundaries.</li>
+</ul>
+<p><strong>Optional detailed nucleotide-level view:</strong></p>
+<p>After the main plot is shown, you will be asked whether to create a detailed HTML view. If you answer <code>y</code>, two more prompts appear:</p>
+<table>
+<thead>
+<tr>
+<th>Prompt</th>
+<th style="text-align: center;">Default</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Position range</td>
+<td style="text-align: center;">full sequence</td>
+<td><code>start,end</code> e.g. <code>200,800</code>; ranges &gt; 500 nt render slowly</td>
+</tr>
+<tr>
+<td>Output HTML file</td>
+<td style="text-align: center;"><code>&lt;name&gt;_detail.html</code></td>
+<td>Always saved as HTML; <code>.html</code> is appended if omitted</td>
+</tr>
+</tbody>
+</table>
+<p>The detail view is a plain HTML page showing every nucleotide in the selected range as monospace text (60 characters per line, prefixed with the genomic position). Hit regions have colored backgrounds matching the main plot. Where two or more sequences overlap, the background is a blended mix of their colors so both are visible simultaneously. Mutation positions are shown in <strong>red uppercase</strong>. A legend lists each sequence with its exact and approximate match counts.</p>
+<hr />
+<h3>2 - Sequence operations</h3>
+<pre><code>--- Sequence operations ---
+1. Find all matches
+2. Search with mutations
+3. Motif extensions
+4. Print core
+5. Export hairpins to CSV
+6. Extend match pair
+7. Alignment score for two sequences
+8. K-mer scramble analysis
+9. Covered area
+10. Back
+</code></pre>
+<h4>2.1 Find all matches</h4>
+<p>Searches the full text for a query sequence (minimum 4 characters). Use <code>.</code> as a single-character wildcard. Reports the number of matches and prints each match with its position in the text.</p>
+<h4>2.2 Search with mutations</h4>
+<p>Searches the full text for a single query string and reports both exact and approximate matches (within a configurable mutation allowance). Mismatched characters in approximate matches are printed in <strong>RED</strong> and <strong>UPPERCASE</strong> so differences are immediately visible.</p>
+<p><strong>Prompts:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Prompt</th>
+<th>Default</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Query string</td>
+<td></td>
+<td>Blank to cancel and go back to the menu</td>
+</tr>
+<tr>
+<td>Mutation rate: 1 per N letters</td>
+<td>6</td>
+<td>Maximum number of nucleotides per one mismatch</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Output:</strong></p>
+<ul>
+<li><strong>Exact matches</strong> — count and list of start positions.</li>
+<li><strong>Approximate matches</strong> — each match printed as <code>pos &lt;position&gt;  "&lt;matched string&gt;"  dist=&lt;hamming distance&gt;</code>, with mutated characters highlighted in red uppercase, e.g. <code>ugaaac</code><strong><code>G</code></strong><code>uac</code>.</li>
+</ul>
+<p>Press <strong>Enter</strong> to return to the Sequence operations menu.</p>
+<h4>2.3 Motif extensions</h4>
+<p>Combines motif search with pairwise extension analysis.  Enter a motif, find all its occurrences (exact or approximate), then automatically compute the longest Hamming-bounded extension for every pair of occurrences and display the results with colour-coded alignments.</p>
+<p><strong>Prompts:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Prompt</th>
+<th style="text-align: center;">Default</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Motif</td>
+<td style="text-align: center;"></td>
+<td>Blank to cancel</td>
+</tr>
+<tr>
+<td>Search method</td>
+<td style="text-align: center;">1 (Exact)</td>
+<td><code>1</code> = exact (<code>find_all_matches</code>); <code>2</code> = with mutations (<code>find_with_mutations</code>)</td>
+</tr>
+<tr>
+<td>Search mutation rate: 1 per N letters</td>
+<td style="text-align: center;">6</td>
+<td>Only shown when search method = 2</td>
+</tr>
+<tr>
+<td>Extension mutation rate: 1 per N letters</td>
+<td style="text-align: center;">6</td>
+<td>Controls how divergent the flanking context may be during extension</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Match display:</strong></p>
+<p>After the search, all found positions are listed (up to 20):</p>
+<ul>
+<li><strong>Exact</strong> matches are shown in green with their start position.</li>
+<li><strong>Approximate</strong> matches (search method 2 only) are shown in red with the Hamming distance.</li>
+</ul>
+<p>At least <strong>2 occurrences</strong> (exact or approximate) are required to proceed to the extension step.</p>
+<p><strong>Extension output:</strong></p>
+<p>Up to 10 pairs are shown, sorted by total extension length (longest first).  For each pair:</p>
+<ul>
+<li>Start positions of both seed copies, total extended length, and left/right extension sizes.</li>
+<li>Both extended sequences printed side-by-side (truncated to 80 characters for long extensions, with the full length noted): the seed region is shown in <strong>BOLD UPPERCASE</strong>; mismatched characters in the flanks are shown in <strong>RED UPPERCASE</strong>.</li>
+<li>Hamming distance as a count and percentage.</li>
+</ul>
+<p><strong>Printing a pair in full:</strong></p>
+<p>After the summary is displayed, you are offered the option to print one pair in full so that the sequences can be selected and copied:</p>
+<pre><code>Print a pair in full [1–10, blank to skip]:
+</code></pre>
+<p>Entering a number prints:
+- The raw (plain-text) extended sequence for each copy, labelled with its start position — no colour codes, safe to copy directly.
+- A colour-coded alignment of the same pair (bold seed, red mismatches) for visual reference.</p>
+<p><strong>Saving results to CSV:</strong></p>
+<p>After the print-in-full step you are prompted to save all pairs to a CSV file:</p>
+<pre><code>Save all pairs to CSV [Enter for extensions_&lt;motif&gt;.csv, Ctrl+D to skip]:
+</code></pre>
+<p>Press <strong>Enter</strong> to save to the default filename (based on the motif), type a custom name, or press <strong>Ctrl+D</strong> to skip. The CSV contains one row per pair with columns: <code>rank</code>, <code>pos1</code>, <code>pos2</code>, <code>left_ext</code>, <code>right_ext</code>, <code>total_len</code>, <code>hamming</code>, <code>ext1</code>, <code>ext2</code>.</p>
+<h4>2.4 Print core</h4>
+<p>Given a sequence, finds and prints the xmotifs that contain it as a core.</p>
+<h4>2.5 Export hairpins to CSV</h4>
+<p>Exports all detected hairpin regions for the loaded sequence to a CSV file. Each row contains the start position, end position, stem sequence, loop sequence, and full hairpin sequence.</p>
+<h4>2.6 Extend match pair</h4>
+<p>Finds all exact occurrences of a seed sequence and, for every pair of occurrences, greedily extends both copies left and right as far as possible while keeping the Hamming distance between the two extended copies within a user-defined rate.  The result reveals how much context around two repeats remains mutually similar.</p>
+<p><strong>How the extension works:</strong></p>
+<ol>
+<li>The right flank is extended first, one nucleotide at a time.  A position is kept whenever the cumulative Hamming distance does not exceed <code>floor(total_length × mutr)</code>.  The loop stops as soon as the budget for the full remaining text is exhausted.</li>
+<li>The left flank is then extended using the budget that remains after the right extension.</li>
+</ol>
+<p><strong>Prompts:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Prompt</th>
+<th style="text-align: center;">Default</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Seed sequence</td>
+<td style="text-align: center;"></td>
+<td>Must occur at least twice in the text; blank to cancel</td>
+</tr>
+<tr>
+<td>Mutation rate: 1 per N letters</td>
+<td style="text-align: center;">6</td>
+<td>1 mismatch allowed per N nucleotides</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Output:</strong></p>
+<p>Up to 10 pairs are shown, sorted by total extension length (longest first).  For each pair:</p>
+<ul>
+<li>Positions of the two seed copies, total extended length, and left/right extension sizes.</li>
+<li>Both extended sequences printed side-by-side: the seed region is shown in <strong>BOLD UPPERCASE</strong>; mismatched characters in the flanks are shown in <strong>RED UPPERCASE</strong>.</li>
+<li>Hamming distance as a count and percentage.</li>
+</ul>
+<p><strong>Printing a pair in full:</strong></p>
+<p>After the summary, you are offered the option to print one pair without truncation:</p>
+<pre><code>Print a pair in full [1–10, blank to skip]:
+</code></pre>
+<p>Entering a number prints the raw plain-text sequences for each copy (safe to copy), followed by a colour-coded alignment for visual reference.</p>
+<p><strong>Saving results to CSV:</strong></p>
+<pre><code>Save all pairs to CSV [Enter for extensions_&lt;seed&gt;.csv, Ctrl+D to skip]:
+</code></pre>
+<p>Press <strong>Enter</strong> to save to the default filename, type a custom name, or press <strong>Ctrl+D</strong> to skip. The CSV contains one row per pair with columns: <code>rank</code>, <code>pos1</code>, <code>pos2</code>, <code>left_ext</code>, <code>right_ext</code>, <code>total_len</code>, <code>hamming</code>, <code>ext1</code>, <code>ext2</code>.</p>
+<h4>2.7 Alignment score for two sequences</h4>
+<p>Aligns two substrings extracted from the loaded text by position.</p>
+<p><strong>Prompts:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Prompt</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Start position of first sequence</td>
+<td>0-based index into the text</td>
+</tr>
+<tr>
+<td>Start position of second sequence</td>
+<td></td>
+</tr>
+<tr>
+<td>Sequence length</td>
+<td>Both substrings share the same length</td>
+</tr>
+<tr>
+<td>Alignment type</td>
+<td>1 = Local (Smith–Waterman), 2 = Global (Gotoh)</td>
+</tr>
+</tbody>
+</table>
+<p>The alignment is printed with gap symbols and the following scores:</p>
+<ul>
+<li><strong>Raw score</strong> — the integer alignment score.</li>
+<li><strong>Normalised score</strong> — raw score divided by the self-alignment score of the shorter sequence; lies in [0, 1]. Values above 0.70 indicate a clearly related pair; above 0.90 near-identical.</li>
+<li><strong>Bit score</strong> — length-independent score computed with the Karlin–Altschul formula (λ = 1.28, K = 0.46); comparable across alignments of different lengths.</li>
+<li><strong>E-value</strong> — expected number of alignments with a score this high or better by chance, using the full transcript as the reference database. Values below 10⁻³ are considered significant.</li>
+</ul>
+<h4>2.8 K-mer scramble analysis</h4>
+<p>Builds an empirical null distribution for k-mer over-representation by shuffling the loaded sequence N times (each shuffle preserves the exact nucleotide composition) and counting every k-mer in each shuffled copy.  For every k-mer observed in the real sequence the p-value is the fraction of shuffles in which that k-mer's count was ≥ its real count.  All results are saved to a CSV file sorted by p-value (most over-represented first).</p>
+<p><strong>Prompts:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Prompt</th>
+<th style="text-align: center;">Default</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>k-mer length</td>
+<td style="text-align: center;">6</td>
+<td>Length of the substrings to count</td>
+</tr>
+<tr>
+<td>Number of shuffles</td>
+<td style="text-align: center;">5000</td>
+<td>More shuffles give a more stable null distribution</td>
+</tr>
+<tr>
+<td>Random seed</td>
+<td style="text-align: center;">0</td>
+<td>Set to any integer for reproducibility</td>
+</tr>
+<tr>
+<td>Output CSV file</td>
+<td style="text-align: center;"><code>&lt;name&gt;_kmer&lt;k&gt;_pvalues.csv</code></td>
+<td>Path to the results file</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Output CSV columns:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Column</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>kmer</code></td>
+<td>The k-mer sequence</td>
+</tr>
+<tr>
+<td><code>real_count</code></td>
+<td>Number of times it appears in the loaded sequence</td>
+</tr>
+<tr>
+<td><code>exceed_count</code></td>
+<td>Number of shuffles in which this k-mer's count was ≥ <code>real_count</code></td>
+</tr>
+<tr>
+<td><code>pvalue</code></td>
+<td><code>exceed_count / N</code> — reported to 8 decimal places</td>
+</tr>
+</tbody>
+</table>
+<p>Rows are sorted by <code>pvalue</code> ascending so the most over-represented k-mers appear at the top.  A p-value of 0.000 means the k-mer was never as frequent in any shuffle; a value near 1.0 means it is no more frequent than expected by chance.</p>
+<h4>2.9 Covered area</h4>
+<p>Computes and prints the coverage score for a single sequence: <code>length^a times occurrences</code>, where <em>a</em> is a configurable exponent (default 1).</p>
+<hr />
+<h3>3 - Open Core file</h3>
+<p>Opens the summary CSV (<code>&lt;name&gt;_init.csv</code>) in your default spreadsheet application. If the file is already open, the existing window is brought to the foreground rather than opening a second copy.</p>
+<hr />
+<h3>4 - Summary statistics</h3>
+<p>Displays counts and lengths derived from the current session:</p>
+<table>
+<thead>
+<tr>
+<th>Statistic</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Text length</td>
+<td>Total number of characters in the sequence</td>
+</tr>
+<tr>
+<td>Number of xmotifs</td>
+<td>Count of recurring subsequences found</td>
+</tr>
+<tr>
+<td>Longest / Shortest xmotif</td>
+<td>Character lengths</td>
+</tr>
+<tr>
+<td>Number of cores</td>
+<td>Count of conserved core sequences</td>
+</tr>
+<tr>
+<td>Longest / Shortest core</td>
+<td>Character lengths</td>
+</tr>
+</tbody>
+</table>
+<p>Press <strong>Enter</strong> to return to the main menu.</p>
+<hr />
+<h3>5 - Show settings</h3>
+<p>Prints the current default values (read-only). Press <strong>Enter</strong> to return.</p>
+<hr />
+<h3>6 - Change setting</h3>
+<p>Lets you change the parameters used when parsing the sequence. Pressing Enter at any prompt keeps the current value.</p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Min xmotif length</td>
+<td>7</td>
+<td>Shortest subsequence considered as an xmotif</td>
+</tr>
+<tr>
+<td>Max xmotif length</td>
+<td>40</td>
+<td>Longest subsequence considered as an xmotif</td>
+</tr>
+<tr>
+<td>Min core length</td>
+<td>6</td>
+<td>Shortest conserved core</td>
+</tr>
+<tr>
+<td>Min occurrences</td>
+<td>2</td>
+<td>Minimum number of times a pattern must appear</td>
+</tr>
+<tr>
+<td>Coverage weight (<em>pwr</em>)</td>
+<td>1.2</td>
+<td>Exponent for the length times occurrence score</td>
+</tr>
+<tr>
+<td>Clear screen</td>
+<td>True</td>
+<td>Whether to clear the terminal between menus</td>
+</tr>
+<tr>
+<td>Data directory</td>
+<td><em>(chosen at startup)</em></td>
+<td>Default folder for file dialogs</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Note:</strong> changing min/max xmotif length, min core length, or min occurrences triggers an automatic re-analysis of the loaded text. The session JSON and summary CSV are updated automatically.</p>
+<p><strong>Auto-expansion of max xmotif length:</strong> if the longest xmotif found during analysis equals the current maximum length, the maximum is automatically raised by 20 and the analysis is re-run. This repeats until the longest xmotif is strictly shorter than the maximum. The expanded value is kept as the new maximum for the session and is shown in <em>Show settings</em>.</p>
+<hr />
+<h3>7 - Open User Guide</h3>
+<p>Opens this user guide in your default web browser.</p>
+<hr />
+<h3>8 - Load new input</h3>
+<p>Discards the current session and returns to the <strong>Choose Input</strong> screen so you can work with a different sequence.</p>
+<hr />
+<h3>9 - Quit</h3>
+<p>Exits the program.</p>
+<hr />
+<h2>Tips</h2>
+<ul>
+<li><strong>Resuming a session:</strong> launch the tool from the directory that contains the session file (<code>.json</code>). If exactly one valid session file is present, it is detected and loaded automatically with no prompts. If multiple session files are present, a selection menu is shown.</li>
+<li><strong>Cancelling mid-prompt:</strong> press <strong>Ctrl+D</strong> to abandon the current operation and jump back to the main menu without losing your session.</li>
+<li><strong>Output files:</strong> plots and logos are saved to the working directory (the folder of the loaded file) unless you specify an absolute path.</li>
+<li><strong>RNA vs DNA:</strong> if the sequence contains only <code>a</code>, <code>c</code>, <code>g</code>, <code>u</code> (RNA), uracil (<code>u</code>) is automatically converted to thymine (<code>t</code>) for internal processing.</li>
+</ul>
+<hr />
+<h2>Package Structure</h2>
+<p>The <code>rna_lexis</code> package is organised into focused sub-modules. New code should import directly from the relevant module rather than from the top-level <code>rna_lexis</code> namespace.</p>
+<table>
+<thead>
+<tr>
+<th>Module</th>
+<th>Contents</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>rna_lexis.algorithms</code></td>
+<td>Pure-computation functions — k-mer counting, motif finding, core extraction, hairpin generation, fuzzy matching, alignment scoring helpers. No I/O or plotting dependencies.</td>
+</tr>
+<tr>
+<td><code>rna_lexis.alignment</code></td>
+<td>Gotoh global and local alignment with affine gap penalties (<code>gotoh_global</code>, <code>gotoh_local</code>, <code>print_alignment</code>, <code>AlignmentResult</code>).</td>
+</tr>
+<tr>
+<td><code>rna_lexis.plots</code></td>
+<td>All matplotlib and Plotly visualisation functions — sequence logos, z-score plots, k-mer histograms, frequency-rank plots, coverage plots, sequence-hit diagrams.</td>
+</tr>
+<tr>
+<td><code>rna_lexis.io</code></td>
+<td>File and session I/O (<code>read_text</code>, <code>save_session</code>, <code>load_session</code>, <code>is_valid_session</code>, <code>init_summary</code>), Ensembl REST API fetching (<code>fetch_enst_cdna</code>), and platform-aware file opening utilities.</td>
+</tr>
+<tr>
+<td><code>rna_lexis.dialogs</code></td>
+<td>Thin tkinter wrappers for native file/directory chooser dialogs (<code>openFile</code>, <code>openDir</code>).</td>
+</tr>
+<tr>
+<td><code>rna_lexis.menu</code></td>
+<td>Interactive CLI menu — all user-facing prompts, menus, and session management.</td>
+</tr>
+<tr>
+<td><code>rna_lexis.RNAlang</code></td>
+<td>Backward-compatibility shim. Re-exports every public symbol from the modules above so that existing code using <code>from rna_lexis.RNAlang import …</code> or <code>import rna_lexis.RNAlang as RNA</code> continues to work without modification.</td>
+</tr>
+</tbody>
+</table>
+<h3>Example — using sub-modules directly</h3>
+<pre><code class="language-python">from rna_lexis.algorithms import cores, find_with_mutations
+from rna_lexis.alignment import gotoh_global, print_alignment
+from rna_lexis.io import read_text, save_session
+
+txt = read_text(&quot;my_sequence.txt&quot;)
+corelist = cores(txt)
+result = gotoh_global(corelist[0], corelist[1])
+print_alignment(result)
+</code></pre></body></html>
