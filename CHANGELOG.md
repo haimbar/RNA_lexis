@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.0.4] - 2026-04-16
+
+### Fixed
+
+- **Cancel in file dialog no longer crashes the program.**  The subprocess-based
+  tkinter dialog now writes its result prefixed with a sentinel string
+  (`__DIALOG_RESULT__:`), so any incidental library output that ends up on
+  stdout (GTK warnings, libpng messages, etc.) is ignored instead of being
+  mistaken for a file path.  `choose_file` also guards against any non-empty
+  but invalid path returned by `openFile` with an `os.path.isfile` check.
+- **Corrupt or missing session JSON no longer crashes the program.**  When the
+  auto-detected session file cannot be loaded (`load_session` returns `None`),
+  the program now clears the stale reference and falls back to the input-source
+  menu instead of crashing with `TypeError`.
+
 ## [0.0.3] - 2026-04-16
 
 ### Added

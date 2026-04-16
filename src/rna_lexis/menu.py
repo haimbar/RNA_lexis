@@ -180,7 +180,7 @@ def choose_file(datadir=''):
         and ``dir``.
     """
     file_path = openFile(initial_dir=datadir or None)
-    if not file_path:
+    if not file_path or not os.path.isfile(file_path):
         return None
     if file_path.endswith(".json"):
         return(load_session(file_path))
@@ -1688,6 +1688,11 @@ def menus():
                 except NameError:
                     if 'fn' in globals().keys():
                         data = load_session(globals()['fn'])
+                        if data is None:
+                            # Session file missing or corrupt — clear fn and
+                            # fall through to the input-source menu.
+                            del globals()['fn']
+                            continue
                         file_path = data['file_path']
                         txt = data['txt']
                         txtb = data['txtb']
