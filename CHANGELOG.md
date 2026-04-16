@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.0.3] - 2026-04-16
+
+### Added
+
+- **Persistent preferences** (`io.load_prefs` / `io.save_prefs`): the last used
+  directory and a user-defined default data directory are now stored in a
+  platform-appropriate config file across sessions:
+  - Linux: `~/.config/RNA_lexis/prefs.json`
+  - macOS: `~/Library/Application Support/RNA_lexis/prefs.json`
+  - Windows: `%APPDATA%\RNA_lexis\prefs.json`
+- On startup the tool seeds the initial directory from `last_used_dir`, falling
+  back to `default_data_dir`, then the current working directory.
+- `last_used_dir` is updated and saved automatically every time a file is opened.
+- `default_data_dir` can be set (or cleared) from the *Change setting* menu.  It
+  is also shown in *Show settings*.
+- New dependency: `platformdirs` (cross-platform config-directory resolution).
+
 ## [0.0.2] - 2026-04-16
 
 ### Fixed

@@ -14,8 +14,57 @@ from dataclasses import dataclass, asdict
 from typing import List, Optional
 
 import pandas as pd
+from platformdirs import user_config_dir
 
 from rna_lexis.algorithms import find_with_mutations
+
+
+# ---------------------------------------------------------------------------
+# Persistent user preferences
+# ---------------------------------------------------------------------------
+
+def _prefs_path() -> str:
+    """Return the path to the RNA_lexis preferences JSON file.
+
+    The directory is the platform-appropriate user config location:
+      Linux:   ~/.config/RNA_lexis/prefs.json
+      macOS:   ~/Library/Application Support/RNA_lexis/prefs.json
+      Windows: C:\\Users\\<user>\\AppData\\Roaming\\RNA_lexis\\prefs.json
+    """
+    config_dir = user_config_dir("RNA_lexis")
+    os.makedirs(config_dir, exist_ok=True)
+    return os.path.join(config_dir, "prefs.json")
+
+
+def load_prefs() -> dict:
+    """Load persistent user preferences from the platform config directory.
+
+    Returns a dict with at least the keys ``'default_data_dir'`` and
+    ``'last_used_dir'``, both defaulting to ``''`` when absent.
+    """
+    defaults = {'default_data_dir': '', 'last_used_dir': ''}
+    path = _prefs_path()
+    if not os.path.isfile(path):
+        return defaults
+    try:
+        with open(path, 'r') as f:
+            return {**defaults, **json.load(f)}
+    except Exception:
+        return defaults
+
+
+def save_prefs(prefs: dict) -> None:
+    """Persist user preferences to the platform config directory.
+
+    Args:
+        prefs: Dict containing preference keys such as ``'default_data_dir'``
+               and ``'last_used_dir'``.  Unknown keys are preserved.
+    """
+    try:
+        with open(_prefs_path(), 'w') as f:
+            json.dump(prefs, f, indent=4)
+    except Exception as e:
+        print(f"Warning: could not save preferences: {e}")
 
 
 _SESSION_REQUIRED_KEYS = frozenset(

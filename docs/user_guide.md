@@ -19,13 +19,13 @@ rna_lexis           # after pip install (console script)
 python -m rna_lexis # without installing
 ```
 
-At startup the tool checks the **current working directory** for saved session files (`.json`):
+At startup the tool checks the **last used directory** (remembered from the previous session) for saved session files (`.json`). If no last-used directory is recorded it falls back to the **default data directory** (set by the user in *Change setting*), and then to the current working directory:
 
 - If **exactly one** valid session file is found, it is loaded automatically — no prompt is shown.
 - If **more than one** valid session file is found, a numbered menu lets you choose which one to load.
-- If **no** valid session file is found in the current directory, you will be prompted to choose a **data directory** via a folder-browser dialog. The same auto-detection is then applied to the chosen directory.
+- If **no** valid session file is found, you will be prompted to choose a **data directory** via a folder-browser dialog. The same auto-detection is then applied to the chosen directory.
 
-The data directory is the folder where session files and output files are saved. You can change it later under *Change setting* (see below).
+The last used directory is updated automatically every time a file is opened and is stored in a platform-appropriate config file so it persists across sessions. The default data directory is a user-defined root that is used as the starting point for file dialogs when no last-used directory is set. Both can be viewed in *Show settings* and the default data directory can be changed in *Change setting*.
 
 It is recommended that each sequence analysed be stored in its own directory, since output files are stored in the same directory as the sequence, as well as the saved-session JSON file.
 
@@ -451,7 +451,7 @@ Press **Enter** to return to the main menu.
 
 ### 5 - Show settings
 
-Prints the current default values (read-only). Press **Enter** to return.
+Prints the current default values (read-only) and the persistent preferences (`default_data_dir`, `last_used_dir`). Press **Enter** to return.
 
 ---
 
@@ -467,7 +467,8 @@ Lets you change the parameters used when parsing the sequence. Pressing Enter at
 | Min occurrences | 2 | Minimum number of times a pattern must appear |
 | Coverage weight (*pwr*) | 1.2 | Exponent for the length times occurrence score |
 | Clear screen | True | Whether to clear the terminal between menus |
-| Data directory | *(chosen at startup)* | Default folder for file dialogs |
+| Session data directory | *(current session)* | Folder used for file dialogs in this session |
+| Default data directory | *(not set)* | Persistent root folder for file dialogs; saved across sessions. Enter to keep, `-` to clear, `B` to browse. |
 
 **Note:** changing min/max xmotif length, min core length, or min occurrences triggers an automatic re-analysis of the loaded text. The session JSON and summary CSV are updated automatically.
 

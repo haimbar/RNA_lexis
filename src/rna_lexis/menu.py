@@ -24,6 +24,7 @@ from rna_lexis.plots import (
 from rna_lexis.io import (
     read_text, save_session, load_session, init_summary, is_valid_session,
     open_file_with_default_software, _find_valid_sessions, fetch_enst_cdna,
+    load_prefs, save_prefs,
 )
 
 
@@ -1471,7 +1472,7 @@ def print_stats(txt, strs):
     safe_input(fmttxt(["Press Enter to return to the menu"], [''], ['white']))
 
 
-def print_settings(defvals):
+def print_settings(defvals, prefs=None):
     '''Print current default values and wait for the user to press Enter.'''
     print(fmttxt(["\n--- Current Settings ---"], ['bold'], ['cyan']))
     labels = {
@@ -1481,15 +1482,23 @@ def print_settings(defvals):
         'mincount':   'Min occurrences',
         'pwr':        'Coverage weight (pwr)',
         'clr':        'Clear screen',
-        'datadir':    'Data directory',
+        'datadir':    'Session data directory',
     }
     for key, lbl in labels.items():
         print(fmttxt([f"  {lbl}:", str(defvals[key])], ['bold', ''], ['white', 'cyan']))
+    if prefs is not None:
+        print(fmttxt(["\n--- Persistent Preferences ---"], ['bold'], ['cyan']))
+        print(fmttxt(["  Default data directory:",
+                      prefs.get('default_data_dir') or '(not set)'],
+                     ['bold', ''], ['white', 'cyan']))
+        print(fmttxt(["  Last used directory:",
+                      prefs.get('last_used_dir') or '(not set)'],
+                     ['bold', ''], ['white', 'cyan']))
     print()
     safe_input(fmttxt(["Press Enter to return to the menu"], [''], ['white']))
 
 
-def get_choices(defvals):
+def get_choices(defvals, prefs=None):
     '''Prompt the user to modify the default values for global parameters.'''
     reload = False
     minxmlen = safe_input(fmttxt(['Minimum length for xmotifs', f'[{defvals["minxmlen"]}]: '],
@@ -1531,7 +1540,7 @@ def get_choices(defvals):
             clr = False
         else:
             clr = True
-    datadir = safe_input(fmttxt(['Data directory (Enter to browse, - to clear)',
+    datadir = safe_input(fmttxt(['Session data directory (Enter to browse, - to clear)',
                                   f'[{defvals["datadir"] or "not set"}]: '],
                                  ['bold', ''], ['yellow', 'cyan']))
     if datadir == '':
@@ -1541,9 +1550,26 @@ def get_choices(defvals):
             datadir = openDir(initial_dir=None)
     elif datadir == '-':
         datadir = ''
+
+    # Persistent default data directory (saved across sessions).
+    cur_default = (prefs or {}).get('default_data_dir') or ''
+    default_data_dir_input = safe_input(fmttxt(
+        ['Default data directory (Enter to keep, - to clear, B to browse)',
+         f'[{cur_default or "not set"}]: '],
+        ['bold', ''], ['yellow', 'cyan']))
+    if default_data_dir_input == '':
+        default_data_dir = cur_default
+    elif default_data_dir_input == '-':
+        default_data_dir = ''
+    elif default_data_dir_input.strip().upper() == 'B':
+        print(fmttxt(["Browsing for default data directory..."], [''], ['cyan']))
+        default_data_dir = openDir(initial_dir=cur_default or None) or cur_default
+    else:
+        default_data_dir = default_data_dir_input.strip()
+
     return({'minxmlen': int(minxmlen), 'maxxmlen': int(maxxmlen), 'mincorelen': int(mincorelen),
             'mincount': int(mincount), 'pwr': float(pwr), 'clr': bool(clr),
-            'datadir': datadir, 'reload': reload})
+            'datadir': datadir, 'reload': reload, 'default_data_dir': default_data_dir})
 
 
 def parsedata(txt, defvals):
@@ -1623,8 +1649,10 @@ def menus():
     * Ctrl+C exits cleanly; Ctrl+D resets to the main menu.
     """
     pid = getpid()
+    prefs = load_prefs()
+    _initial_dir = prefs.get('last_used_dir') or prefs.get('default_data_dir') or ''
     defvals = {'minxmlen': 7, 'maxxmlen': 60, 'mincorelen': 6, 'mincount': 2, 'pwr': 1.2,
-               'clr': True, 'reload': False, 'datadir': ''}
+               'clr': True, 'reload': False, 'datadir': _initial_dir}
     menu_ttl = ["Main Menu", "Plots", "Sequence operations"]
     submenu = [["Plots", "Sequence operations", "Open Core file", "Summary statistics",
                "Show settings", "Change setting", "Open User Guide", "Load new input", "Quit"],
@@ -1687,6 +1715,9 @@ def menus():
                     if workdir and os.path.isdir(workdir):
                         chdir(workdir)
                         defvals['datadir'] = workdir
+                    if defvals['datadir']:
+                        prefs['last_used_dir'] = defvals['datadir']
+                        save_prefs(prefs)
                     globals()['fn'] = file_path + ".json"
                     stats = {
                         'txt_len':      len(txt),
@@ -1727,10 +1758,14 @@ def menus():
                             print_stats(txt, strs)
                             continue
                         if val == 5:
-                            print_settings(defvals)
+                            print_settings(defvals, prefs)
                             continue
                         if val == 6:
-                            defvals = get_choices(defvals)
+                            defvals = get_choices(defvals, prefs)
+                            new_default = defvals.pop('default_data_dir', None)
+                            if new_default is not None and new_default != prefs.get('default_data_dir'):
+                                prefs['default_data_dir'] = new_default
+                                save_prefs(prefs)
                             if defvals['reload']:
                                 # recalculate xmotifs, cores, update JSON and CSV
                                 strs = parsedata(txt, defvals)
