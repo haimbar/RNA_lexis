@@ -48,6 +48,8 @@ Every session starts by loading a sequence. Four input methods are available:
 
 A file-selector dialog opens. Select any plain-text file containing a nucleotide sequence (letters only; spaces and punctuation are stripped automatically). If you select a **`.json`** session file that was saved by a previous run, that session is restored instantly -- no re-processing required.
 
+**FASTA files** (`.fa`, `.fasta`) are also supported. The header line (starting with `>`) is used only to detect the format and extract the gene name; it is not included in the sequence. Multi-record FASTA files are handled correctly: all header lines are stripped and the sequence records are concatenated. The gene name from the first header is stored in the session under the key `gene_name`.
+
 ### 2 - Fetch by Ensembl transcript ID
 
 Enter an Ensembl transcript identifier (e.g. `ENST00000456328` or `ENST00000456328.2`). The tool:

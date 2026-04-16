@@ -184,8 +184,21 @@ def choose_file(datadir=''):
     if file_path.endswith(".json"):
         return(load_session(file_path))
     else:
-        txtb = read_text(file_path, keepspacing=True)
+        # Detect FASTA format and strip header lines before building txt/txtb.
+        gene_name = None
+        with open(file_path, "r", encoding="utf-8", errors="ignore") as fh:
+            raw_lines = fh.readlines()
+        if raw_lines and raw_lines[0].startswith(">"):
+            gene_name = raw_lines[0][1:].split()[0]
+            raw_lines = [ln for ln in raw_lines if not ln.startswith(">")]
+        raw = "".join(raw_lines)
+
+        # Build txtb (spacing preserved) and txt (compact) from sequence only.
+        txtb = raw.replace("\n", " ").lower()
+        txtb = re.sub('[^a-z]+', ' ', txtb)
+        txtb = re.sub(' +', ' ', txtb).strip()
         txt = sub(' +', '', txtb)
+
         if not txt:
             print(f"Error: '{file_path}' contains no alphabetic characters. "
                   "The file may use a non-Latin script or be empty.")
@@ -193,8 +206,11 @@ def choose_file(datadir=''):
         is_rna = contains_only_rna(txt)
         if is_rna:
             txt = re.sub(r"[^A-Za-z]+", "", txt).lower().replace("u", "t")
-    return({'file_path': file_path, 'txt': txt,
-            'is_rna': is_rna, 'txtb': txtb, 'dir': dirname(file_path)})
+    result = {'file_path': file_path, 'txt': txt,
+              'is_rna': is_rna, 'txtb': txtb, 'dir': dirname(file_path)}
+    if gene_name:
+        result['gene_name'] = gene_name
+    return result
 
 
 def choose_enst(datadir=''):
