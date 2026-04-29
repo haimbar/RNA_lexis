@@ -15,6 +15,7 @@ from typing import List, Optional
 
 import pandas as pd
 from platformdirs import user_config_dir
+from scipy.stats import binom as _binom
 
 from rna_lexis.algorithms import find_with_mutations
 
@@ -309,43 +310,40 @@ def init_summary(fn, xm, cores, txt, mutr=1/6, M = 4):
     # Pre-compute core indices for O(1) lookup instead of linear search
     core_idx_map = {core: idx for idx, core in enumerate(cores)}
 
-    # Pre-compute which cores are in each xm (avoid nested loop)
-    xm_core_containment = {i: any(core in xm[i] for core in cores)
-                           for i in range(len(xm))}
-
     # Collect records in list for batch DataFrame creation (O(1) instead of O(n²))
     records = []
 
     for i, seq in enumerate(xm_cores):
-        # Determine sequence type and index
-        if i < len(xm):
-            idx = i
-            seqtype = 'xm'
-            inccore = 1 if xm_core_containment[i] else 0
-        else:
-            seqtype = 'core'
-            idx = core_idx_map.get(seq, -1)
-            inccore = 0
+        is_xm   = 1 if i < len(xm) else 0
+        is_core = 1 if seq in core_idx_map else 0
+        idx     = i if is_xm else core_idx_map.get(seq, -1)
 
         L = len(seq)
         pos, approx, maxmut = find_with_mutations(seq, txt, mutr=mutr, M=M)
         N = len(pos)
-        # mutations = all matches within maxmut (exact + approx); nmut = total distance
-        mutations = [txt_lower[p:p + L] for p in pos] + [m for _, m, _ in approx]
+        n_approx = len(approx)
+        N_total = N + n_approx          # exact + approximate occurrences
         nmut = sum(d for _, _, d in approx)
 
-        # Compute pmut with safe denominator
-        pmut = (nmut + 0.01) / (L * (N + len(mutations)) + 1)
+        # Observed mutation rate per site across all occurrences
+        pmut = nmut / (L * N_total) if N_total > 0 else 0.0
+
+        # Binomial p-value: P(X <= nmut) where X ~ Bin(L*N_total, mutr).
+        # Small p_stable means the sequence is significantly more conserved
+        # than the null mutation rate (mutr), i.e., it is stable.
+        p_stable = _binom.cdf(nmut, L * N_total, mutr) if N_total > 0 else 1.0
 
         records.append({
             'seq': seq,
-            'type': seqtype,
-            'hascore': inccore,
+            'xm': is_xm,
+            'core': is_core,
             'len': L,
             'count': N,
+            'n_approx': n_approx,
             'cover': L * N,
             'numt': nmut,
             'pmut': pmut,
+            'p_stable': p_stable,
             'maxmut': maxmut,
             'idx': idx,
             'pos': pos
@@ -353,7 +351,7 @@ def init_summary(fn, xm, cores, txt, mutr=1/6, M = 4):
 
     # Create DataFrame once from all records (not row-by-row append)
     df = pd.DataFrame(records)
-    df = df.sort_values(by='pmut', ascending=True)
+    df = df.sort_values(by='p_stable', ascending=True)
     out_csv = f'{fn}_init.csv'
     tried = []
     for candidate in [

@@ -234,39 +234,64 @@ def cover(s, txt, pwr=1.1):
     #return(len(find_all_matches(s, txt))*len(s))
 
 
-def cores(txt, xmotifs, minclen=5):
-    """Iteratively extract core sequences from a list of extended motifs.
+def cores(txt, xmotifs, minclen=6):
+    """Find core sequences as k-mers shared across non-containment xmotifs.
 
-    At each iteration the xmotif with the highest weighted coverage (see
-    cover()) is selected as the next core.  Its occurrences are masked in a
-    working copy of txt (replaced with ``'_'``), and the remaining xmotifs
-    are split around the chosen core so that only the flanking sub-sequences
-    survive for the next round.  Iteration stops when no candidate achieves
-    the minimum coverage threshold.
+    For each distinct xmotif length L (from the second-longest down to minclen),
+    all L-mers are extracted from xmotifs of length >= L.  A k-mer is accepted
+    as a core if it appears as a substring in at least two xmotifs that have no
+    containment relationship (neither is a substring of the other).
+
+    Only xmotif-length values of k are tried.  Between two consecutive xmotif
+    lengths the candidate pool is unchanged, so no new cores can emerge at
+    intermediate k values.
 
     Args:
-        txt:      Source text.
-        xmotifs:  List of extended motif strings (candidates for cores).
-        minclen:  Minimum length for a flanking fragment to survive a split
-                  (default 5).
+        txt:      Source text (unused; kept for API compatibility).
+        xmotifs:  List of extended motif strings.
+        minclen:  Minimum core length (default 6).
 
     Returns:
-        List of core strings ordered by the iteration in which they were
-        selected (most dominant first).
+        List of distinct core strings.
     """
-    xmotifs.sort(key=lambda s: len(s), reverse=False)
-    txt2 = txt
-    corelist = []
-    maxstr = '-'
-    mncvr = max(math.ceil(len(txt)**(1/3)), 13)
-    while maxstr != '':
-        maxstr = find_max_cover(txt2, xmotifs, mincover = mncvr)
-        if maxstr == '':
-            break
-        corelist.append(maxstr)
-        txt2 = txt2.replace(maxstr, '_')
-        xmotifs = list(split_words(xmotifs, maxstr, txt, minclen))
-    return(corelist)
+    if not xmotifs:
+        return []
+
+    # Distinct xmotif lengths in descending order
+    lengths = sorted(set(len(xm) for xm in xmotifs), reverse=True)
+
+    # At k = longest length, only xmotifs of that exact length contribute a
+    # k-mer (themselves), so a non-containment pair is impossible when just one
+    # xmotif has that length.  Start from the 2nd-longest in that case.
+    n_at_longest = sum(1 for xm in xmotifs if len(xm) == lengths[0])
+    start_idx = 0 if n_at_longest > 1 else 1
+    k_values = [L for L in lengths[start_idx:] if L >= minclen]
+
+    cores_found = set()
+
+    for k in k_values:
+        pool = [xm for xm in xmotifs if len(xm) >= k]
+
+        # Map each k-mer to the set of xmotifs that contain it
+        kmer_xm: dict = defaultdict(set)
+        for xm in pool:
+            for i in range(len(xm) - k + 1):
+                kmer_xm[xm[i:i + k]].add(xm)
+
+        for kmer, xm_set in kmer_xm.items():
+            if len(xm_set) < 2:
+                continue
+            # Accept if at least one non-containment pair shares this k-mer
+            xm_list = list(xm_set)
+            for a in range(len(xm_list)):
+                for b in range(a + 1, len(xm_list)):
+                    if xm_list[a] not in xm_list[b] and xm_list[b] not in xm_list[a]:
+                        cores_found.add(kmer)
+                        break
+                if kmer in cores_found:
+                    break
+
+    return list(cores_found)
 
 
 def print_core(txt, core, xm):
@@ -1034,11 +1059,23 @@ def find_longest_extensions(s, txt, mutr=1/6, outfile=''):
 # ── k-mer scramble / null-distribution analysis ──────────────────────────────
 
 def scramble_kmer_pvalues(txt: str, k: int, N: int, seed: int = 0) -> list:
-    """Compute empirical p-values for every k-mer observed in txt.
+    """Compute two-sided empirical p-values for every k-mer observed in txt.
 
     Shuffles txt N times (preserving nucleotide composition) and counts each
-    k-mer in every shuffled copy.  For each k-mer the p-value is the fraction
-    of shuffles in which that k-mer's count was >= its real count in txt.
+    k-mer in every shuffled copy.  Two one-sided p-values are reported:
+
+    * pvalue_over  — fraction of shuffles where count >= real count.
+                     Small values flag over-represented k-mers.
+    * pvalue_under — fraction of shuffles where count <= real count.
+                     Small values flag under-represented k-mers.
+
+    A k-mer with no enrichment or depletion relative to the shuffle
+    distribution will have both p-values near 0.5.  BH-adjusted p-values
+    (FDR) and E-values (p * m) are computed separately for the over- and
+    under-representation families.  The ``direction`` field ('over' /
+    'under') indicates which effect is stronger; rows are sorted by
+    min(pvalue_over, pvalue_under) so the most extreme k-mers in either
+    direction appear first.
 
     Args:
         txt  - source sequence (lower-cased internally)
@@ -1047,9 +1084,12 @@ def scramble_kmer_pvalues(txt: str, k: int, N: int, seed: int = 0) -> list:
         seed - random seed for reproducibility
 
     Returns:
-        List of dicts sorted by p-value ascending (most over-represented
-        first).  Each dict has: kmer, real_count, exceed_count, pvalue.
+        List of dicts sorted by min(pvalue_over, pvalue_under) ascending.
+        Each dict has: kmer, real_count, exceed_count, below_count,
+        pvalue_over, evalue_over, pvalue_over_bh,
+        pvalue_under, evalue_under, pvalue_under_bh, direction.
     """
+    from scipy.stats import false_discovery_control
     import random as _random
     _random.seed(seed)
     txt = txt.lower()
@@ -1057,21 +1097,46 @@ def scramble_kmer_pvalues(txt: str, k: int, N: int, seed: int = 0) -> list:
     n = len(txt)
 
     real_kmers = Counter(txt[i: i + k] for i in range(n - k + 1))
+    m = len(real_kmers)
 
-    # exceed[kmer] = number of shuffles where kmer count >= real count
+    # exceed: shuffles where count >= real  (upper tail, over-representation)
+    # below:  shuffles where count <= real  (lower tail, under-representation)
     exceed = Counter()
+    below = Counter()
     for _ in range(N):
         _random.shuffle(chars)
         s = ''.join(chars)
         shuffled = Counter(s[i: i + k] for i in range(n - k + 1))
         for kmer, real_count in real_kmers.items():
-            if shuffled.get(kmer, 0) >= real_count:
+            sc = shuffled.get(kmer, 0)
+            if sc >= real_count:
                 exceed[kmer] += 1
+            if sc <= real_count:
+                below[kmer] += 1
 
-    results = [
-        {'kmer': kmer, 'real_count': count,
-         'exceed_count': exceed[kmer], 'pvalue': exceed[kmer] / N}
-        for kmer, count in real_kmers.items()
-    ]
-    results.sort(key=lambda x: x['pvalue'])
+    kmers = list(real_kmers.keys())
+    pvals_over  = [exceed[kmer] / N for kmer in kmers]
+    pvals_under = [below[kmer]  / N for kmer in kmers]
+    bh_over  = list(false_discovery_control(pvals_over,  method='bh'))
+    bh_under = list(false_discovery_control(pvals_under, method='bh'))
+
+    results = []
+    for i, kmer in enumerate(kmers):
+        po = pvals_over[i]
+        pu = pvals_under[i]
+        direction = 'over' if po <= pu else 'under'
+        results.append({
+            'kmer':          kmer,
+            'real_count':    real_kmers[kmer],
+            'exceed_count':  exceed[kmer],
+            'below_count':   below[kmer],
+            'pvalue_over':   po,
+            'evalue_over':   po * m,
+            'pvalue_over_bh':  bh_over[i],
+            'pvalue_under':  pu,
+            'evalue_under':  pu * m,
+            'pvalue_under_bh': bh_under[i],
+            'direction':     direction,
+        })
+    results.sort(key=lambda x: min(x['pvalue_over'], x['pvalue_under']))
     return results

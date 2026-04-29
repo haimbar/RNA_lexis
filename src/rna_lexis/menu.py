@@ -1314,11 +1314,18 @@ def hairpins_input(txt, file_path, minSL=8, minLL=3, maxLL=40):
 
 def scramble_input(txt, file_path=''):
     """Prompt for k-mer length and shuffle parameters, then write a CSV of
-    all observed k-mers with their empirical p-values sorted ascending.
+    all observed k-mers with two-sided empirical p-values sorted ascending.
 
     Each shuffle preserves the nucleotide composition of the sequence.
-    The p-value for a k-mer is the fraction of shuffles in which that k-mer's
-    count was >= its real count in the sequence.
+    Two one-sided p-values are reported for each k-mer:
+      pvalue_over  — fraction of shuffles with count >= real count
+                     (small = over-represented)
+      pvalue_under — fraction of shuffles with count <= real count
+                     (small = under-represented)
+    K-mers with no enrichment or depletion will have both p-values near 0.5.
+    BH-adjusted p-values (FDR) and E-values (p * m, where m is the number of
+    distinct k-mers tested) are provided separately for each direction.
+    Rows are sorted by min(pvalue_over, pvalue_under).
     """
     k_str = safe_input(fmttxt(['k-mer length', '[default: 6]: '],
                                ['bold', ''], ['yellow', 'cyan']) + ' ').strip()
@@ -1346,10 +1353,20 @@ def scramble_input(txt, file_path=''):
     try:
         with open(out_csv, 'w', newline='') as fh:
             w = _csv.writer(fh)
-            w.writerow(['kmer', 'real_count', 'exceed_count', 'pvalue'])
+            w.writerow([
+                'kmer', 'real_count', 'exceed_count', 'below_count',
+                'pvalue_over', 'evalue_over', 'pvalue_over_bh',
+                'pvalue_under', 'evalue_under', 'pvalue_under_bh',
+                'direction',
+            ])
             for row in results:
-                w.writerow([row['kmer'], row['real_count'],
-                            row['exceed_count'], f"{row['pvalue']:.8f}"])
+                w.writerow([
+                    row['kmer'], row['real_count'],
+                    row['exceed_count'], row['below_count'],
+                    f"{row['pvalue_over']:.8f}",  f"{row['evalue_over']:.4f}",  f"{row['pvalue_over_bh']:.8f}",
+                    f"{row['pvalue_under']:.8f}", f"{row['evalue_under']:.4f}", f"{row['pvalue_under_bh']:.8f}",
+                    row['direction'],
+                ])
         print(fmttxt([f'Saved {len(results)} k-mers to:', out_csv],
                      ['bold', ''], ['green', 'cyan']))
         open_file_with_default_software(out_csv)
