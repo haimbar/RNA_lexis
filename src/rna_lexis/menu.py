@@ -470,12 +470,12 @@ def neighbors_input(fn, txt, strs):
         wd = 40
     else:
         wd = int(wd)
-    wds_prompt = fmttxt(['Enter the strings to include in calculation ', 
-                        '[1: cores (default), or 2: xmotifs]'], 
-                         ['bold', ''], 
-                         ['yellow', 'cyan'])    
+    wds_prompt = fmttxt(['Enter the strings to include in calculation ',
+                        '[1: cores, or 2: xmotifs (default)]'],
+                         ['bold', ''],
+                         ['yellow', 'cyan'])
     wds = safe_input(wds_prompt + " ")
-    if wds == '' or wds == '1':
+    if wds == '1':
         wds = strs["corelist"]
     else:
         wds = strs["xmotifs"]

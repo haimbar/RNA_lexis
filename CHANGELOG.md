@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.0.6] - 2026-04-29
+
+### Changed
+
+- **Neighbours plot default sequence set changed to xmotifs.**  In the
+  *Visualise neighbourhood* prompt, pressing Enter (or any input other
+  than `1`) now selects xmotifs instead of cores.  Enter `1` explicitly
+  to use cores.
+
 ## [0.0.5] - 2026-04-29
 
 ### Added
