@@ -1058,6 +1058,190 @@ def find_longest_extensions(s, txt, mutr=1/6, outfile=''):
 
 # ── k-mer scramble / null-distribution analysis ──────────────────────────────
 
+def _markov_expected_count(kmer_counts: dict, kmer: str, n: int) -> float:
+    """Expected count of kmer under the (len(kmer)-1)-th order Markov model.
+
+    Uses the Prum/Schbath formula:
+        k == 2  →  count(a) * count(b) / n
+        k >= 3  →  count(prefix) * count(suffix) / count(interior)
+    where prefix = kmer[:-1], suffix = kmer[1:], interior = kmer[1:-1].
+
+    Args:
+        kmer_counts: dict mapping length j → Counter of j-mers; must contain
+                     all lengths from 1 to len(kmer).
+        kmer:        The k-mer whose expected count to compute.
+        n:           Sequence length (used only for the k == 2 case).
+
+    Returns:
+        Expected count as a float; 0.0 when the interior (k-2)-mer count is
+        zero (undefined conditional probability).
+    """
+    k = len(kmer)
+    if k == 2:
+        return kmer_counts[1].get(kmer[0], 0) * kmer_counts[1].get(kmer[1], 0) / n
+    c_prefix   = kmer_counts[k - 1].get(kmer[:-1],   0)
+    c_suffix   = kmer_counts[k - 1].get(kmer[1:],    0)
+    c_interior = kmer_counts[k - 2].get(kmer[1:-1],  0)
+    if c_interior == 0:
+        return 0.0
+    return c_prefix * c_suffix / c_interior
+
+
+def markov_kmer_pvalues(txt: str, k: int) -> list:
+    """Analytical Markov-model p-values for all k-mers observed in txt.
+
+    For each k-mer w the expected count under a (k-1)-th order Markov model
+    is computed using the Prum/Schbath formula — no shuffling required.  The
+    observed count is tested against a Poisson(expected) null:
+
+    * pvalue_over  — P(X >= obs). Small values flag over-represented k-mers.
+    * pvalue_under — P(X <= obs). Small values flag under-represented k-mers.
+
+    This is the fast analytical counterpart to scramble_kmer_pvalues().  The
+    null here conditions on the observed (k-1)-mer frequencies rather than on
+    the overall nucleotide composition.  Results are comparable but may differ
+    because the two null models are not identical.
+
+    BH-adjusted p-values (FDR) and E-values (p * m, where m is the number of
+    distinct k-mers) are computed separately for each direction.  Rows are
+    sorted by min(pvalue_over, pvalue_under) ascending.
+
+    Args:
+        txt: Source sequence (lower-cased internally).
+        k:   K-mer length (>= 2).
+
+    Returns:
+        List of dicts sorted by min(pvalue_over, pvalue_under) ascending.
+        Each dict has: kmer, real_count, expected_count,
+        pvalue_over, evalue_over, pvalue_over_bh,
+        pvalue_under, evalue_under, pvalue_under_bh, direction.
+    """
+    from scipy.stats import poisson, false_discovery_control
+
+    if k < 2:
+        raise ValueError("k must be at least 2")
+    txt = txt.lower()
+    n   = len(txt)
+
+    kmer_counts = {j: Counter(txt[i:i+j] for i in range(n - j + 1))
+                   for j in range(1, k + 1)}
+
+    observed    = kmer_counts[k]
+    kmers       = list(observed.keys())
+    m           = len(kmers)
+    real_counts = [observed[w] for w in kmers]
+    expected    = [_markov_expected_count(kmer_counts, w, n) for w in kmers]
+
+    pvals_over  = []
+    pvals_under = []
+    for obs, exp in zip(real_counts, expected):
+        if exp <= 0:
+            pvals_over.append(1.0 if obs == 0 else 0.0)
+            pvals_under.append(0.0 if obs == 0 else 1.0)
+        else:
+            pvals_over.append(float(poisson.sf(obs - 1, exp)))
+            pvals_under.append(float(poisson.cdf(obs, exp)))
+
+    bh_over  = list(false_discovery_control(pvals_over,  method='bh'))
+    bh_under = list(false_discovery_control(pvals_under, method='bh'))
+
+    results = []
+    for i, w in enumerate(kmers):
+        po = pvals_over[i]
+        pu = pvals_under[i]
+        results.append({
+            'kmer':            w,
+            'real_count':      real_counts[i],
+            'expected_count':  round(expected[i], 3),
+            'pvalue_over':     po,
+            'evalue_over':     po * m,
+            'pvalue_over_bh':  bh_over[i],
+            'pvalue_under':    pu,
+            'evalue_under':    pu * m,
+            'pvalue_under_bh': bh_under[i],
+            'direction':       'over' if po <= pu else 'under',
+        })
+    results.sort(key=lambda x: min(x['pvalue_over'], x['pvalue_under']))
+    return results
+
+
+def decompose_motif(txt: str, motif: str, alpha: float = 0.05,
+                    min_k: int = 2) -> list:
+    """Hierarchical Markov decomposition of a motif's enrichment signal.
+
+    Tests every contiguous sub-k-mer of the motif at each length k from
+    len(motif) down to min_k.  At each level the Prum/Schbath Markov formula
+    provides an expected count conditioned on the observed (k-1)-mer
+    frequencies; a Poisson exact p-value answers "is this k-mer count
+    surprising given the shorter context?"
+
+    Use this to find the *shortest* sub-unit of the motif whose enrichment (or
+    depletion) is not fully explained by its own sub-motifs.
+
+    Args:
+        txt:   Source sequence (lower-cased internally).
+        motif: The motif to decompose (lower-cased internally).
+        alpha: Significance threshold for the ``significant`` boolean field,
+               applied to the BH-adjusted p-value (default 0.05).
+        min_k: Shortest sub-k-mer length to test (default 2; must be >= 2).
+
+    Returns:
+        List of dicts ordered from longest (full motif) down to min_k, then
+        by position within the motif (duplicates removed).  Fields: level,
+        kmer, real_count, expected_count, pvalue_over, pvalue_under,
+        pvalue_bh, direction, significant.
+        pvalue_bh is the BH-FDR-adjusted min(pvalue_over, pvalue_under)
+        across all entries; significant uses pvalue_bh < alpha.
+    """
+    from scipy.stats import poisson, false_discovery_control
+
+    motif = motif.lower()
+    txt   = txt.lower()
+    n     = len(txt)
+    L     = len(motif)
+    min_k = max(2, min_k)
+
+    if L < min_k:
+        return []
+
+    kmer_counts = {j: Counter(txt[i:i+j] for i in range(n - j + 1))
+                   for j in range(1, L + 1)}
+
+    results = []
+    for k in range(L, min_k - 1, -1):
+        seen = set()
+        for start in range(L - k + 1):
+            sub = motif[start:start + k]
+            if sub in seen:
+                continue
+            seen.add(sub)
+            obs = kmer_counts[k].get(sub, 0)
+            exp = _markov_expected_count(kmer_counts, sub, n)
+            if exp <= 0:
+                p_over  = 1.0 if obs == 0 else 0.0
+                p_under = 0.0 if obs == 0 else 1.0
+            else:
+                p_over  = float(poisson.sf(obs - 1, exp))
+                p_under = float(poisson.cdf(obs, exp))
+            results.append({
+                'level':          k,
+                'kmer':           sub,
+                'real_count':     obs,
+                'expected_count': round(exp, 3),
+                'pvalue_over':    p_over,
+                'pvalue_under':   p_under,
+                'direction':      'over' if p_over <= p_under else 'under',
+            })
+
+    pvals_min = [min(r['pvalue_over'], r['pvalue_under']) for r in results]
+    bh = list(false_discovery_control(pvals_min, method='bh'))
+    for r, adj in zip(results, bh):
+        r['pvalue_bh']   = adj
+        r['significant'] = adj < alpha
+
+    return results
+
+
 def scramble_kmer_pvalues(txt: str, k: int, N: int, seed: int = 0) -> list:
     """Compute two-sided empirical p-values for every k-mer observed in txt.
 

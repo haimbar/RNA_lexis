@@ -14,7 +14,7 @@ from rna_lexis.algorithms import (
     count_kgrams, contains_only_rna, cover, find_boundary, cores,
     find_all_matches, print_core, find_with_mutations, extend_match_pair,
     find_longest_extensions, gen_hairpins,
-    scramble_kmer_pvalues,
+    scramble_kmer_pvalues, markov_kmer_pvalues, decompose_motif,
 )
 from rna_lexis.alignment import gotoh_global, gotoh_local, print_alignment
 from rna_lexis.plots import (
@@ -1312,6 +1312,132 @@ def hairpins_input(txt, file_path, minSL=8, minLL=3, maxLL=40):
     safe_input(fmttxt(['Press Enter to continue'], [''], ['white']))
 
 
+def markov_input(txt, file_path=''):
+    """Prompt for k-mer length, then write a CSV of all observed k-mers with
+    analytical Markov-model p-values — no shuffling required.
+
+    For each k-mer the expected count under a (k-1)-th order Markov model is
+    computed via the Prum/Schbath formula; a Poisson exact p-value tests
+    whether the observed count is surprising given the (k-1)-mer frequencies.
+    """
+    k_str = safe_input(fmttxt(['k-mer length', '[default: 6]: '],
+                               ['bold', ''], ['yellow', 'cyan']) + ' ').strip()
+    k = int(k_str) if k_str.isdigit() and int(k_str) > 1 else 6
+
+    base = os.path.splitext(file_path)[0] if file_path else 'sequence'
+    default_csv = f'{base}_kmer{k}_markov.csv'
+    fn_str = safe_input(fmttxt(['Output CSV file',
+                                 f'[default: {os.path.basename(default_csv)}]: '],
+                                ['bold', ''], ['yellow', 'cyan']) + ' ').strip()
+    out_csv = fn_str if fn_str else default_csv
+
+    print(fmttxt([f'Computing Markov p-values for k={k} …'], [''], ['cyan']))
+    results = markov_kmer_pvalues(txt, k=k)
+
+    import csv as _csv
+    try:
+        with open(out_csv, 'w', newline='') as fh:
+            w = _csv.writer(fh)
+            w.writerow([
+                'kmer', 'real_count', 'expected_count',
+                'pvalue_over', 'evalue_over', 'pvalue_over_bh',
+                'pvalue_under', 'evalue_under', 'pvalue_under_bh',
+                'direction',
+            ])
+            for row in results:
+                w.writerow([
+                    row['kmer'], row['real_count'],
+                    f"{row['expected_count']:.3f}",
+                    f"{row['pvalue_over']:.8f}",  f"{row['evalue_over']:.4f}",  f"{row['pvalue_over_bh']:.8f}",
+                    f"{row['pvalue_under']:.8f}", f"{row['evalue_under']:.4f}", f"{row['pvalue_under_bh']:.8f}",
+                    row['direction'],
+                ])
+        print(fmttxt([f'Saved {len(results)} k-mers to:', out_csv],
+                     ['bold', ''], ['green', 'cyan']))
+        open_file_with_default_software(out_csv)
+    except Exception as e:
+        print(fmttxt([f'Error writing file: {e}'], ['bold'], ['red']))
+
+    safe_input(fmttxt(['Press Enter to continue'], [''], ['white']))
+
+
+def decompose_motif_input(txt, file_path=''):
+    """Prompt for a motif, then write a CSV of hierarchical Markov decomposition.
+
+    Every contiguous sub-k-mer of the motif is tested at each length k from
+    len(motif) down to 2, revealing the shortest unit whose count is
+    surprising beyond what the (k-1)-mer context already explains.
+    """
+    prompt = fmttxt(['Motif to decompose', '(e.g. ugcaug): '],
+                    ['bold', ''], ['yellow', 'cyan'])
+    motif = safe_input(prompt + ' ').strip().lower()
+    if not motif:
+        print(fmttxt(['No motif entered.'], ['bold'], ['red']))
+        safe_input(fmttxt(['Press Enter to continue'], [''], ['white']))
+        return
+
+    mink_str = safe_input(fmttxt(['Minimum k-mer length', '[default: 4]: '],
+                                  ['bold', ''], ['yellow', 'cyan']) + ' ').strip()
+    min_k = int(mink_str) if mink_str.isdigit() and int(mink_str) >= 2 else 4
+
+    alpha_str = safe_input(fmttxt(['Significance threshold alpha', '[default: 0.05]: '],
+                                   ['bold', ''], ['yellow', 'cyan']) + ' ').strip()
+    try:
+        alpha = float(alpha_str) if alpha_str else 0.05
+    except ValueError:
+        alpha = 0.05
+
+    base = os.path.splitext(file_path)[0] if file_path else 'sequence'
+    default_csv = f'{base}_decompose_{motif}.csv'
+    fn_str = safe_input(fmttxt(['Output CSV file',
+                                 f'[default: {os.path.basename(default_csv)}]: '],
+                                ['bold', ''], ['yellow', 'cyan']) + ' ').strip()
+    out_csv = fn_str if fn_str else default_csv
+
+    print(fmttxt([f'Decomposing {motif!r} …'], [''], ['cyan']))
+    results = decompose_motif(txt, motif, alpha=alpha, min_k=min_k)
+
+    if not results:
+        print(fmttxt(['Motif too short to decompose (need length >= 2).'], ['bold'], ['yellow']))
+        safe_input(fmttxt(['Press Enter to continue'], [''], ['white']))
+        return
+
+    import csv as _csv
+    try:
+        with open(out_csv, 'w', newline='') as fh:
+            w = _csv.writer(fh)
+            w.writerow([
+                'level', 'kmer', 'real_count', 'expected_count',
+                'pvalue_over', 'pvalue_under', 'pvalue_bh', 'direction', 'significant',
+            ])
+            for row in results:
+                w.writerow([
+                    row['level'], row['kmer'], row['real_count'],
+                    f"{row['expected_count']:.3f}",
+                    f"{row['pvalue_over']:.8f}",
+                    f"{row['pvalue_under']:.8f}",
+                    f"{row['pvalue_bh']:.8f}",
+                    row['direction'], row['significant'],
+                ])
+        sig = [r for r in results if r['significant']]
+        if sig:
+            min_level = min(r['level'] for r in sig)
+            min_kmers = [r['kmer'] for r in sig if r['level'] == min_level]
+            print(fmttxt([f'Shortest significant unit: length {min_level}:',
+                          ', '.join(min_kmers)],
+                         ['bold', ''], ['green', 'cyan']))
+        else:
+            print(fmttxt(['No sub-unit reached significance at alpha =',
+                          f'{alpha}'], ['bold', ''], ['yellow', 'cyan']))
+        print(fmttxt([f'Saved {len(results)} entries to:', out_csv],
+                     ['bold', ''], ['green', 'cyan']))
+        open_file_with_default_software(out_csv)
+    except Exception as e:
+        print(fmttxt([f'Error writing file: {e}'], ['bold'], ['red']))
+
+    safe_input(fmttxt(['Press Enter to continue'], [''], ['white']))
+
+
 def scramble_input(txt, file_path=''):
     """Prompt for k-mer length and shuffle parameters, then write a CSV of
     all observed k-mers with two-sided empirical p-values sorted ascending.
@@ -1674,7 +1800,7 @@ def menus():
     submenu = [["Plots", "Sequence operations", "Open Core file", "Summary statistics",
                "Show settings", "Change setting", "Open User Guide", "Load new input", "Quit"],
                ["Core neighbors", "K-mers", "Logo", "Coverage", "Motif Match/Mutation", "Back"],
-               ["Find all matches", "Search with mutations", "Motif extensions", "Print core", "Export hairpins to CSV", "Extend match pair", "Alignment score for two sequences", "K-mer scramble analysis", "Covered area", "Back"]]
+               ["Find all matches", "Search with mutations", "Motif extensions", "Print core", "Export hairpins to CSV", "Extend match pair", "Alignment score for two sequences", "K-mer scramble analysis", "Covered area", "Decompose motif", "Back"]]
     if not defvals['datadir']:
         cwd = os.getcwd()
         valid = _find_valid_sessions(cwd)
@@ -1760,7 +1886,7 @@ def menus():
                 else:
                     val = show_menu(file_path, menu_ttl[menu_level], submenu[menu_level],
                                     clr=defvals['clr'],
-                                    split={0: 4, 1: 5, 2: 9}.get(menu_level))
+                                    split={0: 4, 1: 5, 2: 10}.get(menu_level))
                     # Top level menu:
                     if menu_level == 0:
                         # Quit:
@@ -1887,6 +2013,8 @@ blockquote{{border-left:4px solid #ccc;margin:1em 0;padding:0.5em 1em;color:#555
                             case 9:
                                 txt_coverage_input(txt, strs)
                             case 10:
+                                decompose_motif_input(txt, file_path)
+                            case 11:
                                 menu_level = 0 # Go to the main menu
         
         except EOFSignal:
