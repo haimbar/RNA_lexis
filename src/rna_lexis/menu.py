@@ -1800,7 +1800,8 @@ def menus():
     submenu = [["Plots", "Sequence operations", "Open Core file", "Summary statistics",
                "Show settings", "Change setting", "Open User Guide", "Load new input", "Quit"],
                ["Core neighbors", "K-mers", "Logo", "Coverage", "Motif Match/Mutation", "Back"],
-               ["Find all matches", "Search with mutations", "Motif extensions", "Print core", "Export hairpins to CSV", "Extend match pair", "Alignment score for two sequences", "K-mer scramble analysis", "Covered area", "Decompose motif", "Back"]]
+               ["Find all matches", "Search with mutations", "Motif extensions", "Print core", "Export hairpins to CSV", "Extend match pair", "Alignment score for two sequences", "K-mer scramble analysis", "Covered area", "Back"]]
+#               ["Find all matches", "Search with mutations", "Motif extensions", "Print core", "Export hairpins to CSV", "Extend match pair", "Alignment score for two sequences", "K-mer scramble analysis", "Covered area", "Decompose motif", "Back"]]
     if not defvals['datadir']:
         cwd = os.getcwd()
         valid = _find_valid_sessions(cwd)
@@ -2013,8 +2014,8 @@ blockquote{{border-left:4px solid #ccc;margin:1em 0;padding:0.5em 1em;color:#555
                             case 9:
                                 txt_coverage_input(txt, strs)
                             case 10:
-                                decompose_motif_input(txt, file_path)
-                            case 11:
+#                                decompose_motif_input(txt, file_path)
+#                            case 11:
                                 menu_level = 0 # Go to the main menu
         
         except EOFSignal:
