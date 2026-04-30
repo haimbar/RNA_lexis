@@ -250,7 +250,8 @@ The detail view is a plain HTML page showing every nucleotide in the selected ra
 7. Alignment score for two sequences
 8. K-mer scramble analysis
 9. Covered area
-10. Back
+10. Decompose motif
+11. Back
 ```
 
 #### 2.1 Find all matches
@@ -399,7 +400,7 @@ The alignment is printed with gap symbols and the following scores:
 
 #### 2.8 K-mer scramble analysis
 
-Builds an empirical null distribution for k-mer over-representation by shuffling the loaded sequence N times (each shuffle preserves the exact nucleotide composition) and counting every k-mer in each shuffled copy.  For every k-mer observed in the real sequence the p-value is the fraction of shuffles in which that k-mer's count was ≥ its real count.  All results are saved to a CSV file sorted by p-value (most over-represented first).
+Builds an empirical null distribution for k-mer frequency by shuffling the loaded sequence N times (each shuffle preserves the exact nucleotide composition) and counting every k-mer in each shuffled copy.  Two one-sided p-values are reported per k-mer, testing for over- and under-representation separately.  All results are saved to a CSV file sorted by the more extreme of the two p-values.
 
 **Prompts:**
 
@@ -416,12 +417,48 @@ Builds an empirical null distribution for k-mer over-representation by shuffling
 |---|---|
 | `kmer` | The k-mer sequence |
 | `real_count` | Number of times it appears in the loaded sequence |
-| `exceed_count` | Number of shuffles in which this k-mer's count was ≥ `real_count` |
-| `pvalue` | `exceed_count / N` — reported to 8 decimal places |
+| `exceed_count` | Number of shuffles where count ≥ `real_count` |
+| `below_count` | Number of shuffles where count ≤ `real_count` |
+| `pvalue_over` | `exceed_count / N` — small = **over-represented** |
+| `evalue_over` | `pvalue_over × m` (expected false positives among *m* k-mers) |
+| `pvalue_over_bh` | BH-adjusted p-value for over-representation (FDR) |
+| `pvalue_under` | `below_count / N` — small = **under-represented** |
+| `evalue_under` | `pvalue_under × m` |
+| `pvalue_under_bh` | BH-adjusted p-value for under-representation (FDR) |
+| `direction` | `'over'` or `'under'` — which effect is stronger |
 
-Rows are sorted by `pvalue` ascending so the most over-represented k-mers appear at the top.  A p-value of 0.000 means the k-mer was never as frequent in any shuffle; a value near 1.0 means it is no more frequent than expected by chance.
+Rows are sorted by `min(pvalue_over, pvalue_under)` so the most extreme k-mers in either direction appear first.  A k-mer with no enrichment or depletion will have both p-values near 0.5.  BH correction is applied separately within each family of *m* tests.
 
-#### 2.9 Covered area
+#### 2.9 Decompose motif
+
+Tests whether the enrichment of a motif can be explained by shorter sub-sequences, or whether the motif itself carries genuine signal.  For every contiguous sub-k-mer of the input motif at each length from `len(motif)` down to `min_k`, the expected count is derived analytically from a (k−1)-th order Markov model (Prum/Schbath formula) and compared with the observed count via a Poisson exact test.  A BH-adjusted p-value is reported across all sub-k-mers tested, and the result identifies the **shortest sub-unit whose count is surprising beyond what shorter context already explains**.
+
+**Prompts:**
+
+| Prompt | Default | Notes |
+|---|:---:|---|
+| Motif to decompose | | e.g. `ugcaug` |
+| Minimum k-mer length | 4 | Recursion stops here; must be ≥ 2 |
+| Significance threshold alpha | 0.05 | Applied to the BH-adjusted p-value |
+| Output CSV file | `<name>_decompose_<motif>.csv` | Path to the results file |
+
+**Output CSV columns:**
+
+| Column | Description |
+|---|---|
+| `level` | Sub-k-mer length tested |
+| `kmer` | The sub-k-mer sequence |
+| `real_count` | Observed count in the loaded sequence |
+| `expected_count` | Expected count under the (k−1)-th order Markov null |
+| `pvalue_over` | P(X ≥ obs) — small = over-represented given shorter context |
+| `pvalue_under` | P(X ≤ obs) — small = under-represented given shorter context |
+| `pvalue_bh` | BH-adjusted min(pvalue_over, pvalue_under) across all sub-k-mers |
+| `direction` | `'over'` or `'under'` |
+| `significant` | `True` when `pvalue_bh < alpha` |
+
+After saving the CSV, the shortest level at which at least one sub-k-mer reaches significance is printed to the terminal.
+
+#### 2.10 Covered area
 
 Computes and prints the coverage score for a single sequence: `length^a times occurrences`, where *a* is a configurable exponent (default 1.2, matching the session setting).
 

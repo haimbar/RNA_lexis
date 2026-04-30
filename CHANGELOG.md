@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.0.7] - 2026-04-29
+
+### Added
+
+- **Hierarchical motif decomposition (`decompose_motif`).**  A new *Decompose motif*
+  option (Sequence operations → 10) tests whether a motif's enrichment is genuine or
+  fully explained by shorter sub-sequences.  For every contiguous sub-k-mer of the
+  input motif at each length from `len(motif)` down to a user-configurable `min_k`
+  (default 4), the expected count is computed analytically from a (k−1)-th order
+  Markov model using the Prum/Schbath formula — no shuffling required.  A Poisson
+  exact p-value then answers "is this k-mer count surprising given the shorter
+  context?"  A single BH-FDR-adjusted p-value (`pvalue_bh`) is reported across all
+  sub-k-mers tested, and the shortest level reaching significance is printed to the
+  terminal.  Output columns: `level`, `kmer`, `real_count`, `expected_count`,
+  `pvalue_over`, `pvalue_under`, `pvalue_bh`, `direction`, `significant`.
+
+- **Analytical Markov k-mer test (`markov_kmer_pvalues`).**  A fast analytical
+  counterpart to the shuffle-based scramble test.  For each k-mer the expected count
+  under a (k−1)-th order Markov model is computed from the Prum/Schbath formula and
+  tested with a Poisson exact p-value, with BH-FDR correction.  Runs instantly for
+  any k.  Available in the API (`algorithms.markov_kmer_pvalues`); not yet exposed as
+  a separate menu item.
+
 ## [0.0.6] - 2026-04-29
 
 ### Changed

@@ -66,6 +66,25 @@ A k-mer with no enrichment or depletion relative to the shuffle distribution wil
 direction across all *m* k-mers.  Rows are sorted by `min(pvalue_over, pvalue_under)`
 so the most extreme k-mers in either direction appear first.
 
+## Hierarchical motif decomposition
+
+The *Decompose motif* menu option answers the question: **is a motif's enrichment
+genuine, or is it fully explained by shorter sub-sequences?**
+
+For every contiguous sub-k-mer of the input motif at each length from `len(motif)`
+down to a configurable minimum (default 4), the expected count is derived analytically
+from a (k−1)-th order Markov model using the Prum/Schbath formula:
+
+| k | Expected count formula |
+|---|---|
+| 2 | `count(a) × count(b) / n` |
+| ≥ 3 | `count(w[:-1]) × count(w[1:]) / count(w[1:-1])` |
+
+A Poisson exact p-value then tests whether the observed count is surprising given the
+shorter context.  BH-FDR correction is applied across all sub-k-mers tested.  The
+output CSV includes `pvalue_over`, `pvalue_under`, `pvalue_bh`, `direction`, and
+`significant`; the shortest level reaching significance is printed to the terminal.
+
 ## Requirements
 
 - Python 3.10 or newer
