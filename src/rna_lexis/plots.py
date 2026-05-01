@@ -50,219 +50,470 @@ def plot_seq_nbrs(s0, s, txt, sortby='CP', wd=20, title='', file='',
         hairpins: List of hairpin dicts (keys: start, end, stem_seq,
                   loop_seq) to draw as orange bands beneath row 0.
     """
-    # sortby should be CP, cp, IOU, or iou
     L = len(txt)
     lc = len(s0)
     maxlenstr = 0
+    txtl = txt.lower()  # compute once; reused everywhere below
 
-    # find other cores (from s) within wd from s0
     if sortby.upper() == 'CP':
         s1 = cond_prob_core(s0, s, txt, wnd=wd, rev=True)
     else:
         s1 = core_nbrs(s0, s, txt, wnd=wd, rev=True)
-    if s0 in list(s1.keys()):
+    if s0 in s1:
         del s1[s0]
-    n = len(s1) # number of related cores
+    n = len(s1)
     related = list(s1.keys())
 
-    # search for mutations
-    mutset = set({s0})
-    arrmut = []
+    # discover mutations, then cache their positions once for both sorting and rendering
+    mutset = {s0}
     if lc >= 6:
-        for ms in range(math.floor(lc/6)):
-            tmpset = mutset
-            for mut_j in mutset:
-                mutsrch = allow_mutation(mut_j)
-                arrmuttmp = set(Counter(find_all_matches(mutsrch, txt.lower(), ret='str')).keys())
-                mutset = mutset.union(arrmuttmp)
-            if mutset == tmpset:
+        for _ in range(math.floor(lc / 6)):
+            prev = set(mutset)
+            for mj in prev:
+                mutset |= set(Counter(
+                    find_all_matches(allow_mutation(mj), txtl, ret='str')
+                ).keys())
+            if mutset == prev:
                 break
-    arrmut = list(mutset - {s0})
-    mutcnt = dict()
-    for j in range(len(arrmut)):
-        arr = find_all_matches(arrmut[j], txt.lower(), ret='pos')
-        mutcnt[arrmut[j]] = len(arr)
-    {k: v for k, v in sorted(mutcnt.items(), key=lambda item: item[1])}
-    arrmut = list({k: v for k, v in sorted(mutcnt.items(), key=lambda item: item[1], reverse=True)}.keys())
+    arrmut_raw = list(mutset - {s0})
+    mut_positions = {m: find_all_matches(m, txtl, ret='pos') for m in arrmut_raw}
+    arrmut = sorted(arrmut_raw, key=lambda m: len(mut_positions[m]), reverse=True)
+    nm = len(arrmut)
 
-    # plot all the occurrences of s0:
-    nm = len(arrmut)  # number of mutations; s0 is at y=0, neighbors above (+), mutations below (-)
     plotxrange = [0, L]
-    if len(xrange) == 2:
-        if 0 <= xrange[0] < xrange[1] <= L:
-            plotxrange = xrange
-    layout = go.Layout(showlegend=True, hovermode='closest', hoverlabel=dict(
-        bgcolor="white", font_size=16, font_family="Rockwell"),
-        xaxis=dict(range=[plotxrange[0], plotxrange[1]*1.07], autorange=False),
-        yaxis_range=[-nm-0.5, n+2], title=title)
-    fig = go.Figure(layout=layout)
-    arr0 = [p for p in find_all_matches(s0, txt.lower(), ret='pos')
+    if len(xrange) == 2 and 0 <= xrange[0] < xrange[1] <= L:
+        plotxrange = xrange
+
+    arr0 = [p for p in find_all_matches(s0, txtl, ret='pos')
             if plotxrange[0] <= p < plotxrange[1]]
-    for j in range(len(arr0)):
-        fig.add_shape(type="rect", x0=arr0[j], x1=arr0[j]+lc, y0=0, y1=0.9,
-                fillcolor='rgba(173, 216, 230, 0.5)', line=dict(color='blue', width=1))
-        # highlight the regions next to s0 (width = wd)
-        fig.add_vrect(
-            x0=arr0[j]-wd-lc, x1=arr0[j]+wd+lc,
-            fillcolor="LightSalmon", opacity=0.3,
-            layer="below", line_width=0,
-        )
-        fig.add_trace(go.Scatter(x=[arr0[j]+lc/2], y=[0.5],
-            hovertemplate = f'{s0} {arr0[j]}', showlegend=False,
-                             mode='markers', marker=dict(size=6, color='darkblue', symbol='x')))
-    # draw hairpin regions as orange horizontal bands alongside s0
+
+    # cache neighbour positions filtered to the visible range
+    nbr_positions = {seq: [p for p in find_all_matches(seq, txtl, ret='pos')
+                            if plotxrange[0] <= p < plotxrange[1]]
+                     for seq in related}
+
+    layout = go.Layout(
+        showlegend=True, hovermode='closest',
+        hoverlabel=dict(bgcolor='white', font_size=16, font_family='Rockwell'),
+        xaxis=dict(range=[plotxrange[0], plotxrange[1] * 1.07], autorange=False),
+        yaxis_range=[-nm - 0.5, n + 2], title=title,
+    )
+    fig = go.Figure(layout=layout)
+
+    shapes = []
+    traces = []
+    annotations = []
+
+    # s0 occurrences
+    for p0 in arr0:
+        shapes.append(dict(type='rect', x0=p0, x1=p0 + lc, y0=0, y1=0.9,
+                           fillcolor='rgba(173,216,230,0.5)',
+                           line=dict(color='blue', width=1)))
+        shapes.append(dict(type='rect', xref='x', yref='paper',
+                           x0=p0 - wd - lc, x1=p0 + wd + lc, y0=0, y1=1,
+                           fillcolor='LightSalmon', opacity=0.3,
+                           layer='below', line=dict(width=0)))
+        traces.append(go.Scatter(
+            x=[p0 + lc / 2], y=[0.5],
+            hovertemplate=f'{s0} {p0}', showlegend=False, mode='markers',
+            marker=dict(size=6, color='darkblue', symbol='x')))
+
+    # hairpins
     for hp in hairpins:
-        fig.add_shape(type="rect",
-            x0=hp['start'], x1=hp['end'], y0=-0.15, y1=0,
-            fillcolor='rgba(255,165,0,0.6)', line=dict(color='darkorange', width=1))
+        shapes.append(dict(type='rect', x0=hp['start'], x1=hp['end'],
+                           y0=-0.15, y1=0,
+                           fillcolor='rgba(255,165,0,0.6)',
+                           line=dict(color='darkorange', width=1)))
         mid = (hp['start'] + hp['end']) / 2
-        hover = (f"pos: {hp['start']}–{hp['end']}<br>"
-                 f"stem: {hp['stem_seq']}<br>"
-                 f"loop: {hp['loop_seq']}")
-        fig.add_trace(go.Scatter(
-            x=[mid], y=[-0.075],
-            mode='markers',
+        hover_hp = (f"pos: {hp['start']}–{hp['end']}<br>"
+                    f"stem: {hp['stem_seq']}<br>loop: {hp['loop_seq']}")
+        traces.append(go.Scatter(
+            x=[mid], y=[-0.075], mode='markers',
             marker=dict(size=max(6, (hp['end'] - hp['start']) // 4),
                         color='darkorange', opacity=0),
-            customdata=[hover],
+            customdata=[hover_hp],
             hovertemplate='%{customdata}<extra>Hairpin</extra>',
-            showlegend=False,
-        ))
-    # add the legend on the right
-    fig.add_annotation(x=plotxrange[1]*1.001, y=0.35, text=s0, showarrow=False,
-        xanchor="left", font=dict(family="courier", size=14, color='blue'))
+            showlegend=False))
 
-    # plot all the related cores:
-    for i in range(len(s1)):
-        col = 'rgb(218,112,214)'
-        colt = 'rgba(218,112,214, 0.3)'
-        if (related[i] in s0) or (s0 in related[i]):
-            col = 'rgb(0,255,0)'
-            colt = 'rgba(0,255,0, 0.3)'
-        arr = [p for p in find_all_matches(related[i], txt.lower(), ret='pos')
-               if plotxrange[0] <= p < plotxrange[1]]
-        for j in range(len(arr)):
-            mrk = 'square'
-            sz = 6
-            colm = 'blue'
-            if col == 'rgb(218,112,214)':
-                for i0 in range(len(arr0)):
-                # if s0 starts before s1, and ends after s1 starts
-                    if (arr0[i0] < arr[j]) and (arr[j] < arr0[i0] + lc < arr[j] + len(related[i])):
-                        fig.add_trace(go.Scatter(x=[arr[j]+len(related[i])/2], y=[i+1.5],
-                            hovertemplate = f'{related[i]} {arr[j]}',
-                             showlegend=False, mode='markers',
-                             marker=dict(size=8, color='green', symbol='triangle-right')))
-                        mrk = 'triangle-right'
-                        sz = 12
-                        colm = 'green'
-                # if s1 starts before s0, and ends after s0 starts
-                    if (arr[j] < arr0[i0]) and (arr0[i0] <  arr[j] + len(related[i]) < arr0[i0] + lc):
-                        fig.add_trace(go.Scatter(x=[arr[j]+len(related[i])/2], y=[i+1.5], hovertemplate = f'{related[i]} {arr[j]}',
-                             showlegend=False,
-                             mode='markers', marker=dict(size=6, color='green', symbol='triangle-left')))
-                        mrk = 'triangle-left'
-                        sz = 12
-                        colm = 'green'
-            fig.add_shape(type="rect", x0=arr[j], x1=arr[j]+len(related[i]), y0=i+1, y1=i+1.9,
-                fillcolor=colt, line=dict(color=col, width=1))
-            fig.add_trace(go.Scatter(x=[arr[j]+len(related[i])/2], y=[i+1.5], hovertemplate = f'{related[i]} {arr[j]}',
-                             showlegend=False,
-                             mode='markers', marker=dict(size=sz, color=colm, symbol=mrk)))
-        if len(related[i]) > maxlenstr:
-            maxlenstr = len(related[i])
-        fig.add_annotation(
-                    x=plotxrange[1]*1.001, y=i+1.35, text=related[i],
-                    showarrow=False, xanchor="left",
-                    font=dict(family="courier", size=14, color=col)
-                )
-    if (len(s1) == 0):
-        i = 0
+    annotations.append(dict(x=plotxrange[1] * 1.001, y=0.35, text=s0,
+                             showarrow=False, xanchor='left',
+                             font=dict(family='courier', size=14, color='blue')))
 
-    # plot all the mutations:
-    for j in range(len(arrmut)):
-        arr = [p for p in find_all_matches(arrmut[j], txt.lower(), ret='pos')
-               if plotxrange[0] <= p < plotxrange[1]]
-        for idx in range(len(s0)):
-            if arrmut[j][idx] != s0[idx]:
-                arrmut[j] = arrmut[j][:idx] + arrmut[j][idx].upper() + arrmut[j][idx+1:]
-            for k in range(len(arr)):
-                mrk = 'square'
-                sz = 6
-                colm = 'blue'
-                for i0 in range(len(arr0)):
-                # if s0 starts before s1, and ends after s1 starts
-                    if (arr0[i0] < arr[k]) and (arr[k] < arr0[i0] + lc < arr[k] + len(arrmut[j])):
-                        mrk = 'triangle-right'
-                        sz = 12
-                        colm = 'darkgreen'
-                # if s1 starts before s0, and ends after s0 starts
-                    if (arr[k] < arr0[i0]) and (arr0[i0] <  arr[k] + len(arrmut[j]) < arr0[i0] + lc):
-                        mrk = 'triangle-left'
-                        sz = 12
-                        colm = 'darkgreen'
-                fig.add_shape(type="rect", x0=arr[k], x1=arr[k]+len(arrmut[j]), y0=-1-j, y1=-j-0.1,
-                    fillcolor='rgba(255, 255, 255, 0.1)', line=dict(color='red', width=1))
-                fig.add_trace(go.Scatter(x=[arr[k]+len(arrmut[j])/2], y=[-0.5-j], hovertemplate = f'{arrmut[j]} {arr[k]}',
-                             showlegend=False,
-                             mode='markers', marker=dict(size=sz, color=colm, symbol=mrk)))
-        if len(arrmut[j]) > maxlenstr:
-            maxlenstr = len(arrmut[j])
-        fig.add_annotation(
-                    x=plotxrange[1]*1.001, y=-0.55-j, text=arrmut[j],
-                    showarrow=False, xanchor="left",
-                    font=dict(family="courier", size=14, color='red')
-                )
+    # related cores
+    for i, seq in enumerate(related):
+        is_cont = (seq in s0) or (s0 in seq)
+        col  = 'rgb(0,255,0)'      if is_cont else 'rgb(218,112,214)'
+        colt = 'rgba(0,255,0,0.3)' if is_cont else 'rgba(218,112,214,0.3)'
+        arr = nbr_positions[seq]
+        for p in arr:
+            mrk, sz, colm = 'square', 6, 'blue'
+            if not is_cont:
+                for p0 in arr0:
+                    if (p0 < p) and (p < p0 + lc < p + len(seq)):
+                        traces.append(go.Scatter(
+                            x=[p + len(seq) / 2], y=[i + 1.5],
+                            hovertemplate=f'{seq} {p}',
+                            showlegend=False, mode='markers',
+                            marker=dict(size=8, color='green', symbol='triangle-right')))
+                        mrk, sz, colm = 'triangle-right', 12, 'green'
+                    if (p < p0) and (p0 < p + len(seq) < p0 + lc):
+                        traces.append(go.Scatter(
+                            x=[p + len(seq) / 2], y=[i + 1.5],
+                            hovertemplate=f'{seq} {p}',
+                            showlegend=False, mode='markers',
+                            marker=dict(size=6, color='green', symbol='triangle-left')))
+                        mrk, sz, colm = 'triangle-left', 12, 'green'
+            shapes.append(dict(type='rect', x0=p, x1=p + len(seq),
+                               y0=i + 1, y1=i + 1.9,
+                               fillcolor=colt, line=dict(color=col, width=1)))
+            traces.append(go.Scatter(
+                x=[p + len(seq) / 2], y=[i + 1.5],
+                hovertemplate=f'{seq} {p}',
+                showlegend=False, mode='markers',
+                marker=dict(size=sz, color=colm, symbol=mrk)))
+        if len(seq) > maxlenstr:
+            maxlenstr = len(seq)
+        annotations.append(dict(x=plotxrange[1] * 1.001, y=i + 1.35, text=seq,
+                                 showarrow=False, xanchor='left',
+                                 font=dict(family='courier', size=14, color=col)))
 
-    # --- legend entries (dummy invisible traces) ---
+    # mutations — one shape+trace per occurrence, display string computed once per mutation
+    for j, mut in enumerate(arrmut):
+        display = ''.join(
+            c.upper() if (idx < lc and c != s0[idx]) else c
+            for idx, c in enumerate(mut)
+        )
+        arr = [p for p in mut_positions[mut] if plotxrange[0] <= p < plotxrange[1]]
+        for p in arr:
+            mrk, sz, colm = 'square', 6, 'blue'
+            for p0 in arr0:
+                if (p0 < p) and (p < p0 + lc < p + len(mut)):
+                    mrk, sz, colm = 'triangle-right', 12, 'darkgreen'
+                if (p < p0) and (p0 < p + len(mut) < p0 + lc):
+                    mrk, sz, colm = 'triangle-left', 12, 'darkgreen'
+            shapes.append(dict(type='rect', x0=p, x1=p + len(mut),
+                               y0=-1 - j, y1=-j - 0.1,
+                               fillcolor='rgba(255,255,255,0.1)',
+                               line=dict(color='red', width=1)))
+            traces.append(go.Scatter(
+                x=[p + len(mut) / 2], y=[-0.5 - j],
+                hovertemplate=f'{display} {p}',
+                showlegend=False, mode='markers',
+                marker=dict(size=sz, color=colm, symbol=mrk)))
+        if len(mut) > maxlenstr:
+            maxlenstr = len(mut)
+        annotations.append(dict(x=plotxrange[1] * 1.001, y=-0.55 - j, text=display,
+                                 showarrow=False, xanchor='left',
+                                 font=dict(family='courier', size=14, color='red')))
+
     def _leg(name, color, symbol, size=8):
-        """Return an invisible Scatter trace used solely as a legend entry."""
         return go.Scatter(x=[None], y=[None], mode='markers', name=name,
                           showlegend=True,
                           marker=dict(size=size, color=color, symbol=symbol))
 
-    fig.add_trace(_leg(s0,                          'darkblue',          'x',              size=8))
-    fig.add_trace(_leg('Neighboring core',           'rgb(218,112,214)',  'square',         size=8))
-    fig.add_trace(_leg('Complete overlap with s0',          'rgb(0,200,0)',      'square',         size=8))
+    traces += [
+        _leg(s0,                                       'darkblue',         'x',              8),
+        _leg('Neighboring core',                       'rgb(218,112,214)', 'square',         8),
+        _leg('Complete overlap with s0',               'rgb(0,200,0)',     'square',         8),
+    ]
     if nm > 0:
-        fig.add_trace(_leg('Mutation',               'red',              'square',         size=8))
-    fig.add_trace(_leg('Partial overlap: core ends after s0',  'green',          'triangle-right', size=10))
-    fig.add_trace(_leg('Partial overlap: core starts before s0', 'green',        'triangle-left',  size=10))
+        traces.append(_leg('Mutation', 'red', 'square', 8))
+    traces += [
+        _leg('Partial overlap: core ends after s0',    'green', 'triangle-right', 10),
+        _leg('Partial overlap: core starts before s0', 'green', 'triangle-left',  10),
+    ]
     if hairpins:
-        fig.add_trace(go.Scatter(x=[None], y=[None], mode='lines', name='Hairpin region',
-                                 showlegend=True, line=dict(color='darkorange', width=6)))
+        traces.append(go.Scatter(x=[None], y=[None], mode='lines',
+                                  name='Hairpin region', showlegend=True,
+                                  line=dict(color='darkorange', width=6)))
 
-    avg_char_factor = 0.58  # adjust if your font is narrow/wide
-    right_padding_px = 20   # extra breathing room
-    left_margin_px = 60     # to fit y axis labels
-    plot_area_width_px = 700  # desired interior plot area width (excluding margins)
+    avg_char_factor = 0.58
+    right_padding_px = 20
+    left_margin_px = 60
+    plot_area_width_px = 700
     estimated_text_width_px = int(maxlenstr * 16 * avg_char_factor) + right_padding_px
     fig_width = left_margin_px + plot_area_width_px + estimated_text_width_px
 
-    # custom y-axis ticks: 0 at s0, positive counts in both directions
-    tick_vals  = [0.45] + [i+1.45 for i in range(n)] + [-0.55-j for j in range(nm)]
-    tick_text  = ['0']  + [str(i+1) for i in range(n)] + [str(j+1) for j in range(nm)]
+    tick_vals = [0.45] + [i + 1.45 for i in range(n)] + [-0.55 - j for j in range(nm)]
+    tick_text = ['0'] + [str(i + 1) for i in range(n)] + [str(j + 1) for j in range(nm)]
+
     fig.update_layout(
-        width=fig_width, margin=dict(l=left_margin_px, r=estimated_text_width_px, t=40, b=80),
+        shapes=shapes,
+        annotations=annotations,
+        width=fig_width,
+        margin=dict(l=left_margin_px, r=estimated_text_width_px, t=40, b=80),
         legend=dict(orientation='h', yanchor='top', y=-0.05, xanchor='left', x=0),
         yaxis=dict(tickvals=tick_vals, ticktext=tick_text,
-                   zeroline=True, zerolinewidth=2, zerolinecolor='lightgray'))
+                   zeroline=True, zerolinewidth=2, zerolinecolor='lightgray'),
+    )
+    fig.add_traces(traces)
     fig.show()
+
     if file != '':
         out_file = file
         try:
             low = out_file.lower()
-            if low.endswith(".html") or low.endswith(".htm"):
+            if low.endswith('.html') or low.endswith('.htm'):
                 fig.write_html(out_file, auto_open=False)
             else:
                 root, ext = os.path.splitext(out_file)
-                if ext == "":
-                    out_file = f"{out_file}.png"
+                if ext == '':
+                    out_file = f'{out_file}.png'
                 fig.write_image(out_file, scale=scale)
             open_file_with_default_software(out_file)
         except Exception as e:
-            print(f"Could not save/open output plot: {out_file}")
+            print(f'Could not save/open output plot: {out_file}')
             print(str(e))
+
+
+def _squish_lanes(intervals, gap=1):
+    """Greedy interval-scheduling lane assignment.
+
+    Args:
+        intervals: iterable of (start, end, *rest) tuples, sorted by start.
+        gap:       minimum nucleotide space required between consecutive
+                   intervals assigned to the same lane.
+
+    Returns:
+        List of (start, end, *rest, lane) tuples (lane is 1-based).
+    """
+    lane_ends = []   # end position of the last interval placed in each lane
+    result = []
+    for item in intervals:
+        start, end = item[0], item[1]
+        placed = False
+        for k, last_end in enumerate(lane_ends):
+            if start >= last_end + gap:
+                lane_ends[k] = end
+                result.append((*item, k + 1))
+                placed = True
+                break
+        if not placed:
+            lane_ends.append(end)
+            result.append((*item, len(lane_ends)))
+    return result
+
+
+def _save_fig(fig, file, scale):
+    """Write a Plotly figure to *file* (html or raster) and open it."""
+    try:
+        low = file.lower()
+        if low.endswith('.html') or low.endswith('.htm'):
+            fig.write_html(file, auto_open=False)
+        else:
+            root, ext = os.path.splitext(file)
+            if ext == '':
+                file = f'{file}.png'
+            fig.write_image(file, scale=scale)
+        open_file_with_default_software(file)
+    except Exception as e:
+        print(f'Could not save/open plot: {file}\n{e}')
+
+
+def plot_nbrs_condensed(s0, s, txt, sortby='CP', wd=20, title='', file='',
+                        xrange=[], scale=1, hairpins=[]):
+    """Condensed neighbour plot: three bands — s0, all-neighbour density strip, mutations.
+
+    Shows the query s0 at row 0, all neighbouring sequences collapsed into a
+    single semi-transparent density strip at row 1 (green = overlapping with
+    s0, orchid = non-overlapping; intensity reflects how many sequences share
+    each position), and single-nucleotide mutants in squished lanes below row 0.
+    No wd windows and no sequence labels are drawn inside the plot.
+
+    Args:
+        s0:       Query core sequence.
+        s:        List of all cores/xmotifs to search for neighbours in.
+        txt:      Full source sequence.
+        sortby:   Ranking metric — ``'CP'`` (default) or ``'IOU'``.
+        wd:       Half-window size in nt (default 20).
+        title:    Plot title (optional).
+        file:     Output path; ``_condensed`` is inserted before the extension.
+        xrange:   Optional [start, end] x-axis limits.
+        scale:    Pixel scale for raster export.
+        hairpins: List of hairpin dicts (keys: start, end, stem_seq, loop_seq).
+    """
+    L = len(txt)
+    lc = len(s0)
+    txtl = txt.lower()  # compute once; reused everywhere below
+    plotxrange = [0, L]
+    if len(xrange) == 2 and 0 <= xrange[0] < xrange[1] <= L:
+        plotxrange = xrange
+
+    if sortby.upper() == 'CP':
+        s1 = cond_prob_core(s0, s, txt, wnd=wd, rev=True)
+    else:
+        s1 = core_nbrs(s0, s, txt, wnd=wd, rev=True)
+    if s0 in s1:
+        del s1[s0]
+    related = list(s1.keys())
+    n_related = len(related)
+    density_row = 1
+
+    # discover mutations, then cache positions once for sorting and squish-building
+    mutset = {s0}
+    if lc >= 6:
+        for _ in range(math.floor(lc / 6)):
+            prev = set(mutset)
+            for mj in prev:
+                mutset |= set(Counter(
+                    find_all_matches(allow_mutation(mj), txtl, ret='str')
+                ).keys())
+            if mutset == prev:
+                break
+    arrmut_raw = list(mutset - {s0})
+    mut_positions = {m: find_all_matches(m, txtl, ret='pos') for m in arrmut_raw}
+    arrmut = sorted(arrmut_raw, key=lambda m: len(mut_positions[m]), reverse=True)
+
+    arr0 = [p for p in find_all_matches(s0, txtl, ret='pos')
+            if plotxrange[0] <= p < plotxrange[1]]
+
+    # build squish input using cached positions (no second find_all_matches call)
+    mut_raw = []
+    for mut in arrmut:
+        display = ''.join(
+            c.upper() if (i < lc and c != s0[i]) else c
+            for i, c in enumerate(mut)
+        )
+        for p in mut_positions[mut]:
+            if plotxrange[0] <= p < plotxrange[1]:
+                mut_raw.append((p, p + len(mut), display))
+    mut_packed_pos = _squish_lanes(sorted(mut_raw, key=lambda x: x[0]))
+    mut_packed = [(*item[:-1], -item[-1]) for item in mut_packed_pos]
+    n_mut_lanes = abs(min((item[-1] for item in mut_packed), default=0))
+
+    # cache related sequence positions filtered to the visible range
+    related_positions = {seq: [p for p in find_all_matches(seq, txtl, ret='pos')
+                                if plotxrange[0] <= p < plotxrange[1]]
+                         for seq in related}
+
+    layout = go.Layout(
+        showlegend=True, hovermode='closest',
+        hoverlabel=dict(bgcolor='white', font_size=16, font_family='Rockwell'),
+        xaxis=dict(range=[plotxrange[0], plotxrange[1] * 1.07], autorange=False),
+        yaxis_range=[-(n_mut_lanes + 0.3), density_row + 1.1],
+        title=(f'{title} (condensed)') if title else 'Core neighbours (condensed)',
+    )
+    fig = go.Figure(layout=layout)
+
+    shapes = []
+    traces = []
+
+    # s0 occurrences
+    for p0 in arr0:
+        shapes.append(dict(type='rect', x0=p0, x1=p0 + lc, y0=0, y1=0.9,
+                           fillcolor='rgba(173,216,230,0.5)',
+                           line=dict(color='blue', width=1)))
+        traces.append(go.Scatter(
+            x=[p0 + lc / 2], y=[0.5],
+            hovertemplate=f'{s0} {p0}', showlegend=False, mode='markers',
+            marker=dict(size=6, color='darkblue', symbol='x')))
+
+    # hairpins
+    for hp in hairpins:
+        shapes.append(dict(type='rect', x0=hp['start'], x1=hp['end'],
+                           y0=-0.15, y1=0,
+                           fillcolor='rgba(255,165,0,0.6)',
+                           line=dict(color='darkorange', width=1)))
+        mid = (hp['start'] + hp['end']) / 2
+        hover_hp = (f"pos: {hp['start']}–{hp['end']}<br>"
+                    f"stem: {hp['stem_seq']}<br>loop: {hp['loop_seq']}")
+        traces.append(go.Scatter(
+            x=[mid], y=[-0.075], mode='markers',
+            marker=dict(size=max(6, (hp['end'] - hp['start']) // 4),
+                        color='darkorange', opacity=0),
+            customdata=[hover_hp],
+            hovertemplate='%{customdata}<extra>Hairpin</extra>',
+            showlegend=False))
+
+    # density strip — all related sequences at row 1, using cached positions
+    if n_related > 0:
+        # alpha: floor at 0.15 so sparse positions stay visible; cap at 0.5 so
+        # dense regions don't saturate; n_related fully-overlapping → ~90% opacity
+        alpha = max(0.15, min(0.5, 1 - 0.1 ** (1 / n_related)))
+        for seq in related:
+            is_cont = (seq in s0) or (s0 in seq)
+            a_fill   = f'{alpha:.3f}'
+            a_border = f'{min(1.0, alpha * 2):.3f}'
+            col_fill   = (f'rgba(0,200,0,{a_fill})'   if is_cont
+                          else f'rgba(218,112,214,{a_fill})')
+            col_border = (f'rgba(0,150,0,{a_border})' if is_cont
+                          else f'rgba(180,80,180,{a_border})')
+            occ = related_positions[seq]
+            for p in occ:
+                shapes.append(dict(type='rect', x0=p, x1=p + len(seq),
+                                   y0=density_row, y1=density_row + 0.9,
+                                   fillcolor=col_fill,
+                                   line=dict(color=col_border, width=0.5)))
+            if occ:
+                traces.append(go.Scatter(
+                    x=[p + len(seq) / 2 for p in occ],
+                    y=[density_row + 0.5] * len(occ),
+                    hovertemplate=f'{seq} %{{x:.0f}}<extra></extra>',
+                    showlegend=False, mode='markers',
+                    marker=dict(size=6, color='rgba(0,0,0,0)')))
+
+    # dotted separator between s0 row and density strip
+    shapes.append(dict(type='line', xref='paper', yref='y',
+                       x0=0, x1=1, y0=density_row, y1=density_row,
+                       line=dict(width=1, dash='dot', color='gray')))
+
+    # mutations in squished lanes below y=0
+    for start, end, display, lane in mut_packed:
+        mrk, sz, colm = 'square', 6, 'blue'
+        for p0 in arr0:
+            if (p0 < start) and (start < p0 + lc < end):
+                mrk, sz, colm = 'triangle-right', 12, 'darkgreen'
+                break
+            if (start < p0) and (p0 < end < p0 + lc):
+                mrk, sz, colm = 'triangle-left', 12, 'darkgreen'
+                break
+        shapes.append(dict(type='rect', x0=start, x1=end,
+                           y0=lane, y1=lane + 0.9,
+                           fillcolor='rgba(255,255,255,0.1)',
+                           line=dict(color='red', width=1)))
+        traces.append(go.Scatter(
+            x=[(start + end) / 2], y=[lane + 0.5],
+            hovertemplate=f'{display} {start}',
+            showlegend=False, mode='markers',
+            marker=dict(size=sz, color=colm, symbol=mrk)))
+
+    tick_vals = ([0.45, density_row + 0.45]
+                 + [l + 0.45 for l in range(-1, -n_mut_lanes - 1, -1)])
+    tick_text = (['s0', f'neighbors ({n_related})']
+                 + (['mutations'] + [str(l) for l in range(2, n_mut_lanes + 1)]
+                    if n_mut_lanes > 0 else []))
+
+    def _leg(name, color, symbol, size=8):
+        return go.Scatter(x=[None], y=[None], mode='markers', name=name,
+                          showlegend=True,
+                          marker=dict(size=size, color=color, symbol=symbol))
+
+    traces += [
+        _leg(s0,                                    'darkblue',         'x',      8),
+        _leg('Neighbors (non-overlapping with s0)', 'rgb(218,112,214)', 'square', 8),
+        _leg('Neighbors (overlapping with s0)',     'rgb(0,200,0)',     'square', 8),
+    ]
+    if arrmut:
+        traces.append(_leg('Mutation', 'red', 'square', 8))
+    if hairpins:
+        traces.append(go.Scatter(x=[None], y=[None], mode='lines',
+                                  name='Hairpin region', showlegend=True,
+                                  line=dict(color='darkorange', width=6)))
+
+    fig.update_layout(
+        shapes=shapes,
+        width=800,
+        margin=dict(l=60, r=40, t=20, b=45),
+        legend=dict(orientation='h', yanchor='top', y=-0.05, xanchor='left', x=0),
+        yaxis=dict(tickvals=tick_vals, ticktext=tick_text,
+                   zeroline=True, zerolinewidth=2, zerolinecolor='lightgray'),
+    )
+    fig.add_traces(traces)
+    fig.show()
+
+    if file:
+        root, ext = os.path.splitext(file)
+        _save_fig(fig, f'{root}_condensed{ext or ".png"}', scale)
 
 
 def plot_logo(wd, k, txt, outfile, fmt='pdf', muts=0):

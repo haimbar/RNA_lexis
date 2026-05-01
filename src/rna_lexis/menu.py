@@ -19,7 +19,8 @@ from rna_lexis.algorithms import (
 from rna_lexis.alignment import gotoh_global, gotoh_local, print_alignment
 from rna_lexis.plots import (
     plot_logo, plotzscore, plotkmerhist, plot_frequency_rank,
-    plot_seq_nbrs, plot_coverage, plot_sequence_hits, plot_sequence_hits_detailed,
+    plot_seq_nbrs, plot_nbrs_condensed,
+    plot_coverage, plot_sequence_hits, plot_sequence_hits_detailed,
 )
 from rna_lexis.io import (
     read_text, save_session, load_session, init_summary, is_valid_session,
@@ -440,59 +441,49 @@ def show_menu(fn, ttl, submenu, clr: True, split=None):
             print(fmttxt(["\nInvalid input! Please use numeric digits.\n"],['bold'], ['red']))
 
 
-def neighbors_input(fn, txt, strs):
-    """Interactive handler for the 'Core neighbors' plot.
+def _collect_neighbors_params(fn, txt, strs):
+    """Collect user inputs shared by both Core neighbours plot handlers.
 
-    Prompts for a query sequence, neighbourhood half-width, the string list
-    to use (cores or xmotifs), a plot title, an optional x-axis range, an
-    output file, and whether to overlay hairpin regions.  Delegates to
-    plot_seq_nbrs().
-
-    Args:
-        fn:   Current session file path (used for the default plot title and
-              for locating a companion ``*_hairpins.csv`` file).
-        txt:  Full source sequence.
-        strs: Session strings dict with keys ``'corelist'`` and ``'xmotifs'``.
+    Returns a dict with keys seq, wds, ttl, fn, scale, xrange, hairpins, wd,
+    or None if the sequence was not found.
     """
     file_path = fn
     seq = safe_input(fmttxt(["Enter the sequence to analyze: "], ['bold'], ['yellow']))
     if len(find_all_matches(seq, txt)) < 1:
-        print(fmttxt(["\nSequence not found."],['bold'], ['red']))
+        print(fmttxt(["\nSequence not found."], ['bold'], ['red']))
         safe_input(fmttxt(["Press any key to continue"], [''], ['white']))
         return None
 
     seq = seq.lower()
     wd_prompt = fmttxt(['Enter neighborhood width:', '[default: 40]'],
-                         ['bold', ''],
-                         ['yellow', 'cyan'])
+                       ['bold', ''], ['yellow', 'cyan'])
     wd = safe_input(wd_prompt + " ")
-    if wd == '':
-        wd = 40
-    else:
-        wd = int(wd)
+    wd = 40 if wd == '' else int(wd)
+
     wds_prompt = fmttxt(['Enter the strings to include in calculation ',
-                        '[1: cores, or 2: xmotifs (default)]'],
-                         ['bold', ''],
-                         ['yellow', 'cyan'])
+                         '[1: cores, or 2: xmotifs (default)]'],
+                        ['bold', ''], ['yellow', 'cyan'])
     wds = safe_input(wds_prompt + " ")
-    if wds == '1':
-        wds = strs["corelist"]
-    else:
-        wds = strs["xmotifs"]
+    wds = strs["corelist"] if wds == '1' else strs["xmotifs"]
+
     default_ttl = f"{os.path.basename(fn)} {seq}"
     ttl = safe_input(fmttxt(["Enter a title for the plot ", f"[Default: '{default_ttl}']"],
-                       ['bold', ''], ['yellow', 'cyan']) + " ")
+                             ['bold', ''], ['yellow', 'cyan']) + " ")
     if ttl == '':
         ttl = default_ttl
-    fn, scale = _prompt_save(plotly=True)
+
+    fn_out, scale = _prompt_save(plotly=True)
+
     xrange = safe_input(fmttxt(["Enter the range to plot (leave blank for all, or use 'min, max')",
-                    "[Default: '']"], ['bold', ''], ['yellow', 'cyan']) + " ")
+                                 "[Default: '']"], ['bold', ''], ['yellow', 'cyan']) + " ")
     if xrange != '':
         try:
             parts = xrange.split(',')
-            xrange = [int(parts[0].strip()), int(parts[1].strip())] if len(parts) == 2 else []
+            xrange = ([int(parts[0].strip()), int(parts[1].strip())]
+                      if len(parts) == 2 else [])
         except ValueError:
             xrange = []
+
     hairpins = []
     hairpins_csv = os.path.splitext(file_path)[0] + '_hairpins.csv'
     if os.path.isfile(hairpins_csv):
@@ -509,8 +500,47 @@ def neighbors_input(fn, txt, strs):
                         'loop_seq': row.get('loop_seq', ''),
                         'sequence': row.get('sequence', ''),
                     })
-    plot_seq_nbrs(seq, wds, txt, sortby='CP', wd=wd, title=ttl, file=fn,
-                  xrange=xrange, scale=scale, hairpins=hairpins)
+
+    return dict(seq=seq, wds=wds, ttl=ttl, fn=fn_out, scale=scale,
+                xrange=xrange, hairpins=hairpins, wd=wd)
+
+
+def neighbors_input(fn, txt, strs):
+    """Interactive handler for the 'Core neighbors (detailed)' plot.
+
+    Prompts for all parameters and delegates to plot_seq_nbrs().
+
+    Args:
+        fn:   Current session file path (used for the default plot title and
+              for locating a companion ``*_hairpins.csv`` file).
+        txt:  Full source sequence.
+        strs: Session strings dict with keys ``'corelist'`` and ``'xmotifs'``.
+    """
+    p = _collect_neighbors_params(fn, txt, strs)
+    if p is None:
+        return
+    plot_seq_nbrs(p['seq'], p['wds'], txt, sortby='CP', wd=p['wd'],
+                  title=p['ttl'], file=p['fn'],
+                  xrange=p['xrange'], scale=p['scale'], hairpins=p['hairpins'])
+
+
+def neighbors_condensed_input(fn, txt, strs):
+    """Interactive handler for the 'Core neighbors (condensed)' plot.
+
+    Prompts for all parameters and delegates to plot_nbrs_condensed().
+
+    Args:
+        fn:   Current session file path (used for the default plot title and
+              for locating a companion ``*_hairpins.csv`` file).
+        txt:  Full source sequence.
+        strs: Session strings dict with keys ``'corelist'`` and ``'xmotifs'``.
+    """
+    p = _collect_neighbors_params(fn, txt, strs)
+    if p is None:
+        return
+    plot_nbrs_condensed(p['seq'], p['wds'], txt, sortby='CP', wd=p['wd'],
+                        title=p['ttl'], file=p['fn'],
+                        xrange=p['xrange'], scale=p['scale'], hairpins=p['hairpins'])
 
 
 def kmers_input(fn, txt, defvals):
@@ -1799,7 +1829,7 @@ def menus():
     menu_ttl = ["Main Menu", "Plots", "Sequence operations"]
     submenu = [["Plots", "Sequence operations", "Open Core file", "Summary statistics",
                "Show settings", "Change setting", "Open User Guide", "Load new input", "Quit"],
-               ["Core neighbors", "K-mers", "Logo", "Coverage", "Motif Match/Mutation", "Back"],
+               ["Core neighbors (detailed)", "Core neighbors (condensed)", "K-mers", "Logo", "Coverage", "Motif Match/Mutation", "Back"],
                ["Find all matches", "Search with mutations", "Motif extensions", "Print core", "Export hairpins to CSV", "Extend match pair", "Alignment score for two sequences", "K-mer scramble analysis", "Covered area", "Back"]]
 #               ["Find all matches", "Search with mutations", "Motif extensions", "Print core", "Export hairpins to CSV", "Extend match pair", "Alignment score for two sequences", "K-mer scramble analysis", "Covered area", "Decompose motif", "Back"]]
     if not defvals['datadir']:
@@ -1887,7 +1917,7 @@ def menus():
                 else:
                     val = show_menu(file_path, menu_ttl[menu_level], submenu[menu_level],
                                     clr=defvals['clr'],
-                                    split={0: 4, 1: 5, 2: 10}.get(menu_level))
+                                    split={0: 4, 1: 6, 2: 10}.get(menu_level))
                     # Top level menu:
                     if menu_level == 0:
                         # Quit:
@@ -1980,14 +2010,16 @@ blockquote{{border-left:4px solid #ccc;margin:1em 0;padding:0.5em 1em;color:#555
                             case 1:
                                 neighbors_input(file_path, txt, strs)
                             case 2:
-                                kmers_input(file_path, txt, defvals)
+                                neighbors_condensed_input(file_path, txt, strs)
                             case 3:
-                                logo_input(txt, strs)
+                                kmers_input(file_path, txt, defvals)
                             case 4:
-                                coverage_input(txt, strs)
+                                logo_input(txt, strs)
                             case 5:
-                                sequence_hits_input(file_path, txt)
+                                coverage_input(txt, strs)
                             case 6:
+                                sequence_hits_input(file_path, txt)
+                            case 7:
                                 menu_level = 0 # Go to the main menu
 
                     # Sequences:
