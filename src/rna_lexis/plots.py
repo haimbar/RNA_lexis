@@ -367,19 +367,7 @@ def plot_nbrs_condensed(s0, s, txt, sortby='CP', wd=20, title='', file='',
     arr0 = [p for p in find_all_matches(s0, txtl, ret='pos')
             if plotxrange[0] <= p < plotxrange[1]]
 
-    # build squish input using cached positions (no second find_all_matches call)
-    mut_raw = []
-    for mut in arrmut:
-        display = ''.join(
-            c.upper() if (i < lc and c != s0[i]) else c
-            for i, c in enumerate(mut)
-        )
-        for p in mut_positions[mut]:
-            if plotxrange[0] <= p < plotxrange[1]:
-                mut_raw.append((p, p + len(mut), display))
-    mut_packed_pos = _squish_lanes(sorted(mut_raw, key=lambda x: x[0]))
-    mut_packed = [(*item[:-1], -item[-1]) for item in mut_packed_pos]
-    n_mut_lanes = abs(min((item[-1] for item in mut_packed), default=0))
+    mutation_row = -1
 
     # cache related sequence positions filtered to the visible range
     related_positions = {seq: [p for p in find_all_matches(seq, txtl, ret='pos')
@@ -390,7 +378,7 @@ def plot_nbrs_condensed(s0, s, txt, sortby='CP', wd=20, title='', file='',
         showlegend=True, hovermode='closest',
         hoverlabel=dict(bgcolor='white', font_size=16, font_family='Rockwell'),
         xaxis=dict(range=[plotxrange[0], plotxrange[1] * 1.07], autorange=False),
-        yaxis_range=[-(n_mut_lanes + 0.3), density_row + 1.1],
+        yaxis_range=[(-1.3 if arrmut else -0.3), density_row + 1.1],
         title=(f'{title} (condensed)') if title else 'Core neighbours (condensed)',
     )
     fig = go.Figure(layout=layout)
@@ -457,31 +445,34 @@ def plot_nbrs_condensed(s0, s, txt, sortby='CP', wd=20, title='', file='',
                        x0=0, x1=1, y0=density_row, y1=density_row,
                        line=dict(width=1, dash='dot', color='gray')))
 
-    # mutations in squished lanes below y=0
-    for start, end, display, lane in mut_packed:
-        mrk, sz, colm = 'square', 6, 'blue'
-        for p0 in arr0:
-            if (p0 < start) and (start < p0 + lc < end):
-                mrk, sz, colm = 'triangle-right', 12, 'darkgreen'
-                break
-            if (start < p0) and (p0 < end < p0 + lc):
-                mrk, sz, colm = 'triangle-left', 12, 'darkgreen'
-                break
-        shapes.append(dict(type='rect', x0=start, x1=end,
-                           y0=lane, y1=lane + 0.9,
-                           fillcolor='rgba(255,255,255,0.1)',
-                           line=dict(color='red', width=1)))
-        traces.append(go.Scatter(
-            x=[(start + end) / 2], y=[lane + 0.5],
-            hovertemplate=f'{display} {start}',
-            showlegend=False, mode='markers',
-            marker=dict(size=sz, color=colm, symbol=mrk)))
+    # mutations as a density strip — always a single band at mutation_row
+    if arrmut:
+        alpha_mut = max(0.15, min(0.5, 1 - 0.1 ** (1 / len(arrmut))))
+        a_fill_mut   = f'{alpha_mut:.3f}'
+        a_border_mut = f'{min(1.0, alpha_mut * 2):.3f}'
+        for mut in arrmut:
+            display = ''.join(
+                c.upper() if (i < lc and c != s0[i]) else c
+                for i, c in enumerate(mut)
+            )
+            occ = [p for p in mut_positions[mut] if plotxrange[0] <= p < plotxrange[1]]
+            for p in occ:
+                shapes.append(dict(type='rect', x0=p, x1=p + len(mut),
+                                   y0=mutation_row, y1=mutation_row + 0.9,
+                                   fillcolor=f'rgba(255,80,80,{a_fill_mut})',
+                                   line=dict(color=f'rgba(200,0,0,{a_border_mut})', width=0.5)))
+            if occ:
+                traces.append(go.Scatter(
+                    x=[p + len(mut) / 2 for p in occ],
+                    y=[mutation_row + 0.5] * len(occ),
+                    hovertemplate=f'{display} %{{x:.0f}}<extra></extra>',
+                    showlegend=False, mode='markers',
+                    marker=dict(size=6, color='rgba(0,0,0,0)')))
 
     tick_vals = ([0.45, density_row + 0.45]
-                 + [l + 0.45 for l in range(-1, -n_mut_lanes - 1, -1)])
+                 + ([mutation_row + 0.45] if arrmut else []))
     tick_text = (['s0', f'neighbors ({n_related})']
-                 + (['mutations'] + [str(l) for l in range(2, n_mut_lanes + 1)]
-                    if n_mut_lanes > 0 else []))
+                 + (['mutations'] if arrmut else []))
 
     def _leg(name, color, symbol, size=8):
         return go.Scatter(x=[None], y=[None], mode='markers', name=name,
