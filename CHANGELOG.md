@@ -1,5 +1,35 @@
 # Changelog
 
+## [0.0.8] - 2026-05-02
+
+### Added
+
+- **Core neighbors (condensed) plot** (`plot_nbrs_condensed`).  A new *Core
+  neighbors (condensed)* option in the Plots menu shows the same neighbourhood
+  data as the detailed plot in a compact three-band layout designed for long
+  sequences or large neighbour sets.  s0 occurrences are drawn as light-blue
+  rectangles at y = 0; all neighbours are collapsed into a single semi-
+  transparent **density strip** at y = 1 (green = overlapping with s0, magenta
+  = non-overlapping; opacity scales with the number of sequences sharing each
+  position); single-nucleotide mutations of s0 are collapsed into a red
+  **mutation strip** at y = −1.  Hairpin regions from a companion
+  `*_hairpins.csv` file are shown as orange bands below s0.  Accepts the same
+  prompts as the detailed plot (sequence, window width, cores/xmotifs,
+  title, output file, x-axis range).
+
+- **Core neighbors (text export)** (`export_nbrs_condensed`).  A new *Core
+  neighbors (text export)* option in the Sequence operations menu exports the
+  sequence regions associated with a query core and its neighbourhood as a CSV
+  file.  Each row is one merged region — a contiguous stretch of the full text
+  where any combination of s0, its single-nucleotide mutations, or its
+  neighbours clusters together.  Regions are built by expanding every
+  occurrence of every tracked sequence by ±wd nucleotides and merging
+  overlapping intervals, so each row captures the full extent of a cluster
+  (including neighbours that bridge gaps between s0 occurrences).  Output
+  columns: `start`, `end`, `seq` (= `txt[start:end+1]`).  Results are printed
+  to the terminal and the CSV is opened automatically on completion.  Default
+  output filename: `<session>_<seq>_regions.csv` in the session directory.
+
 ## [0.0.7] - 2026-04-29
 
 ### Added

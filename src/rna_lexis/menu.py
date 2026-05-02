@@ -19,7 +19,7 @@ from rna_lexis.algorithms import (
 from rna_lexis.alignment import gotoh_global, gotoh_local, print_alignment
 from rna_lexis.plots import (
     plot_logo, plotzscore, plotkmerhist, plot_frequency_rank,
-    plot_seq_nbrs, plot_nbrs_condensed,
+    plot_seq_nbrs, plot_nbrs_condensed, export_nbrs_condensed,
     plot_coverage, plot_sequence_hits, plot_sequence_hits_detailed,
 )
 from rna_lexis.io import (
@@ -541,6 +541,56 @@ def neighbors_condensed_input(fn, txt, strs):
     plot_nbrs_condensed(p['seq'], p['wds'], txt, sortby='CP', wd=p['wd'],
                         title=p['ttl'], file=p['fn'],
                         xrange=p['xrange'], scale=p['scale'], hairpins=p['hairpins'])
+
+
+def neighbors_condensed_export_input(fn, txt, strs):
+    """Interactive handler for 'Core neighbors (text export)'.
+
+    Prompts for sequence, window, candidate list, and optional range, then
+    calls export_nbrs_condensed() to write a CSV of all occurrences.
+
+    Args:
+        fn:   Current session file path.
+        txt:  Full source sequence.
+        strs: Session strings dict with keys 'corelist' and 'xmotifs'.
+    """
+    seq = safe_input(fmttxt(["Enter the sequence to analyze: "], ['bold'], ['yellow']))
+    if len(find_all_matches(seq, txt)) < 1:
+        print(fmttxt(["\nSequence not found."], ['bold'], ['red']))
+        safe_input(fmttxt(["Press any key to continue"], [''], ['white']))
+        return
+
+    seq = seq.lower()
+    wd = safe_input(fmttxt(['Enter neighborhood width:', '[default: 40]'],
+                            ['bold', ''], ['yellow', 'cyan']) + " ")
+    wd = 40 if wd == '' else int(wd)
+
+    wds_prompt = fmttxt(['Enter the strings to include ',
+                         '[1: cores, or 2: xmotifs (default)]'],
+                        ['bold', ''], ['yellow', 'cyan'])
+    wds = safe_input(wds_prompt + " ")
+    wds = strs["corelist"] if wds == '1' else strs["xmotifs"]
+
+    xrange = safe_input(fmttxt(["Enter the range (leave blank for all, or use 'min, max')",
+                                 "[Default: '']"], ['bold', ''], ['yellow', 'cyan']) + " ")
+    if xrange != '':
+        try:
+            parts = xrange.split(',')
+            xrange = ([int(parts[0].strip()), int(parts[1].strip())]
+                      if len(parts) == 2 else [])
+        except ValueError:
+            xrange = []
+
+    default_out = os.path.splitext(fn)[0] + f'_{seq}_regions.csv'
+    fn_out = safe_input(fmttxt(['Output CSV file',
+                                 f"[default: {os.path.basename(default_out)}]: "],
+                                ['bold', ''], ['yellow', 'cyan']) + ' ').strip()
+    if not fn_out:
+        fn_out = default_out
+    elif not os.path.isabs(fn_out):
+        fn_out = os.path.join(os.path.dirname(fn) or '.', fn_out)
+
+    export_nbrs_condensed(seq, wds, txt, sortby='CP', wd=wd, xrange=xrange, file=fn_out)
 
 
 def kmers_input(fn, txt, defvals):
@@ -1830,7 +1880,7 @@ def menus():
     submenu = [["Plots", "Sequence operations", "Open Core file", "Summary statistics",
                "Show settings", "Change setting", "Open User Guide", "Load new input", "Quit"],
                ["Core neighbors (detailed)", "Core neighbors (condensed)", "K-mers", "Logo", "Coverage", "Motif Match/Mutation", "Back"],
-               ["Find all matches", "Search with mutations", "Motif extensions", "Print core", "Export hairpins to CSV", "Extend match pair", "Alignment score for two sequences", "K-mer scramble analysis", "Covered area", "Back"]]
+               ["Find all matches", "Search with mutations", "Motif extensions", "Print core", "Export hairpins to CSV", "Extend match pair", "Alignment score for two sequences", "K-mer scramble analysis", "Covered area", "Core neighbors (text export)", "Back"]]
 #               ["Find all matches", "Search with mutations", "Motif extensions", "Print core", "Export hairpins to CSV", "Extend match pair", "Alignment score for two sequences", "K-mer scramble analysis", "Covered area", "Decompose motif", "Back"]]
     if not defvals['datadir']:
         cwd = os.getcwd()
@@ -2046,8 +2096,8 @@ blockquote{{border-left:4px solid #ccc;margin:1em 0;padding:0.5em 1em;color:#555
                             case 9:
                                 txt_coverage_input(txt, strs)
                             case 10:
-#                                decompose_motif_input(txt, file_path)
-#                            case 11:
+                                neighbors_condensed_export_input(file_path, txt, strs)
+                            case 11:
                                 menu_level = 0 # Go to the main menu
         
         except EOFSignal:

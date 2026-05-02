@@ -1,5 +1,6 @@
 """Visualisation functions (matplotlib and Plotly)."""
 
+import csv
 import os
 import sys
 import math
@@ -505,6 +506,95 @@ def plot_nbrs_condensed(s0, s, txt, sortby='CP', wd=20, title='', file='',
     if file:
         root, ext = os.path.splitext(file)
         _save_fig(fig, f'{root}_condensed{ext or ".png"}', scale)
+
+
+def export_nbrs_condensed(s0, s, txt, sortby='CP', wd=20, xrange=[], file=''):
+    """Export context windows around s0 occurrences and its neighbours as CSV.
+
+    Uses the same logic as the condensed plot: finds neighbours via CP/IOU,
+    discovers single-nucleotide mutations, then pools every occurrence of s0,
+    its mutations, and its neighbours.  Each occurrence is expanded by ±wd;
+    overlapping expanded intervals are merged into contiguous regions.
+    Columns: start, end, seq — where seq = txt[start:end+1].
+
+    Args:
+        s0:     Query core sequence.
+        s:      List of all cores/xmotifs to search for neighbours in.
+        txt:    Full source sequence.
+        sortby: Ranking metric — 'CP' (default) or 'IOU'.
+        wd:     Half-window size in nt (default 20).
+        xrange: Optional [start, end] positional limits.
+        file:   Output CSV path. Always prints to stdout; also saves if given.
+
+    Returns:
+        Path of the written CSV, or None if no file path was given.
+    """
+    L = len(txt)
+    lc = len(s0)
+    txtl = txt.lower()
+    plotxrange = [0, L]
+    if len(xrange) == 2 and 0 <= xrange[0] < xrange[1] <= L:
+        plotxrange = xrange
+
+    # neighbours — identical computation to the condensed plot
+    if sortby.upper() == 'CP':
+        s1 = cond_prob_core(s0, s, txt, wnd=wd, rev=True)
+    else:
+        s1 = core_nbrs(s0, s, txt, wnd=wd, rev=True)
+    if s0 in s1:
+        del s1[s0]
+    related = list(s1.keys())
+
+    # mutations
+    mutset = {s0}
+    if lc >= 6:
+        for _ in range(math.floor(lc / 6)):
+            prev = set(mutset)
+            for mj in prev:
+                mutset |= set(Counter(
+                    find_all_matches(allow_mutation(mj), txtl, ret='str')
+                ).keys())
+            if mutset == prev:
+                break
+    arrmut = list(mutset - {s0})
+
+    # build ±wd expanded intervals for every occurrence of s0, mutations, and neighbours
+    intervals = []
+    for seq in [s0] + arrmut + related:
+        L_seq = len(seq)
+        for p in find_all_matches(seq, txtl, ret='pos'):
+            if plotxrange[0] <= p < plotxrange[1]:
+                intervals.append((max(0, p - wd), min(L - 1, p + L_seq + wd - 1)))
+
+    intervals.sort()
+
+    # merge overlapping intervals; end = end of the last sequence in each cluster
+    merged = []
+    for ws, we in intervals:
+        if merged and ws <= merged[-1][1]:
+            merged[-1][1] = max(merged[-1][1], we)
+        else:
+            merged.append([ws, we])
+
+    header = ['start', 'end', 'seq']
+    rows = [[ws, we, txt[ws:we + 1]] for ws, we in merged]
+
+    print(','.join(header))
+    for row in rows:
+        print(','.join(str(x) for x in row))
+
+    if not file:
+        return None
+
+    root, ext = os.path.splitext(file)
+    out = file if ext.lower() == '.csv' else f'{root}.csv'
+    with open(out, 'w', newline='') as f:
+        writer = csv.writer(f)
+        writer.writerow(header)
+        writer.writerows(rows)
+    print(f"Saved to '{out}'")
+    open_file_with_default_software(out)
+    return out
 
 
 def plot_logo(wd, k, txt, outfile, fmt='pdf', muts=0):

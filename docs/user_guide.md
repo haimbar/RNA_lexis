@@ -110,17 +110,18 @@ Opens the Plots submenu:
 
 ```
 --- Plots ---
-1. Core neighbors
-2. K-mers
-3. Logo
-4. Coverage
-5. Motif Match/Mutation
-6. Back
+1. Core neighbors (detailed)
+2. Core neighbors (condensed)
+3. K-mers
+4. Logo
+5. Coverage
+6. Motif Match/Mutation
+7. Back
 ```
 
-#### 1.1 Core neighbors
+#### 1.1 Core neighbors (detailed)
 
-Visualises how a chosen core sequence co-occurs with its neighbours across the full text.
+Visualises how a chosen core sequence co-occurs with its neighbours across the full text, with one horizontal lane per neighbour.
 
 **Prompts:**
 
@@ -128,7 +129,7 @@ Visualises how a chosen core sequence co-occurs with its neighbours across the f
 |:---|:---:|:---|
 | Sequence to analyse | no default | Must be present in the text |
 | Neighbourhood width | 40 | Number of positions on each side of the sequence |
-| Strings to include | 1 (cores) | 1 = cores, 2 = xmotifs |
+| Strings to include | 2 (xmotifs) | 1 = cores, 2 = xmotifs |
 | Plot title | `<file> <sequence>` | Free text |
 | Output file name | *(screen only)* | Leave blank to display interactively |
 | Output format | 1 (PNG standard) | 1 = PNG, 2 = PNG high-res (3×), 3 = SVG, 4 = HTML |
@@ -144,7 +145,33 @@ The interactive HTML plot is always shown on screen. If an output file name is g
 - Triangle direction indicates which end of the neighbour extends beyond s0: **>** extends to the right, **<** extends to the left.
 - A legend at the bottom of the plot explains all symbols and colours.
 
-#### 1.2 K-mers
+#### 1.2 Core neighbors (condensed)
+
+A compact three-band overview of the same neighbourhood data, designed for long sequences or large neighbour sets where individual lanes would be unreadable.
+
+**Prompts:** (identical to Core neighbors (detailed))
+
+| Prompt | Default | Notes |
+|:---|:---:|:---|
+| Sequence to analyse | no default | Must be present in the text |
+| Neighbourhood width | 40 | Number of positions on each side of the sequence |
+| Strings to include | 2 (xmotifs) | 1 = cores, 2 = xmotifs |
+| Plot title | `<file> <sequence>` | Free text |
+| Output file name | *(screen only)* | Leave blank to display interactively |
+| Output format | 1 (PNG standard) | 1 = PNG, 2 = PNG high-res (3×), 3 = SVG, 4 = HTML |
+| X-axis range | *(full range)* | `min, max` e.g. `100, 500` |
+
+**Reading the plot:**
+
+- **s0** (light blue rectangles) sits at **y = 0**.
+- All neighbours are collapsed into a single **density strip** at **y = 1**. Opacity scales with the number of distinct neighbours overlapping each position.
+  - **Green** = neighbour overlaps with or contains s0.
+  - **Magenta** = neighbour does not overlap with s0.
+- **Mutations** of s0 (if any, requires `len(s0) ≥ 6`) are collapsed into a single red **mutation strip** at **y = −1**.
+- **Hairpins** (only shown when a companion `*_hairpins.csv` file exists in the session directory) appear as orange bands just below s0.
+- The y-axis tick labels report the number of distinct neighbours found.
+
+#### 1.3 K-mers
 
 Analyses the frequency distribution of all substrings of a given length k.
 
@@ -174,7 +201,7 @@ The Rank-frequency plot shows the log of the rank of each score vs. the log of t
 After the plot-specific parameters, you will be prompted for an **output file name** and **format** (PNG standard, PNG high-res 3×, or SVG). Leave the file name blank to display on screen only.
 
 
-#### 1.3 Logo
+#### 1.4 Logo
 
 Generates a sequence logo centred on all occurrences of a chosen sequence.
 
@@ -188,7 +215,7 @@ Generates a sequence logo centred on all occurrences of a chosen sequence.
 | Format | pdf | `pdf` or `svg` |
 | Output file name | `<seq>_logo` | |
 
-#### 1.4 Coverage
+#### 1.5 Coverage
 
 Shows how much of the text is covered by cores or xmotifs, weighted by a power law.
 
@@ -201,7 +228,7 @@ Shows how much of the text is covered by cores or xmotifs, weighted by a power l
 | Output file name | *(screen only)* | Leave blank to display interactively |
 | Output format | 1 (PNG standard) | 1 = PNG, 2 = PNG high-res (3×), 3 = SVG |
 
-#### 1.5 Motif Match/Mutation
+#### 1.6 Motif Match/Mutation
 
 Plots the positions of up to three user-supplied sequences along the full text as colored rectangles stacked in separate horizontal lanes: sequence 1 at the bottom, sequence 2 above it, and sequence 3 at the top.
 
@@ -250,7 +277,7 @@ The detail view is a plain HTML page showing every nucleotide in the selected ra
 7. Alignment score for two sequences
 8. K-mer scramble analysis
 9. Covered area
-10. Decompose motif
+10. Core neighbors (text export)
 11. Back
 ```
 
@@ -429,38 +456,37 @@ Builds an empirical null distribution for k-mer frequency by shuffling the loade
 
 Rows are sorted by `min(pvalue_over, pvalue_under)` so the most extreme k-mers in either direction appear first.  A k-mer with no enrichment or depletion will have both p-values near 0.5.  BH correction is applied separately within each family of *m* tests.
 
-#### 2.9 Decompose motif
+#### 2.9 Covered area
 
-Tests whether the enrichment of a motif can be explained by shorter sub-sequences, or whether the motif itself carries genuine signal.  For every contiguous sub-k-mer of the input motif at each length from `len(motif)` down to `min_k`, the expected count is derived analytically from a (k−1)-th order Markov model (Prum/Schbath formula) and compared with the observed count via a Poisson exact test.  A BH-adjusted p-value is reported across all sub-k-mers tested, and the result identifies the **shortest sub-unit whose count is surprising beyond what shorter context already explains**.
+Computes and prints the coverage score for a single sequence: `length^a times occurrences`, where *a* is a configurable exponent (default 1.2, matching the session setting).
+
+#### 2.10 Core neighbors (text export)
+
+Exports the sequence regions associated with a query core and its neighbourhood as a CSV file, so that individual region sequences can be copied directly into other tools (e.g. **Alignment score for two sequences**, **Search with mutations**).
+
+**How regions are defined:**
+
+Every occurrence of s0, its single-nucleotide mutations, and all its neighbours (sequences with a positive conditional-probability score within the window) is expanded by ±wd nucleotides. Overlapping expanded intervals are merged into contiguous regions. The result is a set of non-overlapping windows that cover every area of the text where any of the tracked sequences cluster together — including regions where neighbours bridge the gap between two s0 occurrences, and regions that contain only neighbours with no s0 nearby.
 
 **Prompts:**
 
 | Prompt | Default | Notes |
-|---|:---:|---|
-| Motif to decompose | | e.g. `ugcaug` |
-| Minimum k-mer length | 4 | Recursion stops here; must be ≥ 2 |
-| Significance threshold alpha | 0.05 | Applied to the BH-adjusted p-value |
-| Output CSV file | `<name>_decompose_<motif>.csv` | Path to the results file |
+|:---|:---:|:---|
+| Sequence to analyse | no default | Must be present in the text |
+| Neighbourhood width | 40 | Half-window used for interval expansion and gap merging |
+| Strings to include | 2 (xmotifs) | 1 = cores, 2 = xmotifs |
+| X-axis range | *(full range)* | `min, max` e.g. `100, 500` — limits which positions are considered |
+| Output CSV file | `<session>_<seq>_regions.csv` | In the session directory; leave blank to use the default |
 
 **Output CSV columns:**
 
 | Column | Description |
 |---|---|
-| `level` | Sub-k-mer length tested |
-| `kmer` | The sub-k-mer sequence |
-| `real_count` | Observed count in the loaded sequence |
-| `expected_count` | Expected count under the (k−1)-th order Markov null |
-| `pvalue_over` | P(X ≥ obs) — small = over-represented given shorter context |
-| `pvalue_under` | P(X ≤ obs) — small = under-represented given shorter context |
-| `pvalue_bh` | BH-adjusted min(pvalue_over, pvalue_under) across all sub-k-mers |
-| `direction` | `'over'` or `'under'` |
-| `significant` | `True` when `pvalue_bh < alpha` |
+| `start` | 0-based start position of the region in the full sequence |
+| `end` | 0-based end position (inclusive) |
+| `seq` | `txt[start:end+1]` — the raw nucleotide sequence of the region |
 
-After saving the CSV, the shortest level at which at least one sub-k-mer reaches significance is printed to the terminal.
-
-#### 2.10 Covered area
-
-Computes and prints the coverage score for a single sequence: `length^a times occurrences`, where *a* is a configurable exponent (default 1.2, matching the session setting).
+Results are also printed to the terminal. The CSV is opened automatically in your default application when writing completes.
 
 ---
 

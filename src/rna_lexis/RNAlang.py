@@ -58,6 +58,7 @@ from rna_lexis.alignment import (
 from rna_lexis.plots import (
     plot_seq_nbrs,
     plot_nbrs_condensed,
+    export_nbrs_condensed,
     plot_logo,
     plotzscore,
     plotkmerhist,
