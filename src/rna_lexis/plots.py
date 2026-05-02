@@ -495,7 +495,7 @@ def plot_nbrs_condensed(s0, s, txt, sortby='CP', wd=20, title='', file='',
     fig.update_layout(
         shapes=shapes,
         width=800,
-        margin=dict(l=60, r=40, t=20, b=45),
+        margin=dict(l=60, r=40, t=30, b=45),
         legend=dict(orientation='h', yanchor='top', y=-0.05, xanchor='left', x=0),
         yaxis=dict(tickvals=tick_vals, ticktext=tick_text,
                    zeroline=True, zerolinewidth=2, zerolinecolor='lightgray'),
