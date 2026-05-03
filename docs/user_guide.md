@@ -275,7 +275,7 @@ The detail view is a plain HTML page showing every nucleotide in the selected ra
 5. Export hairpins to CSV
 6. Extend match pair
 7. Alignment score for two sequences
-8. K-mer scramble analysis
+8. K-mer Markov analysis
 9. Covered area
 10. Core neighbors (text export)
 11. Back
@@ -425,18 +425,27 @@ The alignment is printed with gap symbols and the following scores:
 - **Bit score** — length-independent score computed with the Karlin–Altschul formula (λ = 1.28, K = 0.46); comparable across alignments of different lengths.
 - **E-value** — expected number of alignments with a score this high or better by chance, using the full transcript as the reference database. Values below 10⁻³ are considered significant.
 
-#### 2.8 K-mer scramble analysis
+#### 2.8 K-mer Markov analysis
 
-Builds an empirical null distribution for k-mer frequency by shuffling the loaded sequence N times (each shuffle preserves the exact nucleotide composition) and counting every k-mer in each shuffled copy.  Two one-sided p-values are reported per k-mer, testing for over- and under-representation separately.  All results are saved to a CSV file sorted by the more extreme of the two p-values.
+Computes analytical p-values for every observed k-mer using a Markov-model null — no shuffling or random seeds required.  For each k-mer the expected count is derived from the Prum/Schbath formula conditioned on shorter k-mer frequencies; the observed count is then tested against a Poisson(expected) null.  Two one-sided p-values are reported per k-mer, testing for over- and under-representation separately.  All results are saved to a CSV file sorted by the more extreme of the two p-values.
+
+**Markov background order** controls how much context the null model conditions on:
+
+| Order | Null conditions on | Typical use |
+|:---:|---|---|
+| 0 | Single-nucleotide (A/C/G/U) frequencies | Equivalent to the old shuffle null |
+| 1 *(default)* | Dinucleotide frequencies | Recommended for sequences of a few kb |
+| 2 | Trinucleotide frequencies | Longer sequences or k-mers ≥ 10 |
+
+> **Note:** Using order = k−1 (the classic Prum/Schbath setting) is appropriate only for very long sequences.  For short transcripts (< ~10 kb) it makes expected ≈ observed for long k-mers, producing no significant results.  Order 1 is almost always the right choice.
 
 **Prompts:**
 
 | Prompt | Default | Notes |
 |---|:---:|---|
-| k-mer length | 6 | Length of the substrings to count |
-| Number of shuffles | 5000 | More shuffles give a more stable null distribution |
-| Random seed | 0 | Set to any integer for reproducibility |
-| Output CSV file | `<name>_kmer<k>_pvalues.csv` | Path to the results file |
+| k-mer length | 6 | Length of the substrings to count (≥ 2) |
+| Markov background order | 1 | 0 = nucleotide, 1 = dinucleotide, … (max k−2) |
+| Output CSV file | `<name>_kmer<k>_order<order>_markov_pvalues.csv` | Path to the results file |
 
 **Output CSV columns:**
 
@@ -444,17 +453,16 @@ Builds an empirical null distribution for k-mer frequency by shuffling the loade
 |---|---|
 | `kmer` | The k-mer sequence |
 | `real_count` | Number of times it appears in the loaded sequence |
-| `exceed_count` | Number of shuffles where count ≥ `real_count` |
-| `below_count` | Number of shuffles where count ≤ `real_count` |
-| `pvalue_over` | `exceed_count / N` — small = **over-represented** |
+| `expected_count` | Expected count under the Markov null |
+| `pvalue_over` | P(X ≥ obs) under Poisson(expected) — small = **over-represented** |
 | `evalue_over` | `pvalue_over × m` (expected false positives among *m* k-mers) |
 | `pvalue_over_bh` | BH-adjusted p-value for over-representation (FDR) |
-| `pvalue_under` | `below_count / N` — small = **under-represented** |
+| `pvalue_under` | P(X ≤ obs) under Poisson(expected) — small = **under-represented** |
 | `evalue_under` | `pvalue_under × m` |
 | `pvalue_under_bh` | BH-adjusted p-value for under-representation (FDR) |
 | `direction` | `'over'` or `'under'` — which effect is stronger |
 
-Rows are sorted by `min(pvalue_over, pvalue_under)` so the most extreme k-mers in either direction appear first.  A k-mer with no enrichment or depletion will have both p-values near 0.5.  BH correction is applied separately within each family of *m* tests.
+Rows are sorted by `min(pvalue_over, pvalue_under)` so the most extreme k-mers appear first.  BH correction is applied separately within each family of *m* tests.
 
 #### 2.9 Covered area
 

@@ -1,5 +1,44 @@
 # Changelog
 
+## [0.0.9] - 2026-05-03
+
+### Changed
+
+- **K-mer scramble analysis replaced by K-mer Markov analysis.**  The
+  shuffle-based permutation test (*K-mer scramble analysis*) has been replaced
+  in the Sequence operations menu by an analytical Markov test (*K-mer Markov
+  analysis*) that requires no shuffling and runs instantly for any k.
+
+  The key improvement is a new `order` parameter in `markov_kmer_pvalues`
+  (default `order=1`, dinucleotide null) that controls how much context the
+  null model conditions on.  The previous implementation always used a
+  (k−1)-th order model, which is degenerate for long k-mers in short
+  sequences (expected ≈ observed → all p-values ≈ 0.5).  With `order=1` the
+  dinucleotide frequencies serve as the null, giving meaningful expected counts
+  and well-calibrated p-values even for 8-mers or longer in transcripts of a
+  few kilobases.
+
+  **New menu prompts:**
+
+  | Prompt | Default |
+  |---|:---:|
+  | k-mer length | 6 |
+  | Markov background order (0 = nucleotide, 1 = dinucleotide, …) | 1 |
+  | Output CSV file | `<name>_kmer<k>_order<order>_markov_pvalues.csv` |
+
+  **Output CSV columns** are the same as before except `exceed_count` and
+  `below_count` are replaced by `expected_count` (the analytical Markov
+  expectation).
+
+  `scramble_kmer_pvalues` and `scramble_input` remain available in the API
+  for users who need the permutation-based null.
+
+### Fixed
+
+- `_markov_expected_count_order` added alongside the existing
+  `_markov_expected_count`; the new helper supports arbitrary Markov order
+  (0 through k−2) via the generalised Prum/Schbath formula.
+
 ## [0.0.8] - 2026-05-02
 
 ### Added
@@ -48,10 +87,10 @@
 
 - **Analytical Markov k-mer test (`markov_kmer_pvalues`).**  A fast analytical
   counterpart to the shuffle-based scramble test.  For each k-mer the expected count
-  under a (k−1)-th order Markov model is computed from the Prum/Schbath formula and
-  tested with a Poisson exact p-value, with BH-FDR correction.  Runs instantly for
-  any k.  Available in the API (`algorithms.markov_kmer_pvalues`); not yet exposed as
-  a separate menu item.
+  under a configurable-order Markov model is computed from the Prum/Schbath formula
+  and tested with a Poisson exact p-value, with BH-FDR correction.  Runs instantly
+  for any k.  Available in the API (`algorithms.markov_kmer_pvalues`); exposed as
+  the *K-mer Markov analysis* menu item as of v0.0.9.
 
 ## [0.0.6] - 2026-04-29
 
