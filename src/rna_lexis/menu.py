@@ -1582,6 +1582,64 @@ def scramble_input(txt, file_path=''):
     safe_input(fmttxt(['Press Enter to continue'], [''], ['white']))
 
 
+def markov_kmer_input(txt, file_path=''):
+    """Prompt for k-mer length and Markov order, then write a CSV of all
+    observed k-mers with analytical Markov-model p-values (no shuffling).
+
+    order=1 (dinucleotide null) is the recommended default for sequences of a
+    few kb: it gives meaningful expected counts for any k-mer length without
+    conditioning on such long context that expected ≈ observed.
+    order=0 is equivalent to the nucleotide-composition (shuffle) null.
+    """
+    k_str = safe_input(fmttxt(['k-mer length', '[default: 6]: '],
+                               ['bold', ''], ['yellow', 'cyan']) + ' ').strip()
+    k = int(k_str) if k_str.isdigit() and int(k_str) >= 2 else 6
+
+    order_str = safe_input(fmttxt(['Markov background order (0=nucleotide, 1=dinucleotide, …)',
+                                    f'[default: 1, max: {k - 2}]: '],
+                                   ['bold', ''], ['yellow', 'cyan']) + ' ').strip()
+    max_order = k - 2
+    order = int(order_str) if order_str.isdigit() and int(order_str) <= max_order else 1
+    order = min(order, max_order)
+
+    base = os.path.splitext(file_path)[0] if file_path else 'sequence'
+    default_csv = f'{base}_kmer{k}_order{order}_markov_pvalues.csv'
+    fn_str = safe_input(fmttxt(['Output CSV file',
+                                 f'[default: {os.path.basename(default_csv)}]: '],
+                                ['bold', ''], ['yellow', 'cyan']) + ' ').strip()
+    out_csv = fn_str if fn_str else default_csv
+
+    print(fmttxt([f'Computing Markov p-values for k={k}, order={order} …'],
+                 [''], ['cyan']))
+    results = markov_kmer_pvalues(txt, k=k, order=order)
+
+    import csv as _csv
+    try:
+        with open(out_csv, 'w', newline='') as fh:
+            w = _csv.writer(fh)
+            w.writerow([
+                'kmer', 'real_count', 'expected_count',
+                'pvalue_over', 'evalue_over', 'pvalue_over_bh',
+                'pvalue_under', 'evalue_under', 'pvalue_under_bh',
+                'direction',
+            ])
+            for row in results:
+                w.writerow([
+                    row['kmer'], row['real_count'],
+                    f"{row['expected_count']:.3f}",
+                    f"{row['pvalue_over']:.8f}",  f"{row['evalue_over']:.4f}",  f"{row['pvalue_over_bh']:.8f}",
+                    f"{row['pvalue_under']:.8f}", f"{row['evalue_under']:.4f}", f"{row['pvalue_under_bh']:.8f}",
+                    row['direction'],
+                ])
+        print(fmttxt([f'Saved {len(results)} k-mers to:', out_csv],
+                     ['bold', ''], ['green', 'cyan']))
+        open_file_with_default_software(out_csv)
+    except Exception as e:
+        print(fmttxt([f'Error writing file: {e}'], ['bold'], ['red']))
+
+    safe_input(fmttxt(['Press Enter to continue'], [''], ['white']))
+
+
 def sequence_hits_input(fn, txt):
     """Prompt for up to 3 sequences + mutation rate and plot their occurrences.
 
@@ -1880,8 +1938,7 @@ def menus():
     submenu = [["Plots", "Sequence operations", "Open Core file", "Summary statistics",
                "Show settings", "Change setting", "Open User Guide", "Load new input", "Quit"],
                ["Core neighbors (detailed)", "Core neighbors (condensed)", "K-mers", "Logo", "Coverage", "Motif Match/Mutation", "Back"],
-               ["Find all matches", "Search with mutations", "Motif extensions", "Print core", "Export hairpins to CSV", "Extend match pair", "Alignment score for two sequences", "K-mer scramble analysis", "Covered area", "Core neighbors (text export)", "Back"]]
-#               ["Find all matches", "Search with mutations", "Motif extensions", "Print core", "Export hairpins to CSV", "Extend match pair", "Alignment score for two sequences", "K-mer scramble analysis", "Covered area", "Decompose motif", "Back"]]
+               ["Find all matches", "Search with mutations", "Motif extensions", "Print core", "Export hairpins to CSV", "Extend match pair", "Alignment score for two sequences", "K-mer Markov analysis", "Covered area", "Core neighbors (text export)", "Back"]]
     if not defvals['datadir']:
         cwd = os.getcwd()
         valid = _find_valid_sessions(cwd)
@@ -2092,7 +2149,7 @@ blockquote{{border-left:4px solid #ccc;margin:1em 0;padding:0.5em 1em;color:#555
                             case 7:
                                 print_alignment_score(txt)
                             case 8:
-                                scramble_input(txt, file_path)
+                                markov_kmer_input(txt, file_path)
                             case 9:
                                 txt_coverage_input(txt, strs)
                             case 10:

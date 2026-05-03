@@ -1058,6 +1058,35 @@ def find_longest_extensions(s, txt, mutr=1/6, outfile=''):
 
 # ── k-mer scramble / null-distribution analysis ──────────────────────────────
 
+def _markov_expected_count_order(kmer_counts: dict, kmer: str, n: int,
+                                  order: int) -> float:
+    """Expected count of kmer under an order-m Markov model.
+
+    order=0  →  product of single-nucleotide counts / n^(k-1)
+    order>=1 →  generalised Prum/Schbath formula using (order+1)-mer counts:
+                E(w) = count(w[0:m+1])
+                       * prod_{j=1}^{k-1-m} count(w[j:j+m+1]) / count(w[j:j+m])
+
+    kmer_counts must contain lengths 1 … order+1 and k.
+    Returns 0.0 when a denominator count is zero.
+    """
+    k = len(kmer)
+    m = order
+    if m == 0:
+        prod = 1.0
+        for c in kmer:
+            prod *= kmer_counts[1].get(c, 0)
+        return prod / (n ** (k - 1))
+    exp = float(kmer_counts[m + 1].get(kmer[:m + 1], 0))
+    for j in range(1, k - m):
+        num = kmer_counts[m + 1].get(kmer[j:j + m + 1], 0)
+        den = kmer_counts[m].get(kmer[j:j + m], 0)
+        if den == 0:
+            return 0.0
+        exp = exp * num / den
+    return exp
+
+
 def _markov_expected_count(kmer_counts: dict, kmer: str, n: int) -> float:
     """Expected count of kmer under the (len(kmer)-1)-th order Markov model.
 
@@ -1087,28 +1116,30 @@ def _markov_expected_count(kmer_counts: dict, kmer: str, n: int) -> float:
     return c_prefix * c_suffix / c_interior
 
 
-def markov_kmer_pvalues(txt: str, k: int) -> list:
+def markov_kmer_pvalues(txt: str, k: int, order: int = 1) -> list:
     """Analytical Markov-model p-values for all k-mers observed in txt.
 
-    For each k-mer w the expected count under a (k-1)-th order Markov model
-    is computed using the Prum/Schbath formula — no shuffling required.  The
-    observed count is tested against a Poisson(expected) null:
+    For each k-mer w the expected count under an order-m Markov model is
+    computed — no shuffling required.  The observed count is tested against a
+    Poisson(expected) null:
 
     * pvalue_over  — P(X >= obs). Small values flag over-represented k-mers.
     * pvalue_under — P(X <= obs). Small values flag under-represented k-mers.
 
-    This is the fast analytical counterpart to scramble_kmer_pvalues().  The
-    null here conditions on the observed (k-1)-mer frequencies rather than on
-    the overall nucleotide composition.  Results are comparable but may differ
-    because the two null models are not identical.
+    order=1 (default) conditions on dinucleotide frequencies, which gives
+    meaningful expected counts even for long k-mers in short sequences.
+    order=0 conditions only on nucleotide frequencies (equivalent to the
+    scramble/shuffle null).  Higher orders condition on longer context but
+    become degenerate as order approaches k-1.
 
     BH-adjusted p-values (FDR) and E-values (p * m, where m is the number of
     distinct k-mers) are computed separately for each direction.  Rows are
     sorted by min(pvalue_over, pvalue_under) ascending.
 
     Args:
-        txt: Source sequence (lower-cased internally).
-        k:   K-mer length (>= 2).
+        txt:   Source sequence (lower-cased internally).
+        k:     K-mer length (>= 2).
+        order: Markov background order (0 <= order < k-1).  Default 1.
 
     Returns:
         List of dicts sorted by min(pvalue_over, pvalue_under) ascending.
@@ -1120,17 +1151,21 @@ def markov_kmer_pvalues(txt: str, k: int) -> list:
 
     if k < 2:
         raise ValueError("k must be at least 2")
+    if not (0 <= order < k):
+        raise ValueError(f"order must be in [0, k-1); got order={order}, k={k}")
     txt = txt.lower()
     n   = len(txt)
 
+    needed = set(range(1, order + 2)) | {k}
     kmer_counts = {j: Counter(txt[i:i+j] for i in range(n - j + 1))
-                   for j in range(1, k + 1)}
+                   for j in needed}
 
     observed    = kmer_counts[k]
     kmers       = list(observed.keys())
     m           = len(kmers)
     real_counts = [observed[w] for w in kmers]
-    expected    = [_markov_expected_count(kmer_counts, w, n) for w in kmers]
+    expected    = [_markov_expected_count_order(kmer_counts, w, n, order)
+                   for w in kmers]
 
     pvals_over  = []
     pvals_under = []
