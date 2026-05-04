@@ -234,6 +234,51 @@ def cover(s, txt, pwr=1.1):
     #return(len(find_all_matches(s, txt))*len(s))
 
 
+def extend_core_maximally(txt: str, core: str) -> str:
+    """Extend core left and right in txt while all occurrences share the same
+    flanking character.
+
+    Each extension step checks the character immediately to the left (or right)
+    of every occurrence.  If all occurrences agree on that character, it is
+    absorbed into the core and the process repeats.  The occurrence count never
+    decreases, so the extended core is as informative as the original while
+    eliminating the ambiguity implied by the shorter string.
+
+    Args:
+        txt:  Full source text.
+        core: Starting core string (must appear in txt).
+
+    Returns:
+        The maximally extended core string.
+    """
+    n = len(txt)
+    current = core
+    changed = True
+    while changed:
+        changed = False
+        positions = []
+        start = 0
+        while True:
+            pos = txt.find(current, start)
+            if pos == -1:
+                break
+            positions.append(pos)
+            start = pos + 1
+        if not positions:
+            break
+        right = {txt[pos + len(current)] if pos + len(current) < n else None
+                 for pos in positions}
+        if len(right) == 1 and None not in right:
+            current += right.pop()
+            changed = True
+            continue
+        left = {txt[pos - 1] if pos > 0 else None for pos in positions}
+        if len(left) == 1 and None not in left:
+            current = left.pop() + current
+            changed = True
+    return current
+
+
 def cores(txt, xmotifs, minclen=6):
     """Find core sequences as k-mers shared across non-containment xmotifs.
 
@@ -291,6 +336,10 @@ def cores(txt, xmotifs, minclen=6):
                 if kmer in cores_found:
                     break
 
+    # Extend each core maximally in txt, then deduplicate.
+    # Multiple short cores often collapse to the same maximal string.
+    if txt:
+        return list({extend_core_maximally(txt, c) for c in cores_found})
     return list(cores_found)
 
 
