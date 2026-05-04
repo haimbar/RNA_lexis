@@ -7,6 +7,7 @@ called **xmotifs** and extracts their shorter conserved cores. From there you ca
 
 - Visualise the neighbourhood of any core sequence
 - Study k-mer frequency distributions (z-score, rank-frequency, histograms)
+- Test k-mer enrichment analytically with Markov-model p-values (no shuffling)
 - Generate sequence logos
 - Inspect coverage across the full transcript
 - Align pairs of subsequences (Gotoh global / Smith–Waterman local)
@@ -45,26 +46,39 @@ A small `p_stable` means the sequence appears **more conserved than expected by
 chance**, i.e., it is stable.  The CSV is sorted by `p_stable` ascending.
 A sequence with no strong conservation signal will have `p_stable ≈ 0.5`.
 
-## K-mer scramble analysis
+## Maximal core extension
 
-The *K-mer scramble analysis* menu option shuffles the transcript `N` times
-(preserving nucleotide composition) and tests every observed k-mer against the
-shuffle distribution.  The output CSV reports **two one-sided p-values** per k-mer:
+Cores are automatically extended to their **maximal unique form** before being
+reported.  Starting from a raw core, the algorithm grows the string one character
+at a time in each direction for as long as every occurrence in the transcript
+shares the same flanking character.  Multiple raw cores that collapse to the same
+maximal string are deduplicated, eliminating the sliding-window redundancy common
+in repeat-rich sequences.
+
+## K-mer Markov analysis
+
+The *K-mer Markov analysis* menu option tests every observed k-mer analytically —
+no shuffling or random seeds required.  For each k-mer the expected count is
+computed from the Prum/Schbath formula under a configurable-order Markov null and
+tested with a Poisson exact p-value.  The output CSV reports **two one-sided
+p-values** per k-mer:
 
 | column | description |
 |---|---|
-| `pvalue_over` | fraction of shuffles with count ≥ observed — small = **over-represented** |
+| `expected_count` | Expected count under the Markov null |
+| `pvalue_over` | P(X ≥ obs) — small = **over-represented** |
 | `evalue_over` | `pvalue_over × m` (expected false positives among *m* k-mers tested) |
 | `pvalue_over_bh` | BH-adjusted p-value for over-representation (FDR) |
-| `pvalue_under` | fraction of shuffles with count ≤ observed — small = **under-represented** |
+| `pvalue_under` | P(X ≤ obs) — small = **under-represented** |
 | `evalue_under` | `pvalue_under × m` |
 | `pvalue_under_bh` | BH-adjusted p-value for under-representation (FDR) |
 | `direction` | `'over'` or `'under'` — which effect is stronger |
 
-A k-mer with no enrichment or depletion relative to the shuffle distribution will have
-`pvalue_over ≈ pvalue_under ≈ 0.5`.  BH correction is applied separately for each
-direction across all *m* k-mers.  Rows are sorted by `min(pvalue_over, pvalue_under)`
-so the most extreme k-mers in either direction appear first.
+The **Markov background order** controls the null: `order=0` conditions only on
+nucleotide frequencies (equivalent to the shuffle null); `order=1` (default)
+conditions on dinucleotide frequencies and is recommended for transcripts of a
+few kilobases.  BH correction is applied separately for each direction across all
+*m* k-mers.  Rows are sorted by `min(pvalue_over, pvalue_under)`.
 
 ## Hierarchical motif decomposition
 

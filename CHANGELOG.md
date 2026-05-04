@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.0.10] - 2026-05-03
+
+### Changed
+
+- **Cores are now maximally extended before being reported.**  After the raw
+  core set is identified, each core is grown left and right in the source text
+  as long as every occurrence shares the same flanking character.  The extended
+  string is strictly more informative than the original: it retains the same
+  occurrence count and removes the ambiguity implied by the shorter form.
+  Multiple raw cores that collapse to the same maximal string are deduplicated,
+  eliminating the sliding-window redundancy that previously inflated core counts
+  in repeat-rich sequences (e.g. EBYT lyrics: 87 raw cores → 5 maximal cores).
+
+### Added
+
+- **`extend_core_maximally(txt, core)`** (`algorithms`).  Public helper that
+  implements the bidirectional greedy extension described above.  Accepts the
+  full source text and a core string; returns the maximally extended string.
+
 ## [0.0.9] - 2026-05-03
 
 ### Changed
