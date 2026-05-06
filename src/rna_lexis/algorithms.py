@@ -226,7 +226,7 @@ def cover(s, txt, pwr=1.1):
     s0[found[0]:found[0]+ls] = [1]*ls
     for i in range(1, len(found)):
         if max(s0[found[i]:found[i]+ls]) == 1:
-            continue # no overlap
+            continue # overlaps already-covered region; skip
         s0[found[i]:found[i]+ls] = [1]*ls
         cnt += 1
     return(ls**pwr * (1+cnt))
