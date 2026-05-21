@@ -51,6 +51,7 @@ from rna_lexis.statistical import (
     best_mutation_family_per_motif,
     find_gapped_motif_hits,
     score_gapped_motif,
+    spacing_periodicity_test,
     write_rows_csv,
 )
 ```
@@ -430,6 +431,47 @@ score = score_gapped_motif(txt, "TGT", "TATA", min_gap=0, max_gap=6)
 # Keys: pattern, observed_count, expected_markov, enrichment_markov, p_markov
 ```
 
+### `spacing_periodicity_test(positions, seq_len) -> dict`
+
+Test whether a set of motif occurrence positions is more periodic than expected
+by chance. Requires at least 3 positions.
+
+- `positions`: list of integer start positions (0-based, unsorted is fine)
+- `seq_len`: total sequence length (used to calibrate the Binomial null)
+
+Two complementary tests are performed:
+
+**Gap cluster test** — consecutive gaps are compared to a candidate period
+T = median(gaps). Gaps within δ = max(5, 5 % × T) of T are counted; this count
+is tested against Bin(n\_gaps, 2δ/seq\_len) with Bonferroni correction × n\_gaps
+(because T is estimated from the same data).
+
+**Rayleigh test** — occurrence positions modulo T are mapped to angles
+θ = 2π(pos mod T)/T. The mean resultant length R and statistic Z = m·R² are
+computed; the p-value uses the Mardia & Jupp (2000) large-sample approximation.
+
+```python
+from rna_lexis.algorithms import find_all_matches
+from rna_lexis.statistical import spacing_periodicity_test
+
+positions = find_all_matches("tgtatata", txt)
+result = spacing_periodicity_test(positions, len(txt))
+# Keys:
+#   m            — number of occurrences
+#   gaps         — list of consecutive gaps
+#   mean_gap, std_gap
+#   period       — candidate period T (median gap)
+#   delta        — tolerance window δ
+#   k_near_T     — number of gaps within [T−δ, T+δ]
+#   gaps_near_T  — list of those gaps
+#   p_cluster    — Bonferroni-corrected Binomial p-value
+#   rayleigh_r   — mean resultant length R (0=random, 1=perfectly periodic)
+#   rayleigh_z   — Rayleigh statistic Z = m·R²
+#   p_rayleigh   — Rayleigh p-value
+sig = result['p_cluster'] < 0.05 or result['p_rayleigh'] < 0.05
+print(f"Periodic: {sig}, T={result['period']} nt, R={result['rayleigh_r']:.3f}")
+```
+
 ### `write_rows_csv(path, rows) -> str`
 
 Write a list of dicts to a CSV file. Returns the path written.
@@ -569,6 +611,23 @@ import glob
 sessions = [sd for p in glob.glob("/path/to/output/*.json")
             if (sd := is_valid_session(p))]
 txt, corelist, xmotifs = sessions[0].txt, sessions[0].corelist, sessions[0].xmotifs
+```
+
+### 10 — Motif spacing / periodicity test
+
+```python
+from rna_lexis.algorithms import find_all_matches
+from rna_lexis.statistical import spacing_periodicity_test
+
+positions = find_all_matches("tgtatata", txt)
+if len(positions) >= 3:
+    result = spacing_periodicity_test(positions, len(txt))
+    sig = result['p_cluster'] < 0.05 or result['p_rayleigh'] < 0.05
+    if sig:
+        print(f"Periodic spacing detected: T={result['period']} nt")
+        print(f"  Gap cluster: {result['k_near_T']}/{len(result['gaps'])} gaps near T,"
+              f" p={result['p_cluster']:.4f}")
+        print(f"  Rayleigh: R={result['rayleigh_r']:.3f}, p={result['p_rayleigh']:.4f}")
 ```
 
 ---

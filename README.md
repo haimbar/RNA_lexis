@@ -17,6 +17,8 @@ called **xmotifs** and extracts their shorter conserved cores. From there you ca
 - **Score motifs against a transcript-specific Markov background with FDR correction**
 - **Test mutation-tolerant motif families for statistical enrichment**
 - **Search for anchor-gap-anchor gapped motif patterns**
+- **Test whether motif occurrences are spaced periodically (gap-cluster and Rayleigh tests)**
+- Clear workspace (remove all generated files while preserving the input sequence)
 
 ## Initialisation summary (`_test_init.csv`)
 
@@ -152,6 +154,24 @@ of a pattern of the form `LEFT[gap:min–max]RIGHT`: two exact anchor sequences
 separated by a variable-length gap. The whole family is scored under the Markov
 background, and individual hits (with exact positions and gap lengths) are saved
 to a CSV.
+
+### Motif spacing / periodicity test
+
+The *Motif spacing / periodicity test* option (Sequence operations → 6) takes a
+motif, finds all exact occurrences, and tests whether their spacing is more
+periodic than expected by chance. Two complementary tests are applied:
+
+**Gap cluster test** — counts how many consecutive gaps fall within a tolerance
+window δ = max(5, 5 % × T) of the candidate period T (median gap). Tested against
+a Binomial null Bin(n\_gaps, 2δ/L) with Bonferroni correction for estimating T
+from the same data.
+
+**Rayleigh test** — maps occurrence positions modulo T to angles and measures the
+mean resultant length R (0 = random, 1 = perfectly periodic). A large R indicates
+that positions cluster at a consistent phase relative to T.
+
+Either test reaching p < 0.05 is reported as a positive periodicity signal.
+Requires at least 3 exact occurrences.
 
 ### Batch CLI (`rna_lexis_stat_cli`)
 
