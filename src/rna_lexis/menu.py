@@ -2092,7 +2092,31 @@ def spacing_test_input(txt):
     if not seq:
         return
 
-    positions = find_all_matches(seq, txt)
+    mutr_str = safe_input(fmttxt(
+        ["Mutations: 0 = exact only, or enter N for 1-per-N-nt (max 6) [default: 0]: "],
+        ['bold'], ['yellow']
+    )).strip()
+    try:
+        mutr_n = int(mutr_str) if mutr_str else 0
+    except ValueError:
+        mutr_n = 0
+    mutr = 0.0 if mutr_n <= 0 else min(1.0 / mutr_n, 1.0 / 6.0)
+
+    if mutr > 0:
+        exact_pos, approx, maxmut = find_with_mutations(seq, txt, mutr=mutr)
+        n_exact  = len(exact_pos)
+        n_approx = len(approx)
+        positions = sorted(set(exact_pos) | {a[0] for a in approx})
+        if maxmut > 0:
+            match_mode = (f"≤{maxmut} mutation(s)  "
+                          f"({n_exact} exact, {n_approx} approx)")
+        else:
+            match_mode = "exact only  (motif too short for mutations at this rate)"
+    else:
+        positions = find_all_matches(seq, txt)
+        match_mode = "exact only"
+        maxmut = 0
+
     m = len(positions)
     L = len(txt)
 
@@ -2133,6 +2157,7 @@ def spacing_test_input(txt):
     W = 54
     print(fmttxt([f"\nSpacing analysis for '{seq}'"], ['bold'], ['cyan']))
     print('-' * W)
+    print(f"  Match mode             : {match_mode}")
     print(f"  Occurrences (m)        : {m}")
     print(f"  Sequence length (L)    : {L} nt")
     print(f"  Positions              : {pos_str}")

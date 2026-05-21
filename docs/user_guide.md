@@ -413,15 +413,21 @@ Up to 15 supported candidates are printed to the terminal after the CSV is saved
 
 #### 2.6 Motif spacing / periodicity test
 
-Tests whether the exact occurrences of a motif are spaced more regularly than
-random placement would produce.  Requires m ≥ 3 occurrences; a warning is
-shown when m < 6 (low power).
+Tests whether the occurrences of a motif are spaced more regularly than random
+placement would produce.  Requires m ≥ 3 occurrences; a warning is shown when
+m < 6 (low power).
 
-**Prompt:**
+**Prompts:**
 
-| Prompt | Notes |
-|---|---|
-| Sequence to test | Exact matches are found; approximate matches are not used |
+| Prompt | Default | Notes |
+|---|:---:|---|
+| Sequence to test | | Blank to cancel |
+| Mutations: 0 = exact only, or N for 1-per-N-nt | 0 | Enter 6 to allow 1 mutation per 6 nt; maximum N is 6 (rate 1/6) |
+
+When a mutation rate > 0 is given, both exact and approximate (Hamming)
+matches are included.  Overlapping positions are deduplicated before the test.
+The match mode (e.g. "≤1 mutation(s) — 8 exact, 3 approx") is shown in the
+output header.
 
 **Two statistical tests are run:**
 

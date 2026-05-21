@@ -705,26 +705,35 @@
 </table>
 <p>Up to 15 supported candidates are printed to the terminal after the CSV is saved.</p>
 <h4 id="motif-spacing-periodicity-test">2.6 Motif spacing / periodicity test</h4>
-<p>Tests whether the exact occurrences of a motif are spaced more regularly than random placement would produce. Requires m ≥ 3 occurrences; a warning is shown when m &lt; 6 (low power).</p>
-<p><strong>Prompt:</strong></p>
+<p>Tests whether the occurrences of a motif are spaced more regularly than random placement would produce. Requires m ≥ 3 occurrences; a warning is shown when m &lt; 6 (low power).</p>
+<p><strong>Prompts:</strong></p>
 <table>
 <colgroup>
-<col style="width: 50%" />
-<col style="width: 50%" />
+<col style="width: 27%" />
+<col style="width: 45%" />
+<col style="width: 27%" />
 </colgroup>
 <thead>
 <tr class="header">
 <th>Prompt</th>
+<th style="text-align: center;">Default</th>
 <th>Notes</th>
 </tr>
 </thead>
 <tbody>
 <tr class="odd">
 <td>Sequence to test</td>
-<td>Exact matches are found; approximate matches are not used</td>
+<td style="text-align: center;"></td>
+<td>Blank to cancel</td>
+</tr>
+<tr class="even">
+<td>Mutations: 0 = exact only, or N for 1-per-N-nt</td>
+<td style="text-align: center;">0</td>
+<td>Enter 6 to allow 1 mutation per 6 nt; maximum N is 6 (rate 1/6)</td>
 </tr>
 </tbody>
 </table>
+<p>When a mutation rate &gt; 0 is given, both exact and approximate (Hamming) matches are included. Overlapping positions are deduplicated before the test. The match mode (e.g. “≤1 mutation(s) — 8 exact, 3 approx”) is shown in the output header.</p>
 <p><strong>Two statistical tests are run:</strong></p>
 <p><strong>Gap cluster test</strong> (primary) — estimates the candidate period T as the median of the m−1 consecutive gaps, then counts how many gaps fall within δ = max(5, 5%·T) of T. Under the null hypothesis of uniform random placement each gap is Uniform[0, L], giving an expected count of (m−1) × 2δ/L. The observed count is tested against Bin(m−1, 2δ/L); the p-value is Bonferroni-corrected by (m−1) because T is derived from the same data.</p>
 <p><strong>Rayleigh test</strong> (confirmatory) — maps all m positions modulo T to angles θᵢ = 2π(pᵢ mod T)/T on a circle and tests whether they cluster. The mean resultant length R ∈ [0,1] quantifies concentration (0 = uniform, 1 = all coincide); Z = m·R² is the test statistic. The Mardia &amp; Jupp (2000) approximation gives the p-value.</p>

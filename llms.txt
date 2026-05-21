@@ -451,10 +451,16 @@ is tested against Bin(n\_gaps, 2δ/seq\_len) with Bonferroni correction × n\_ga
 computed; the p-value uses the Mardia & Jupp (2000) large-sample approximation.
 
 ```python
-from rna_lexis.algorithms import find_all_matches
+from rna_lexis.algorithms import find_all_matches, find_with_mutations
 from rna_lexis.statistical import spacing_periodicity_test
 
+# Exact matches only
 positions = find_all_matches("tgtatata", txt)
+
+# Or include approximate matches (e.g. mutr=1/6 → 1 mutation per 6 nt)
+exact_pos, approx, maxmut = find_with_mutations("tgtatata", txt, mutr=1/6)
+positions = sorted(set(exact_pos) | {a[0] for a in approx})
+
 result = spacing_periodicity_test(positions, len(txt))
 # Keys:
 #   m            — number of occurrences
@@ -613,13 +619,19 @@ sessions = [sd for p in glob.glob("/path/to/output/*.json")
 txt, corelist, xmotifs = sessions[0].txt, sessions[0].corelist, sessions[0].xmotifs
 ```
 
-### 10 — Motif spacing / periodicity test
+### 10 — Motif spacing / periodicity test (with optional mutations)
 
 ```python
-from rna_lexis.algorithms import find_all_matches
+from rna_lexis.algorithms import find_all_matches, find_with_mutations
 from rna_lexis.statistical import spacing_periodicity_test
 
+# Exact matches only
 positions = find_all_matches("tgtatata", txt)
+
+# Or include approximate matches (mutr=1/6 → up to 1 mutation per 6 nt)
+exact_pos, approx, maxmut = find_with_mutations("tgtatata", txt, mutr=1/6)
+positions = sorted(set(exact_pos) | {a[0] for a in approx})
+
 if len(positions) >= 3:
     result = spacing_periodicity_test(positions, len(txt))
     sig = result['p_cluster'] < 0.05 or result['p_rayleigh'] < 0.05
