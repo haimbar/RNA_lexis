@@ -279,20 +279,23 @@ The detail view is a plain HTML page showing every nucleotide in the selected ra
 
 ```
 --- Sequence operations ---
- 1. Find all matches
+ 1. Find all matches                      ← single-sequence analysis
  2. Search with mutations
  3. Motif extensions
  4. Print core
- 5. Rank core motifs (Markov/FDR)
- 6. Motif spacing / periodicity test
- 7. Mutation-family scoring
- 8. Gapped motif search
- 9. Export hairpins to CSV
-10. Extend match pair
-11. Alignment score for two sequences
-12. K-mer Markov analysis
-13. Covered area
-14. Core neighbors (text export)
+ 5. Motif spacing / periodicity test
+ 6. Gapped motif search
+ 7. Extend match pair
+ 8. Covered area
+ 9. Core neighbors (text export)
+
+10. Rank core motifs (Markov/FDR)         ← statistical analysis
+11. Mutation-family scoring
+12. Alignment score for two sequences
+13. K-mer Markov analysis
+
+14. Export hairpins to CSV                ← other
+
 15. Back
 ```
 
@@ -374,44 +377,7 @@ Press **Enter** to save to the default filename (based on the motif), type a cus
 
 Given a sequence, finds and prints the xmotifs that contain it as a core.
 
-#### 2.5 Rank core motifs (Markov/FDR)
-
-Enumerates all shared substrings of the current xmotifs within a configurable
-length range, scores each candidate against a transcript-specific Markov
-background, and saves a ranked CSV.  Candidates are accepted as *statistically
-supported* when the FDR-corrected q-value is below the threshold **and** the
-enrichment ratio exceeds the minimum enrichment.
-
-**Prompts:**
-
-| Prompt | Default | Notes |
-|---|:---:|---|
-| Candidate minimum core length | 5 | Shortest substring to test |
-| Candidate maximum core length | 18 | Longest substring to test |
-| Minimum xmotif-type support | 2 | Candidate must appear in at least this many xmotif families |
-| Minimum Markov enrichment | 10 | `observed / expected` ratio threshold |
-| FDR q-value threshold | 0.05 | Benjamini–Hochberg threshold |
-| Output CSV file | `<session>_ranked_cores_markov.csv` | |
-
-**Output CSV columns:**
-
-| Column | Description |
-|---|---|
-| `motif` | Candidate core sequence |
-| `exact_count` | Number of exact occurrences in the transcript |
-| `expected_markov` | Expected count under the Markov null |
-| `enrichment_markov` | `observed / expected` ratio |
-| `p_markov` | Poisson upper-tail p-value |
-| `q_markov` | BH-adjusted p-value |
-| `statistically_supported` | `True` if q and enrichment thresholds are met |
-| `coverage_bp` | Base-pairs covered by non-overlapping occurrences |
-| `xmotif_type_support` | Number of distinct xmotif families containing this candidate |
-| `rank_statistical` | Primary rank (statistical support first) |
-| `rank_coverage` | Secondary rank (coverage) |
-
-Up to 15 supported candidates are printed to the terminal after the CSV is saved.
-
-#### 2.6 Motif spacing / periodicity test
+#### 2.5 Motif spacing / periodicity test
 
 Tests whether the occurrences of a motif are spaced more regularly than random
 placement would produce.  Requires m ≥ 3 occurrences; a warning is shown when
@@ -451,39 +417,7 @@ gap sizes are mixed, the output automatically notes:
   window.
 - **Large gaps** (> 175%·T) — likely one or more periods skipped.
 
-#### 2.7 Mutation-family scoring
-
-Tests one or more motifs at every Hamming radius allowed by the mutation cap.
-For each motif and radius, the complete neighbourhood — all sequences within that
-Hamming distance — is counted and scored against the Markov background.  The
-best-supported radius per motif is written to a separate `_best.csv` file.
-
-**Prompts:**
-
-| Prompt | Default | Notes |
-|---|:---:|---|
-| Motif source | 1 | 1 = enter a motif, 2 = current cores, 3 = current xmotifs |
-| Motif | | Only shown when source = 1; blank to cancel |
-| Mutation search cap: 1 per N letters | 6 | Sets the maximum Hamming radius tested |
-| Minimum family enrichment | 5 | Enrichment threshold for the full Hamming neighbourhood |
-| Maximum expected family count | 5 | Families with a higher expected count are not scored |
-| FDR q-value threshold | 0.05 | BH threshold applied across all (motif, radius) pairs |
-| Output CSV file | `<session>_mutation_family_tests.csv` | Full results |
-
-Two files are written:
-- **Full results** (`_mutation_family_tests.csv`): one row per (motif, radius) pair.
-- **Best radius** (`_mutation_family_tests_best.csv`): one row per motif showing
-  the strongest accepted radius.
-
-**Decision values in `_best.csv`:**
-
-| Decision | Meaning |
-|---|---|
-| `mutation_supported` | Family is statistically enriched at this radius |
-| `exact_or_specific_only` | Only the exact sequence (radius 0) is enriched |
-| `below_threshold` | No radius passes the enrichment + FDR criteria |
-
-#### 2.8 Gapped motif search
+#### 2.6 Gapped motif search
 
 Finds all occurrences of an anchor-gap-anchor pattern `LEFT[gap:min–max]RIGHT`
 and scores the whole family under the Markov background.
@@ -516,11 +450,7 @@ The family-level statistics (`pattern`, `observed_count`, `expected_markov`,
 (`start`, `gap_length`, `matched_sequence`) vary by row.  Up to 20 hits are
 printed to the terminal.
 
-#### 2.9 Export hairpins to CSV
-
-Exports all detected hairpin regions for the loaded sequence to a CSV file. Each row contains the start position, end position, stem sequence, loop sequence, and full hairpin sequence.
-
-#### 2.10 Extend match pair
+#### 2.7 Extend match pair
 
 Finds all exact occurrences of a seed sequence and, for every pair of occurrences, greedily extends both copies left and right as far as possible while keeping the Hamming distance between the two extended copies within a user-defined rate.  The result reveals how much context around two repeats remains mutually similar.
 
@@ -562,7 +492,108 @@ Save all pairs to CSV [Enter for extensions_<seed>.csv, Ctrl+D to skip]:
 
 Press **Enter** to save to the default filename, type a custom name, or press **Ctrl+D** to skip. The CSV contains one row per pair with columns: `rank`, `pos1`, `pos2`, `left_ext`, `right_ext`, `total_len`, `hamming`, `ext1`, `ext2`.
 
-#### 2.11 Alignment score for two sequences
+#### 2.8 Covered area
+
+Computes and prints the coverage score for a single sequence: `length^a times occurrences`, where *a* is a configurable exponent (default 1.2, matching the session setting).
+
+#### 2.9 Core neighbors (text export)
+
+Exports the sequence regions associated with a query core and its neighbourhood as a CSV file, so that individual region sequences can be copied directly into other tools (e.g. **Alignment score for two sequences**, **Search with mutations**).
+
+**How regions are defined:**
+
+Every occurrence of s0, its single-nucleotide mutations, and all its neighbours (sequences with a positive conditional-probability score within the window) is expanded by ±wd nucleotides. Overlapping expanded intervals are merged into contiguous regions. The result is a set of non-overlapping windows that cover every area of the text where any of the tracked sequences cluster together — including regions where neighbours bridge the gap between two s0 occurrences, and regions that contain only neighbours with no s0 nearby.
+
+**Prompts:**
+
+| Prompt | Default | Notes |
+|:---|:---:|:---|
+| Sequence to analyse | no default | Must be present in the text |
+| Neighbourhood width | 40 | Half-window used for interval expansion and gap merging |
+| Strings to include | 2 (xmotifs) | 1 = cores, 2 = xmotifs |
+| X-axis range | *(full range)* | `min, max` e.g. `100, 500` — limits which positions are considered |
+| Output CSV file | `<session>_<seq>_regions.csv` | In the session directory; leave blank to use the default |
+
+**Output CSV columns:**
+
+| Column | Description |
+|---|---|
+| `start` | 0-based start position of the region in the full sequence |
+| `end` | 0-based end position (inclusive) |
+| `seq` | `txt[start:end+1]` — the raw nucleotide sequence of the region |
+
+Results are also printed to the terminal. The CSV is opened automatically in your default application when writing completes.
+
+#### 2.10 Rank core motifs (Markov/FDR)
+
+Enumerates all shared substrings of the current xmotifs within a configurable
+length range, scores each candidate against a transcript-specific Markov
+background, and saves a ranked CSV.  Candidates are accepted as *statistically
+supported* when the FDR-corrected q-value is below the threshold **and** the
+enrichment ratio exceeds the minimum enrichment.
+
+**Prompts:**
+
+| Prompt | Default | Notes |
+|---|:---:|---|
+| Candidate minimum core length | 5 | Shortest substring to test |
+| Candidate maximum core length | 18 | Longest substring to test |
+| Minimum xmotif-type support | 2 | Candidate must appear in at least this many xmotif families |
+| Minimum Markov enrichment | 10 | `observed / expected` ratio threshold |
+| FDR q-value threshold | 0.05 | Benjamini–Hochberg threshold |
+| Output CSV file | `<session>_ranked_cores_markov.csv` | |
+
+**Output CSV columns:**
+
+| Column | Description |
+|---|---|
+| `motif` | Candidate core sequence |
+| `exact_count` | Number of exact occurrences in the transcript |
+| `expected_markov` | Expected count under the Markov null |
+| `enrichment_markov` | `observed / expected` ratio |
+| `p_markov` | Poisson upper-tail p-value |
+| `q_markov` | BH-adjusted p-value |
+| `statistically_supported` | `True` if q and enrichment thresholds are met |
+| `coverage_bp` | Base-pairs covered by non-overlapping occurrences |
+| `xmotif_type_support` | Number of distinct xmotif families containing this candidate |
+| `rank_statistical` | Primary rank (statistical support first) |
+| `rank_coverage` | Secondary rank (coverage) |
+
+Up to 15 supported candidates are printed to the terminal after the CSV is saved.
+
+#### 2.11 Mutation-family scoring
+
+Tests one or more motifs at every Hamming radius allowed by the mutation cap.
+For each motif and radius, the complete neighbourhood — all sequences within that
+Hamming distance — is counted and scored against the Markov background.  The
+best-supported radius per motif is written to a separate `_best.csv` file.
+
+**Prompts:**
+
+| Prompt | Default | Notes |
+|---|:---:|---|
+| Motif source | 1 | 1 = enter a motif, 2 = current cores, 3 = current xmotifs |
+| Motif | | Only shown when source = 1; blank to cancel |
+| Mutation search cap: 1 per N letters | 6 | Sets the maximum Hamming radius tested |
+| Minimum family enrichment | 5 | Enrichment threshold for the full Hamming neighbourhood |
+| Maximum expected family count | 5 | Families with a higher expected count are not scored |
+| FDR q-value threshold | 0.05 | BH threshold applied across all (motif, radius) pairs |
+| Output CSV file | `<session>_mutation_family_tests.csv` | Full results |
+
+Two files are written:
+- **Full results** (`_mutation_family_tests.csv`): one row per (motif, radius) pair.
+- **Best radius** (`_mutation_family_tests_best.csv`): one row per motif showing
+  the strongest accepted radius.
+
+**Decision values in `_best.csv`:**
+
+| Decision | Meaning |
+|---|---|
+| `mutation_supported` | Family is statistically enriched at this radius |
+| `exact_or_specific_only` | Only the exact sequence (radius 0) is enriched |
+| `below_threshold` | No radius passes the enrichment + FDR criteria |
+
+#### 2.12 Alignment score for two sequences
 
 Aligns two substrings extracted from the loaded text by position.
 
@@ -582,7 +613,7 @@ The alignment is printed with gap symbols and the following scores:
 - **Bit score** — length-independent score computed with the Karlin–Altschul formula (λ = 1.28, K = 0.46); comparable across alignments of different lengths.
 - **E-value** — expected number of alignments with a score this high or better by chance, using the full transcript as the reference database. Values below 10⁻³ are considered significant.
 
-#### 2.12 K-mer Markov analysis
+#### 2.13 K-mer Markov analysis
 
 Computes analytical p-values for every observed k-mer using a Markov-model null — no shuffling or random seeds required.  For each k-mer the expected count is derived from the Prum/Schbath formula conditioned on shorter k-mer frequencies; the observed count is then tested against a Poisson(expected) null.  Two one-sided p-values are reported per k-mer, testing for over- and under-representation separately.  All results are saved to a CSV file sorted by the more extreme of the two p-values.
 
@@ -621,37 +652,9 @@ Computes analytical p-values for every observed k-mer using a Markov-model null 
 
 Rows are sorted by `min(pvalue_over, pvalue_under)` so the most extreme k-mers appear first.  BH correction is applied separately within each family of *m* tests.
 
-#### 2.13 Covered area
+#### 2.14 Export hairpins to CSV
 
-Computes and prints the coverage score for a single sequence: `length^a times occurrences`, where *a* is a configurable exponent (default 1.2, matching the session setting).
-
-#### 2.14 Core neighbors (text export)
-
-Exports the sequence regions associated with a query core and its neighbourhood as a CSV file, so that individual region sequences can be copied directly into other tools (e.g. **Alignment score for two sequences**, **Search with mutations**).
-
-**How regions are defined:**
-
-Every occurrence of s0, its single-nucleotide mutations, and all its neighbours (sequences with a positive conditional-probability score within the window) is expanded by ±wd nucleotides. Overlapping expanded intervals are merged into contiguous regions. The result is a set of non-overlapping windows that cover every area of the text where any of the tracked sequences cluster together — including regions where neighbours bridge the gap between two s0 occurrences, and regions that contain only neighbours with no s0 nearby.
-
-**Prompts:**
-
-| Prompt | Default | Notes |
-|:---|:---:|:---|
-| Sequence to analyse | no default | Must be present in the text |
-| Neighbourhood width | 40 | Half-window used for interval expansion and gap merging |
-| Strings to include | 2 (xmotifs) | 1 = cores, 2 = xmotifs |
-| X-axis range | *(full range)* | `min, max` e.g. `100, 500` — limits which positions are considered |
-| Output CSV file | `<session>_<seq>_regions.csv` | In the session directory; leave blank to use the default |
-
-**Output CSV columns:**
-
-| Column | Description |
-|---|---|
-| `start` | 0-based start position of the region in the full sequence |
-| `end` | 0-based end position (inclusive) |
-| `seq` | `txt[start:end+1]` — the raw nucleotide sequence of the region |
-
-Results are also printed to the terminal. The CSV is opened automatically in your default application when writing completes.
+Exports all detected hairpin regions for the loaded sequence to a CSV file. Each row contains the start position, end position, stem sequence, loop sequence, and full hairpin sequence.
 
 ---
 

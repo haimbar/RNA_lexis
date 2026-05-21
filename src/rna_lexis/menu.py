@@ -370,20 +370,25 @@ def choose_input_source(datadir=''):
 
 # fmttxt([menu_ttl[menu_level]], ['bold'], ['yellow'])
 
-def gen_menu(ttl, sttl, opts, clr='True', split=None):
+def gen_menu(ttl, sttl, opts, clr='True', split=None, splits=None):
     """Render a numbered menu to stdout.
 
     Clears the screen (via print_hdr) if clr is truthy, prints a decorated
     sub-title bar, and lists each option prefixed with its 1-based index.
 
     Args:
-        ttl:   Top-level header / file name passed to print_hdr.
-        sttl:  Sub-title shown centred inside a horizontal rule.
-        opts:  List of option strings; each is printed as ``N. <option>``.
-        clr:   Passed to print_hdr to control screen clearing (default True).
-        split: If given, items 1..split are styled as primary (bold cyan) and
-               items split+1 onward as utility (dim white).  Back/Quit are
-               always bold red regardless of split.
+        ttl:    Top-level header / file name passed to print_hdr.
+        sttl:   Sub-title shown centred inside a horizontal rule.
+        opts:   List of option strings; each is printed as ``N. <option>``.
+        clr:    Passed to print_hdr to control screen clearing (default True).
+        split:  If given (int), items 1..split are bold cyan and items
+                split+1 onward are dim white.  Back/Quit are always styled
+                regardless of split.
+        splits: List of (boundary_index, color) pairs for multi-block menus.
+                Items before the first boundary are bold cyan; each boundary
+                starts a new color block (bold, except 'white' which is dim).
+                A blank line is printed between blocks.  Takes precedence
+                over split when both are given.
     """
     print_hdr(ttl, clr)
     if not opts:
@@ -396,11 +401,21 @@ def gen_menu(ttl, sttl, opts, clr='True', split=None):
     sttl = fmttxt([sttl], ['bold'], ['green'])
     hd = '-'*declen + f" {sttl} " + '-'*declen
     print(hd)
+    _split_boundaries = {b for b, _ in splits} if splits else set()
     for i in range(len(opts)):
+        if splits is not None and i > 0 and i in _split_boundaries:
+            print()   # blank line between color blocks
         if opts[i] == 'Quit':
             print(fmttxt([f"{i+1}. {opts[i]}"], ['bold'], ['red']))
         elif opts[i] == 'Back':
             print(fmttxt([f"{i+1}. {opts[i]}"], ['bold'], ['magenta']))
+        elif splits is not None:
+            color = 'cyan'
+            for boundary, blk_color in splits:
+                if i >= boundary:
+                    color = blk_color
+            style = 'dim' if color == 'white' else 'bold'
+            print(fmttxt([f"{i+1}. {opts[i]}"], [style], [color]))
         elif split is not None and i >= split:
             print(fmttxt([f"{i+1}. {opts[i]}"], ['dim'], ['white']))
         elif split is not None:
@@ -410,7 +425,7 @@ def gen_menu(ttl, sttl, opts, clr='True', split=None):
     print('-'*hbarlen + '\n')
 
 
-def show_menu(fn, ttl, submenu, clr: True, split=None):
+def show_menu(fn, ttl, submenu, clr: True, split=None, splits=None):
     """Display a menu and block until the user enters a valid selection.
 
     Calls gen_menu() to render the numbered list, then loops reading input
@@ -424,12 +439,13 @@ def show_menu(fn, ttl, submenu, clr: True, split=None):
         clr:     Passed to gen_menu to control screen clearing.
         split:   Forwarded to gen_menu; items before this index are styled as
                  primary, items from this index onward as utility.
+        splits:  Forwarded to gen_menu for multi-block coloring.
 
     Returns:
         Integer in [0, len(submenu)] representing the user's choice.
         Returns -1 on EOFError (Ctrl+D).
     """
-    gen_menu(fn, ttl, submenu, clr, split=split)
+    gen_menu(fn, ttl, submenu, clr, split=split, splits=splits)
     while True:
         try:
             main_prompt = fmttxt(['Select a menu option', f'[1-{len(submenu)}]'], 
@@ -2309,10 +2325,11 @@ def menus():
                "Show settings", "Change setting", "Open User Guide", "Clear workspace", "Load new input", "Quit"],
                ["Core neighbors (detailed)", "Core neighbors (condensed)", "K-mers", "Logo", "Coverage", "Motif Match/Mutation", "Back"],
                ["Find all matches", "Search with mutations", "Motif extensions", "Print core",
-                "Rank core motifs (Markov/FDR)", "Motif spacing / periodicity test",
-                "Mutation-family scoring", "Gapped motif search",
-                "Export hairpins to CSV", "Extend match pair", "Alignment score for two sequences",
-                "K-mer Markov analysis", "Covered area", "Core neighbors (text export)", "Back"]]
+                "Motif spacing / periodicity test", "Gapped motif search",
+                "Extend match pair", "Covered area", "Core neighbors (text export)",
+                "Rank core motifs (Markov/FDR)", "Mutation-family scoring",
+                "Alignment score for two sequences", "K-mer Markov analysis",
+                "Export hairpins to CSV", "Back"]]
     if not defvals['datadir']:
         cwd = os.getcwd()
         valid = _find_valid_sessions(cwd)
@@ -2396,9 +2413,12 @@ def menus():
                                                   'stats': stats})
                     init_summary(file_path, strs['xmotifs'], strs['corelist'], txt)
                 else:
+                    # Sequence ops menu uses 3 color blocks; other menus use a single split.
+                    _seq_splits = [(9, 'yellow'), (13, 'white')]
                     val = show_menu(file_path, menu_ttl[menu_level], submenu[menu_level],
                                     clr=defvals['clr'],
-                                    split={0: 4, 1: 6, 2: 8}.get(menu_level))
+                                    split={0: 4, 1: 6}.get(menu_level),
+                                    splits=_seq_splits if menu_level == 2 else None)
                     # Top level menu:
                     if menu_level == 0:
                         # Quit:
@@ -2510,6 +2530,7 @@ blockquote{{border-left:4px solid #ccc;margin:1em 0;padding:0.5em 1em;color:#555
                         match val:
                             case 0:
                                 menu_level = 0
+                            # Block 1 — single-sequence search & analysis
                             case 1:
                                 find_match_input(txt, strs)
                             case 2:
@@ -2519,25 +2540,27 @@ blockquote{{border-left:4px solid #ccc;margin:1em 0;padding:0.5em 1em;color:#555
                             case 4:
                                 print_core_input(txt, strs)
                             case 5:
-                                statistical_core_input(file_path, txt, strs)
-                            case 6:
                                 spacing_test_input(txt)
-                            case 7:
-                                mutation_family_input(file_path, txt, strs)
-                            case 8:
+                            case 6:
                                 gapped_motif_input(file_path, txt)
-                            case 9:
-                                hairpins_input(txt, file_path)
-                            case 10:
+                            case 7:
                                 extend_match_input(txt)
-                            case 11:
-                                print_alignment_score(txt)
-                            case 12:
-                                markov_kmer_input(txt, file_path)
-                            case 13:
+                            case 8:
                                 txt_coverage_input(txt, strs)
-                            case 14:
+                            case 9:
                                 neighbors_condensed_export_input(file_path, txt, strs)
+                            # Block 2 — statistical analysis
+                            case 10:
+                                statistical_core_input(file_path, txt, strs)
+                            case 11:
+                                mutation_family_input(file_path, txt, strs)
+                            case 12:
+                                print_alignment_score(txt)
+                            case 13:
+                                markov_kmer_input(txt, file_path)
+                            # Block 3 — other
+                            case 14:
+                                hairpins_input(txt, file_path)
                             case 15:
                                 menu_level = 0 # Go to the main menu
         

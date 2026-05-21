@@ -480,20 +480,23 @@
 <hr />
 <h3 id="sequence-operations">2 - Sequence operations</h3>
 <pre><code>--- Sequence operations ---
- 1. Find all matches
+ 1. Find all matches                      ← single-sequence analysis
  2. Search with mutations
  3. Motif extensions
  4. Print core
- 5. Rank core motifs (Markov/FDR)
- 6. Motif spacing / periodicity test
- 7. Mutation-family scoring
- 8. Gapped motif search
- 9. Export hairpins to CSV
-10. Extend match pair
-11. Alignment score for two sequences
-12. K-mer Markov analysis
-13. Covered area
-14. Core neighbors (text export)
+ 5. Motif spacing / periodicity test
+ 6. Gapped motif search
+ 7. Extend match pair
+ 8. Covered area
+ 9. Core neighbors (text export)
+
+10. Rank core motifs (Markov/FDR)         ← statistical analysis
+11. Mutation-family scoring
+12. Alignment score for two sequences
+13. K-mer Markov analysis
+
+14. Export hairpins to CSV                ← other
+
 15. Back</code></pre>
 <h4 id="find-all-matches">2.1 Find all matches</h4>
 <p>Searches the full text for a query sequence (minimum 4 characters). Use <code>.</code> as a single-character wildcard. Reports the number of matches and prints each match with its position in the text.</p>
@@ -595,7 +598,243 @@
 <p>Press <strong>Enter</strong> to save to the default filename (based on the motif), type a custom name, or press <strong>Ctrl+D</strong> to skip. The CSV contains one row per pair with columns: <code>rank</code>, <code>pos1</code>, <code>pos2</code>, <code>left_ext</code>, <code>right_ext</code>, <code>total_len</code>, <code>hamming</code>, <code>ext1</code>, <code>ext2</code>.</p>
 <h4 id="print-core">2.4 Print core</h4>
 <p>Given a sequence, finds and prints the xmotifs that contain it as a core.</p>
-<h4 id="rank-core-motifs-markovfdr">2.5 Rank core motifs (Markov/FDR)</h4>
+<h4 id="motif-spacing-periodicity-test">2.5 Motif spacing / periodicity test</h4>
+<p>Tests whether the occurrences of a motif are spaced more regularly than random placement would produce. Requires m ≥ 3 occurrences; a warning is shown when m &lt; 6 (low power).</p>
+<p><strong>Prompts:</strong></p>
+<table>
+<colgroup>
+<col style="width: 27%" />
+<col style="width: 45%" />
+<col style="width: 27%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>Prompt</th>
+<th style="text-align: center;">Default</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Sequence to test</td>
+<td style="text-align: center;"></td>
+<td>Blank to cancel</td>
+</tr>
+<tr class="even">
+<td>Mutations: 0 = exact only, or N for 1-per-N-nt</td>
+<td style="text-align: center;">0</td>
+<td>Enter 6 to allow 1 mutation per 6 nt; maximum N is 6 (rate 1/6)</td>
+</tr>
+</tbody>
+</table>
+<p>When a mutation rate &gt; 0 is given, both exact and approximate (Hamming) matches are included. Overlapping positions are deduplicated before the test. The match mode (e.g. “≤1 mutation(s) — 8 exact, 3 approx”) is shown in the output header.</p>
+<p><strong>Two statistical tests are run:</strong></p>
+<p><strong>Gap cluster test</strong> (primary) — estimates the candidate period T as the median of the m−1 consecutive gaps, then counts how many gaps fall within δ = max(5, 5%·T) of T. Under the null hypothesis of uniform random placement each gap is Uniform[0, L], giving an expected count of (m−1) × 2δ/L. The observed count is tested against Bin(m−1, 2δ/L); the p-value is Bonferroni-corrected by (m−1) because T is derived from the same data.</p>
+<p><strong>Rayleigh test</strong> (confirmatory) — maps all m positions modulo T to angles θᵢ = 2π(pᵢ mod T)/T on a circle and tests whether they cluster. The mean resultant length R ∈ [0,1] quantifies concentration (0 = uniform, 1 = all coincide); Z = m·R² is the test statistic. The Mardia &amp; Jupp (2000) approximation gives the p-value.</p>
+<p>Either test reaching p &lt; 0.05 produces a green “Significant” verdict. When gap sizes are mixed, the output automatically notes:</p>
+<ul>
+<li><strong>Small gaps</strong> (&lt; 15%·T) — likely tandem copies within the same period window.</li>
+<li><strong>Large gaps</strong> (&gt; 175%·T) — likely one or more periods skipped.</li>
+</ul>
+<h4 id="gapped-motif-search">2.6 Gapped motif search</h4>
+<p>Finds all occurrences of an anchor-gap-anchor pattern <code>LEFT[gap:min–max]RIGHT</code> and scores the whole family under the Markov background.</p>
+<p><strong>Prompts:</strong></p>
+<table>
+<thead>
+<tr class="header">
+<th>Prompt</th>
+<th style="text-align: center;">Default</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Left anchor sequence</td>
+<td style="text-align: center;"></td>
+<td>Blank to cancel</td>
+</tr>
+<tr class="even">
+<td>Right anchor sequence</td>
+<td style="text-align: center;"></td>
+<td>Blank to cancel</td>
+</tr>
+<tr class="odd">
+<td>Minimum gap length</td>
+<td style="text-align: center;">0</td>
+<td></td>
+</tr>
+<tr class="even">
+<td>Maximum gap length</td>
+<td style="text-align: center;">30</td>
+<td></td>
+</tr>
+<tr class="odd">
+<td>Output CSV file</td>
+<td style="text-align: center;"><code>&lt;session&gt;_gapped_motif.csv</code></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Output CSV columns:</strong></p>
+<table>
+<thead>
+<tr class="header">
+<th>Column</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>pattern</code></td>
+<td>Pattern string, e.g. <code>ACGU[gap:0-30]UGCA</code></td>
+</tr>
+<tr class="even">
+<td><code>observed_count</code></td>
+<td>Number of pattern hits found</td>
+</tr>
+<tr class="odd">
+<td><code>expected_markov</code></td>
+<td>Expected count under the Markov null</td>
+</tr>
+<tr class="even">
+<td><code>enrichment_markov</code></td>
+<td><code>observed / expected</code></td>
+</tr>
+<tr class="odd">
+<td><code>p_markov</code></td>
+<td>Poisson upper-tail p-value</td>
+</tr>
+<tr class="even">
+<td><code>start</code></td>
+<td>Start position of each hit (one row per hit)</td>
+</tr>
+<tr class="odd">
+<td><code>gap_length</code></td>
+<td>Gap length for this hit</td>
+</tr>
+<tr class="even">
+<td><code>matched_sequence</code></td>
+<td>Full matched sequence including the gap</td>
+</tr>
+</tbody>
+</table>
+<p>The family-level statistics (<code>pattern</code>, <code>observed_count</code>, <code>expected_markov</code>, <code>enrichment_markov</code>, <code>p_markov</code>) are the same on every row; per-hit columns (<code>start</code>, <code>gap_length</code>, <code>matched_sequence</code>) vary by row. Up to 20 hits are printed to the terminal.</p>
+<h4 id="extend-match-pair">2.7 Extend match pair</h4>
+<p>Finds all exact occurrences of a seed sequence and, for every pair of occurrences, greedily extends both copies left and right as far as possible while keeping the Hamming distance between the two extended copies within a user-defined rate. The result reveals how much context around two repeats remains mutually similar.</p>
+<p><strong>How the extension works:</strong></p>
+<ol type="1">
+<li>The right flank is extended first, one nucleotide at a time. A position is kept whenever the cumulative Hamming distance does not exceed <code>floor(total_length × mutr)</code>. The loop stops as soon as the budget for the full remaining text is exhausted.</li>
+<li>The left flank is then extended using the budget that remains after the right extension.</li>
+</ol>
+<p><strong>Prompts:</strong></p>
+<table>
+<thead>
+<tr class="header">
+<th>Prompt</th>
+<th style="text-align: center;">Default</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Seed sequence</td>
+<td style="text-align: center;"></td>
+<td>Must occur at least twice in the text; blank to cancel</td>
+</tr>
+<tr class="even">
+<td>Mutation rate: 1 per N letters</td>
+<td style="text-align: center;">6</td>
+<td>1 mismatch allowed per N nucleotides</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Output:</strong></p>
+<p>Up to 10 pairs are shown, sorted by total extension length (longest first). For each pair:</p>
+<ul>
+<li>Positions of the two seed copies, total extended length, and left/right extension sizes.</li>
+<li>Both extended sequences printed side-by-side: the seed region is shown in <strong>BOLD UPPERCASE</strong>; mismatched characters in the flanks are shown in <strong>RED UPPERCASE</strong>.</li>
+<li>Hamming distance as a count and percentage.</li>
+</ul>
+<p><strong>Printing a pair in full:</strong></p>
+<p>After the summary, you are offered the option to print one pair without truncation:</p>
+<pre><code>Print a pair in full [1–10, blank to skip]:</code></pre>
+<p>Entering a number prints the raw plain-text sequences for each copy (safe to copy), followed by a colour-coded alignment for visual reference.</p>
+<p><strong>Saving results to CSV:</strong></p>
+<pre><code>Save all pairs to CSV [Enter for extensions_&lt;seed&gt;.csv, Ctrl+D to skip]:</code></pre>
+<p>Press <strong>Enter</strong> to save to the default filename, type a custom name, or press <strong>Ctrl+D</strong> to skip. The CSV contains one row per pair with columns: <code>rank</code>, <code>pos1</code>, <code>pos2</code>, <code>left_ext</code>, <code>right_ext</code>, <code>total_len</code>, <code>hamming</code>, <code>ext1</code>, <code>ext2</code>.</p>
+<h4 id="covered-area">2.8 Covered area</h4>
+<p>Computes and prints the coverage score for a single sequence: <code>length^a times occurrences</code>, where <em>a</em> is a configurable exponent (default 1.2, matching the session setting).</p>
+<h4 id="core-neighbors-text-export">2.9 Core neighbors (text export)</h4>
+<p>Exports the sequence regions associated with a query core and its neighbourhood as a CSV file, so that individual region sequences can be copied directly into other tools (e.g. <strong>Alignment score for two sequences</strong>, <strong>Search with mutations</strong>).</p>
+<p><strong>How regions are defined:</strong></p>
+<p>Every occurrence of s0, its single-nucleotide mutations, and all its neighbours (sequences with a positive conditional-probability score within the window) is expanded by ±wd nucleotides. Overlapping expanded intervals are merged into contiguous regions. The result is a set of non-overlapping windows that cover every area of the text where any of the tracked sequences cluster together — including regions where neighbours bridge the gap between two s0 occurrences, and regions that contain only neighbours with no s0 nearby.</p>
+<p><strong>Prompts:</strong></p>
+<table>
+<colgroup>
+<col style="width: 30%" />
+<col style="width: 38%" />
+<col style="width: 30%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: left;">Prompt</th>
+<th style="text-align: center;">Default</th>
+<th style="text-align: left;">Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">Sequence to analyse</td>
+<td style="text-align: center;">no default</td>
+<td style="text-align: left;">Must be present in the text</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Neighbourhood width</td>
+<td style="text-align: center;">40</td>
+<td style="text-align: left;">Half-window used for interval expansion and gap merging</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Strings to include</td>
+<td style="text-align: center;">2 (xmotifs)</td>
+<td style="text-align: left;">1 = cores, 2 = xmotifs</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">X-axis range</td>
+<td style="text-align: center;"><em>(full range)</em></td>
+<td style="text-align: left;"><code>min, max</code> e.g. <code>100, 500</code> — limits which positions are considered</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Output CSV file</td>
+<td style="text-align: center;"><code>&lt;session&gt;_&lt;seq&gt;_regions.csv</code></td>
+<td style="text-align: left;">In the session directory; leave blank to use the default</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Output CSV columns:</strong></p>
+<table>
+<thead>
+<tr class="header">
+<th>Column</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>start</code></td>
+<td>0-based start position of the region in the full sequence</td>
+</tr>
+<tr class="even">
+<td><code>end</code></td>
+<td>0-based end position (inclusive)</td>
+</tr>
+<tr class="odd">
+<td><code>seq</code></td>
+<td><code>txt[start:end+1]</code> — the raw nucleotide sequence of the region</td>
+</tr>
+</tbody>
+</table>
+<p>Results are also printed to the terminal. The CSV is opened automatically in your default application when writing completes.</p>
+<h4 id="rank-core-motifs-markovfdr">2.10 Rank core motifs (Markov/FDR)</h4>
 <p>Enumerates all shared substrings of the current xmotifs within a configurable length range, scores each candidate against a transcript-specific Markov background, and saves a ranked CSV. Candidates are accepted as <em>statistically supported</em> when the FDR-corrected q-value is below the threshold <strong>and</strong> the enrichment ratio exceeds the minimum enrichment.</p>
 <p><strong>Prompts:</strong></p>
 <table>
@@ -704,45 +943,7 @@
 </tbody>
 </table>
 <p>Up to 15 supported candidates are printed to the terminal after the CSV is saved.</p>
-<h4 id="motif-spacing-periodicity-test">2.6 Motif spacing / periodicity test</h4>
-<p>Tests whether the occurrences of a motif are spaced more regularly than random placement would produce. Requires m ≥ 3 occurrences; a warning is shown when m &lt; 6 (low power).</p>
-<p><strong>Prompts:</strong></p>
-<table>
-<colgroup>
-<col style="width: 27%" />
-<col style="width: 45%" />
-<col style="width: 27%" />
-</colgroup>
-<thead>
-<tr class="header">
-<th>Prompt</th>
-<th style="text-align: center;">Default</th>
-<th>Notes</th>
-</tr>
-</thead>
-<tbody>
-<tr class="odd">
-<td>Sequence to test</td>
-<td style="text-align: center;"></td>
-<td>Blank to cancel</td>
-</tr>
-<tr class="even">
-<td>Mutations: 0 = exact only, or N for 1-per-N-nt</td>
-<td style="text-align: center;">0</td>
-<td>Enter 6 to allow 1 mutation per 6 nt; maximum N is 6 (rate 1/6)</td>
-</tr>
-</tbody>
-</table>
-<p>When a mutation rate &gt; 0 is given, both exact and approximate (Hamming) matches are included. Overlapping positions are deduplicated before the test. The match mode (e.g. “≤1 mutation(s) — 8 exact, 3 approx”) is shown in the output header.</p>
-<p><strong>Two statistical tests are run:</strong></p>
-<p><strong>Gap cluster test</strong> (primary) — estimates the candidate period T as the median of the m−1 consecutive gaps, then counts how many gaps fall within δ = max(5, 5%·T) of T. Under the null hypothesis of uniform random placement each gap is Uniform[0, L], giving an expected count of (m−1) × 2δ/L. The observed count is tested against Bin(m−1, 2δ/L); the p-value is Bonferroni-corrected by (m−1) because T is derived from the same data.</p>
-<p><strong>Rayleigh test</strong> (confirmatory) — maps all m positions modulo T to angles θᵢ = 2π(pᵢ mod T)/T on a circle and tests whether they cluster. The mean resultant length R ∈ [0,1] quantifies concentration (0 = uniform, 1 = all coincide); Z = m·R² is the test statistic. The Mardia &amp; Jupp (2000) approximation gives the p-value.</p>
-<p>Either test reaching p &lt; 0.05 produces a green “Significant” verdict. When gap sizes are mixed, the output automatically notes:</p>
-<ul>
-<li><strong>Small gaps</strong> (&lt; 15%·T) — likely tandem copies within the same period window.</li>
-<li><strong>Large gaps</strong> (&gt; 175%·T) — likely one or more periods skipped.</li>
-</ul>
-<h4 id="mutation-family-scoring">2.7 Mutation-family scoring</h4>
+<h4 id="mutation-family-scoring">2.11 Mutation-family scoring</h4>
 <p>Tests one or more motifs at every Hamming radius allowed by the mutation cap. For each motif and radius, the complete neighbourhood — all sequences within that Hamming distance — is counted and scored against the Markov background. The best-supported radius per motif is written to a separate <code>_best.csv</code> file.</p>
 <p><strong>Prompts:</strong></p>
 <table>
@@ -820,135 +1021,7 @@
 </tr>
 </tbody>
 </table>
-<h4 id="gapped-motif-search">2.8 Gapped motif search</h4>
-<p>Finds all occurrences of an anchor-gap-anchor pattern <code>LEFT[gap:min–max]RIGHT</code> and scores the whole family under the Markov background.</p>
-<p><strong>Prompts:</strong></p>
-<table>
-<thead>
-<tr class="header">
-<th>Prompt</th>
-<th style="text-align: center;">Default</th>
-<th>Notes</th>
-</tr>
-</thead>
-<tbody>
-<tr class="odd">
-<td>Left anchor sequence</td>
-<td style="text-align: center;"></td>
-<td>Blank to cancel</td>
-</tr>
-<tr class="even">
-<td>Right anchor sequence</td>
-<td style="text-align: center;"></td>
-<td>Blank to cancel</td>
-</tr>
-<tr class="odd">
-<td>Minimum gap length</td>
-<td style="text-align: center;">0</td>
-<td></td>
-</tr>
-<tr class="even">
-<td>Maximum gap length</td>
-<td style="text-align: center;">30</td>
-<td></td>
-</tr>
-<tr class="odd">
-<td>Output CSV file</td>
-<td style="text-align: center;"><code>&lt;session&gt;_gapped_motif.csv</code></td>
-<td></td>
-</tr>
-</tbody>
-</table>
-<p><strong>Output CSV columns:</strong></p>
-<table>
-<thead>
-<tr class="header">
-<th>Column</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody>
-<tr class="odd">
-<td><code>pattern</code></td>
-<td>Pattern string, e.g. <code>ACGU[gap:0-30]UGCA</code></td>
-</tr>
-<tr class="even">
-<td><code>observed_count</code></td>
-<td>Number of pattern hits found</td>
-</tr>
-<tr class="odd">
-<td><code>expected_markov</code></td>
-<td>Expected count under the Markov null</td>
-</tr>
-<tr class="even">
-<td><code>enrichment_markov</code></td>
-<td><code>observed / expected</code></td>
-</tr>
-<tr class="odd">
-<td><code>p_markov</code></td>
-<td>Poisson upper-tail p-value</td>
-</tr>
-<tr class="even">
-<td><code>start</code></td>
-<td>Start position of each hit (one row per hit)</td>
-</tr>
-<tr class="odd">
-<td><code>gap_length</code></td>
-<td>Gap length for this hit</td>
-</tr>
-<tr class="even">
-<td><code>matched_sequence</code></td>
-<td>Full matched sequence including the gap</td>
-</tr>
-</tbody>
-</table>
-<p>The family-level statistics (<code>pattern</code>, <code>observed_count</code>, <code>expected_markov</code>, <code>enrichment_markov</code>, <code>p_markov</code>) are the same on every row; per-hit columns (<code>start</code>, <code>gap_length</code>, <code>matched_sequence</code>) vary by row. Up to 20 hits are printed to the terminal.</p>
-<h4 id="export-hairpins-to-csv">2.9 Export hairpins to CSV</h4>
-<p>Exports all detected hairpin regions for the loaded sequence to a CSV file. Each row contains the start position, end position, stem sequence, loop sequence, and full hairpin sequence.</p>
-<h4 id="extend-match-pair">2.10 Extend match pair</h4>
-<p>Finds all exact occurrences of a seed sequence and, for every pair of occurrences, greedily extends both copies left and right as far as possible while keeping the Hamming distance between the two extended copies within a user-defined rate. The result reveals how much context around two repeats remains mutually similar.</p>
-<p><strong>How the extension works:</strong></p>
-<ol type="1">
-<li>The right flank is extended first, one nucleotide at a time. A position is kept whenever the cumulative Hamming distance does not exceed <code>floor(total_length × mutr)</code>. The loop stops as soon as the budget for the full remaining text is exhausted.</li>
-<li>The left flank is then extended using the budget that remains after the right extension.</li>
-</ol>
-<p><strong>Prompts:</strong></p>
-<table>
-<thead>
-<tr class="header">
-<th>Prompt</th>
-<th style="text-align: center;">Default</th>
-<th>Notes</th>
-</tr>
-</thead>
-<tbody>
-<tr class="odd">
-<td>Seed sequence</td>
-<td style="text-align: center;"></td>
-<td>Must occur at least twice in the text; blank to cancel</td>
-</tr>
-<tr class="even">
-<td>Mutation rate: 1 per N letters</td>
-<td style="text-align: center;">6</td>
-<td>1 mismatch allowed per N nucleotides</td>
-</tr>
-</tbody>
-</table>
-<p><strong>Output:</strong></p>
-<p>Up to 10 pairs are shown, sorted by total extension length (longest first). For each pair:</p>
-<ul>
-<li>Positions of the two seed copies, total extended length, and left/right extension sizes.</li>
-<li>Both extended sequences printed side-by-side: the seed region is shown in <strong>BOLD UPPERCASE</strong>; mismatched characters in the flanks are shown in <strong>RED UPPERCASE</strong>.</li>
-<li>Hamming distance as a count and percentage.</li>
-</ul>
-<p><strong>Printing a pair in full:</strong></p>
-<p>After the summary, you are offered the option to print one pair without truncation:</p>
-<pre><code>Print a pair in full [1–10, blank to skip]:</code></pre>
-<p>Entering a number prints the raw plain-text sequences for each copy (safe to copy), followed by a colour-coded alignment for visual reference.</p>
-<p><strong>Saving results to CSV:</strong></p>
-<pre><code>Save all pairs to CSV [Enter for extensions_&lt;seed&gt;.csv, Ctrl+D to skip]:</code></pre>
-<p>Press <strong>Enter</strong> to save to the default filename, type a custom name, or press <strong>Ctrl+D</strong> to skip. The CSV contains one row per pair with columns: <code>rank</code>, <code>pos1</code>, <code>pos2</code>, <code>left_ext</code>, <code>right_ext</code>, <code>total_len</code>, <code>hamming</code>, <code>ext1</code>, <code>ext2</code>.</p>
-<h4 id="alignment-score-for-two-sequences">2.11 Alignment score for two sequences</h4>
+<h4 id="alignment-score-for-two-sequences">2.12 Alignment score for two sequences</h4>
 <p>Aligns two substrings extracted from the loaded text by position.</p>
 <p><strong>Prompts:</strong></p>
 <table>
@@ -984,7 +1057,7 @@
 <li><strong>Bit score</strong> — length-independent score computed with the Karlin–Altschul formula (λ = 1.28, K = 0.46); comparable across alignments of different lengths.</li>
 <li><strong>E-value</strong> — expected number of alignments with a score this high or better by chance, using the full transcript as the reference database. Values below 10⁻³ are considered significant.</li>
 </ul>
-<h4 id="k-mer-markov-analysis">2.12 K-mer Markov analysis</h4>
+<h4 id="k-mer-markov-analysis">2.13 K-mer Markov analysis</h4>
 <p>Computes analytical p-values for every observed k-mer using a Markov-model null — no shuffling or random seeds required. For each k-mer the expected count is derived from the Prum/Schbath formula conditioned on shorter k-mer frequencies; the observed count is then tested against a Poisson(expected) null. Two one-sided p-values are reported per k-mer, testing for over- and under-representation separately. All results are saved to a CSV file sorted by the more extreme of the two p-values.</p>
 <p><strong>Markov background order</strong> controls how much context the null model conditions on:</p>
 <table>
@@ -1109,78 +1182,8 @@
 </tbody>
 </table>
 <p>Rows are sorted by <code>min(pvalue_over, pvalue_under)</code> so the most extreme k-mers appear first. BH correction is applied separately within each family of <em>m</em> tests.</p>
-<h4 id="covered-area">2.13 Covered area</h4>
-<p>Computes and prints the coverage score for a single sequence: <code>length^a times occurrences</code>, where <em>a</em> is a configurable exponent (default 1.2, matching the session setting).</p>
-<h4 id="core-neighbors-text-export">2.14 Core neighbors (text export)</h4>
-<p>Exports the sequence regions associated with a query core and its neighbourhood as a CSV file, so that individual region sequences can be copied directly into other tools (e.g. <strong>Alignment score for two sequences</strong>, <strong>Search with mutations</strong>).</p>
-<p><strong>How regions are defined:</strong></p>
-<p>Every occurrence of s0, its single-nucleotide mutations, and all its neighbours (sequences with a positive conditional-probability score within the window) is expanded by ±wd nucleotides. Overlapping expanded intervals are merged into contiguous regions. The result is a set of non-overlapping windows that cover every area of the text where any of the tracked sequences cluster together — including regions where neighbours bridge the gap between two s0 occurrences, and regions that contain only neighbours with no s0 nearby.</p>
-<p><strong>Prompts:</strong></p>
-<table>
-<colgroup>
-<col style="width: 30%" />
-<col style="width: 38%" />
-<col style="width: 30%" />
-</colgroup>
-<thead>
-<tr class="header">
-<th style="text-align: left;">Prompt</th>
-<th style="text-align: center;">Default</th>
-<th style="text-align: left;">Notes</th>
-</tr>
-</thead>
-<tbody>
-<tr class="odd">
-<td style="text-align: left;">Sequence to analyse</td>
-<td style="text-align: center;">no default</td>
-<td style="text-align: left;">Must be present in the text</td>
-</tr>
-<tr class="even">
-<td style="text-align: left;">Neighbourhood width</td>
-<td style="text-align: center;">40</td>
-<td style="text-align: left;">Half-window used for interval expansion and gap merging</td>
-</tr>
-<tr class="odd">
-<td style="text-align: left;">Strings to include</td>
-<td style="text-align: center;">2 (xmotifs)</td>
-<td style="text-align: left;">1 = cores, 2 = xmotifs</td>
-</tr>
-<tr class="even">
-<td style="text-align: left;">X-axis range</td>
-<td style="text-align: center;"><em>(full range)</em></td>
-<td style="text-align: left;"><code>min, max</code> e.g. <code>100, 500</code> — limits which positions are considered</td>
-</tr>
-<tr class="odd">
-<td style="text-align: left;">Output CSV file</td>
-<td style="text-align: center;"><code>&lt;session&gt;_&lt;seq&gt;_regions.csv</code></td>
-<td style="text-align: left;">In the session directory; leave blank to use the default</td>
-</tr>
-</tbody>
-</table>
-<p><strong>Output CSV columns:</strong></p>
-<table>
-<thead>
-<tr class="header">
-<th>Column</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody>
-<tr class="odd">
-<td><code>start</code></td>
-<td>0-based start position of the region in the full sequence</td>
-</tr>
-<tr class="even">
-<td><code>end</code></td>
-<td>0-based end position (inclusive)</td>
-</tr>
-<tr class="odd">
-<td><code>seq</code></td>
-<td><code>txt[start:end+1]</code> — the raw nucleotide sequence of the region</td>
-</tr>
-</tbody>
-</table>
-<p>Results are also printed to the terminal. The CSV is opened automatically in your default application when writing completes.</p>
+<h4 id="export-hairpins-to-csv">2.14 Export hairpins to CSV</h4>
+<p>Exports all detected hairpin regions for the loaded sequence to a CSV file. Each row contains the start position, end position, stem sequence, loop sequence, and full hairpin sequence.</p>
 <hr />
 <h3 id="open-core-file">3 - Open Core file</h3>
 <p>Opens (or regenerates) the summary CSV (<code>&lt;name&gt;_test_init.csv</code>) in your default spreadsheet application. If the file already exists and contains the statistical columns, it is opened directly. If it is missing or was created by an older version (and lacks the statistical columns), it is regenerated automatically. If the file is already open in a spreadsheet application, the existing window is brought to the foreground rather than opening a second copy.</p>

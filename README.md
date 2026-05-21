@@ -132,7 +132,7 @@ output CSV includes `pvalue_over`, `pvalue_under`, `pvalue_bh`, `direction`, and
 
 ### Rank core motifs (Markov/FDR)
 
-The *Rank core motifs (Markov/FDR)* option (Sequence operations → 5) enumerates
+The *Rank core motifs (Markov/FDR)* option (Sequence operations → 10) enumerates
 all shared substrings of the current xmotifs within a configurable length range,
 scores each candidate against the transcript-specific Markov background, and saves
 a ranked CSV. Candidates are ranked first by statistical support (`q_markov` below
@@ -140,7 +140,7 @@ threshold, enrichment above threshold), then by coverage.
 
 ### Mutation-family scoring
 
-The *Mutation-family scoring* option (Sequence operations → 6) tests one or more
+The *Mutation-family scoring* option (Sequence operations → 11) tests one or more
 motifs at every Hamming radius allowed by the mutation cap. For each motif and
 radius, the full neighbourhood of sequences within that distance is counted and
 scored against the Markov background. The result shows whether the approximate
@@ -149,7 +149,7 @@ mismatches. The best-supported radius per motif is saved to a `_best.csv` file.
 
 ### Gapped motif search
 
-The *Gapped motif search* option (Sequence operations → 7) finds all occurrences
+The *Gapped motif search* option (Sequence operations → 6) finds all occurrences
 of a pattern of the form `LEFT[gap:min–max]RIGHT`: two exact anchor sequences
 separated by a variable-length gap. The whole family is scored under the Markov
 background, and individual hits (with exact positions and gap lengths) are saved
@@ -157,7 +157,7 @@ to a CSV.
 
 ### Motif spacing / periodicity test
 
-The *Motif spacing / periodicity test* option (Sequence operations → 6) takes a
+The *Motif spacing / periodicity test* option (Sequence operations → 5) takes a
 motif, finds all exact occurrences, and tests whether their spacing is more
 periodic than expected by chance. Two complementary tests are applied:
 
