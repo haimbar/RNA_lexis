@@ -1,5 +1,31 @@
 # Changelog
 
+## [0.1.1] - 2026-05-21
+
+### Added
+
+- **"Clear workspace" option in the main menu (option 8).**  A new menu entry lets
+  the user delete all generated files from the working directory in one step, while
+  preserving the loaded input file and any other files with a FASTA extension
+  (`.fasta`, `.fa`, `.fna`, `.fas`).
+
+  Before deleting anything the menu shows two lists — files that **will be deleted**
+  and files that **will be kept** — and requires the user to type `YES` (exact,
+  case-sensitive) to confirm.  Typing anything else, or pressing Enter, cancels the
+  operation without touching any files.
+
+  If the user confirms, all non-preserved files are removed and the session is reset
+  so that the tool returns to the *Choose Input* screen, ready to reload the original
+  sequence fresh.  If no deletable files exist the menu reports this and returns
+  without prompting.
+
+  The check for which input file to keep is based on the **actual file path** of the
+  loaded sequence rather than its extension alone, so plain-text and other non-FASTA
+  source files are protected correctly.
+
+- **"Load new input" is now option 9 and "Quit" is option 10** (shifted by the
+  insertion of "Clear workspace" at position 8).
+
 ## [0.1.0] - 2026-05-20
 
 ### Added

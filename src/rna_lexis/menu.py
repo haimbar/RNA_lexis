@@ -2083,6 +2083,63 @@ def parsedata(txt, defvals):
     return({'corelist': core_xm, 'xmotifs': xmotifs})
 
 
+_FASTA_EXTENSIONS = {'.fasta', '.fa', '.fna', '.fas'}
+
+
+def _clear_workspace(workdir, file_path):
+    """List all files in workdir, keep FASTA files, ask for confirmation, then delete the rest.
+
+    Returns True if files were deleted, False if the user cancelled or there was nothing to delete.
+    """
+    if not workdir or not os.path.isdir(workdir):
+        print(fmttxt(["Cannot determine workspace directory."], ['bold'], ['red']))
+        return False
+
+    all_files = [f for f in os.listdir(workdir) if os.path.isfile(os.path.join(workdir, f))]
+    input_file = os.path.basename(file_path)
+    fasta_files = {f for f in all_files if os.path.splitext(f)[1].lower() in _FASTA_EXTENSIONS}
+    to_keep = fasta_files | {input_file}
+    to_delete = sorted(f for f in all_files if f not in to_keep)
+
+    if not to_delete:
+        print(fmttxt(["No files to delete (only FASTA files found)."], [''], ['green']))
+        safe_input(fmttxt(["Press Enter to continue"], [''], ['white']))
+        return False
+
+    print(fmttxt(["Files that will be DELETED from:", workdir], ['bold', ''], ['red', 'cyan']))
+    for f in to_delete:
+        print(fmttxt(["  -", f], ['', ''], ['white', 'yellow']))
+    if to_keep:
+        print(fmttxt(["Files that will be KEPT:"], ['bold'], ['green']))
+        for f in sorted(to_keep):
+            print(fmttxt(["  +", f], ['', ''], ['white', 'green']))
+
+    print()
+    confirm = safe_input(fmttxt(
+        ["Type", "YES", "to confirm deletion, or press Enter to cancel:"],
+        ['bold', 'bold', 'bold'], ['white', 'red', 'white']
+    ) + " ")
+    if confirm.strip() != "YES":
+        print(fmttxt(["Cancelled. No files were deleted."], [''], ['yellow']))
+        safe_input(fmttxt(["Press Enter to continue"], [''], ['white']))
+        return False
+
+    errors = []
+    for f in to_delete:
+        try:
+            os.remove(os.path.join(workdir, f))
+        except OSError as exc:
+            errors.append(f"{f}: {exc}")
+    if errors:
+        print(fmttxt(["Some files could not be deleted:"], ['bold'], ['red']))
+        for e in errors:
+            print(f"  {e}")
+    else:
+        print(fmttxt(["Workspace cleared successfully."], ['bold'], ['green']))
+    safe_input(fmttxt(["Press Enter to continue"], [''], ['white']))
+    return True
+
+
 def menus():
     """Run the interactive RNA_explore menu loop.
 
@@ -2105,7 +2162,7 @@ def menus():
                'clr': True, 'reload': False, 'datadir': _initial_dir}
     menu_ttl = ["Main Menu", "Plots", "Sequence operations"]
     submenu = [["Plots", "Sequence operations", "Open Core file", "Summary statistics",
-               "Show settings", "Change setting", "Open User Guide", "Load new input", "Quit"],
+               "Show settings", "Change setting", "Open User Guide", "Clear workspace", "Load new input", "Quit"],
                ["Core neighbors (detailed)", "Core neighbors (condensed)", "K-mers", "Logo", "Coverage", "Motif Match/Mutation", "Back"],
                ["Find all matches", "Search with mutations", "Motif extensions", "Print core",
                 "Rank core motifs (Markov/FDR)", "Mutation-family scoring", "Gapped motif search",
@@ -2272,8 +2329,14 @@ blockquote{{border-left:4px solid #ccc;margin:1em 0;padding:0.5em 1em;color:#555
                                 webbrowser.open(f'file://{_guide_html}')
                             else:
                                 print(fmttxt(["User guide not found:", _guide_md], ['bold', ''], ['red', 'white']))
-                        # Load another file, and show the main menu again:
+                        # Clear workspace (delete all non-FASTA files), then reload:
                         if val == 8:
+                            if _clear_workspace(workdir, file_path):
+                                del txt
+                                del globals()['fn']
+                            continue
+                        # Load another file, and show the main menu again:
+                        if val == 9:
                             del txt
                             del globals()['fn']
                             continue
