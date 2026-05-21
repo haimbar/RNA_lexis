@@ -33,6 +33,7 @@ from rna_lexis.statistical import (
     mutation_family_tests,
     rank_core_candidates,
     score_gapped_motif,
+    spacing_periodicity_test,
     write_rows_csv,
 )
 
@@ -2083,6 +2084,102 @@ def parsedata(txt, defvals):
     return({'corelist': core_xm, 'xmotifs': xmotifs})
 
 
+def spacing_test_input(txt):
+    """Test whether occurrences of a motif are more regularly spaced than chance."""
+    seq = safe_input(fmttxt(
+        ["Enter the sequence to test for periodic spacing: "], ['bold'], ['yellow']
+    )).strip().lower()
+    if not seq:
+        return
+
+    positions = find_all_matches(seq, txt)
+    m = len(positions)
+    L = len(txt)
+
+    if m == 0:
+        print(fmttxt([f"\n'{seq}' not found in the sequence."], ['bold'], ['red']))
+        safe_input(fmttxt(["Press Enter to continue"], [''], ['white']))
+        return
+    if m == 1:
+        print(fmttxt([f"\n'{seq}' occurs only once — no gaps to analyse."], ['bold'], ['red']))
+        safe_input(fmttxt(["Press Enter to continue"], [''], ['white']))
+        return
+    if m == 2:
+        gap = positions[1] - positions[0]
+        print(fmttxt([f"\n'{seq}' occurs exactly 2 times — only 1 gap, no statistical test possible."],
+                     ['bold'], ['yellow']))
+        print(f"  Positions : {positions[0]}, {positions[1]}")
+        print(f"  Gap       : {gap} nt")
+        safe_input(fmttxt(["Press Enter to continue"], [''], ['white']))
+        return
+
+    if m < 6:
+        print(fmttxt([f"\nWarning: only {m} occurrences — test has very low power.\n"],
+                     ['bold'], ['yellow']))
+
+    result = spacing_periodicity_test(positions, L)
+    gaps = result['gaps']
+
+    # Compact display for large m
+    if m <= 10:
+        pos_str = ', '.join(str(p) for p in positions)
+        gap_str = ', '.join(str(g) for g in gaps)
+    else:
+        pos_str = (f"{positions[0]}, {positions[1]}, {positions[2]}, … "
+                   f"{positions[-2]}, {positions[-1]}  ({m} total)")
+        gap_str = (f"min={min(gaps)}, max={max(gaps)}, "
+                   f"first 5: {', '.join(str(g) for g in gaps[:5])}, …")
+
+    W = 52
+    print(fmttxt([f"\nSpacing analysis for '{seq}'"], ['bold'], ['cyan']))
+    print('-' * W)
+    print(f"  Occurrences (m)      : {m}")
+    print(f"  Sequence length (L)  : {L} nt")
+    print(f"  Positions            : {pos_str}")
+    print(f"  Consecutive gaps     : {gap_str}")
+    print()
+    print(f"  Mean gap             : {result['mean_gap']:.1f} nt")
+    print(f"  SD of gaps           : {result['std_gap']:.1f} nt")
+    print(f"  Observed CV          : {result['cv_obs']:.3f}  "
+          f"(null median {result['cv_null_median']:.3f}, "
+          f"5th pctile {result['cv_null_p5']:.3f})")
+    print(f"  p-value (CV test)    : {result['p_cv']:.4f}  "
+          f"[H0: random placement, {result['n_sim']:,} simulations]")
+    print()
+    print(f"  Candidate period (T) : {result['period']} nt  (median gap)")
+    print(f"  Rayleigh R           : {result['rayleigh_r']:.3f}"
+          f"  (0 = random, 1 = perfectly periodic)")
+    print(f"  Rayleigh Z           : {result['rayleigh_z']:.3f}")
+    print(f"  p-value (Rayleigh)   : {result['p_rayleigh']:.4f}")
+    print()
+
+    sig_cv  = result['p_cv'] < 0.05
+    sig_ray = result['p_rayleigh'] < 0.05
+    if sig_cv and sig_ray:
+        print(fmttxt(
+            [f"  *** Significant periodic spacing at T = {result['period']} nt"
+             f" (both tests p < 0.05) ***"],
+            ['bold'], ['green']
+        ))
+    elif sig_cv:
+        print(fmttxt(
+            [f"  Spacing more uniform than chance (CV p = {result['p_cv']:.4f}),"
+             f" but Rayleigh test not significant at T = {result['period']} nt."],
+            [''], ['yellow']
+        ))
+    elif sig_ray:
+        print(fmttxt(
+            [f"  Periodic signal at T = {result['period']} nt"
+             f" (Rayleigh p = {result['p_rayleigh']:.4f}),"
+             f" but overall spacing uniformity not significant."],
+            [''], ['yellow']
+        ))
+    else:
+        print(fmttxt(["  No significant periodic spacing detected."], [''], ['white']))
+
+    safe_input(fmttxt(["\nPress Enter to continue"], [''], ['white']))
+
+
 _FASTA_EXTENSIONS = {'.fasta', '.fa', '.fna', '.fas'}
 
 
@@ -2165,7 +2262,8 @@ def menus():
                "Show settings", "Change setting", "Open User Guide", "Clear workspace", "Load new input", "Quit"],
                ["Core neighbors (detailed)", "Core neighbors (condensed)", "K-mers", "Logo", "Coverage", "Motif Match/Mutation", "Back"],
                ["Find all matches", "Search with mutations", "Motif extensions", "Print core",
-                "Rank core motifs (Markov/FDR)", "Mutation-family scoring", "Gapped motif search",
+                "Rank core motifs (Markov/FDR)", "Motif spacing / periodicity test",
+                "Mutation-family scoring", "Gapped motif search",
                 "Export hairpins to CSV", "Extend match pair", "Alignment score for two sequences",
                 "K-mer Markov analysis", "Covered area", "Core neighbors (text export)", "Back"]]
     if not defvals['datadir']:
@@ -2253,7 +2351,7 @@ def menus():
                 else:
                     val = show_menu(file_path, menu_ttl[menu_level], submenu[menu_level],
                                     clr=defvals['clr'],
-                                    split={0: 4, 1: 6, 2: 7}.get(menu_level))
+                                    split={0: 4, 1: 6, 2: 8}.get(menu_level))
                     # Top level menu:
                     if menu_level == 0:
                         # Quit:
@@ -2376,22 +2474,24 @@ blockquote{{border-left:4px solid #ccc;margin:1em 0;padding:0.5em 1em;color:#555
                             case 5:
                                 statistical_core_input(file_path, txt, strs)
                             case 6:
-                                mutation_family_input(file_path, txt, strs)
+                                spacing_test_input(txt)
                             case 7:
-                                gapped_motif_input(file_path, txt)
+                                mutation_family_input(file_path, txt, strs)
                             case 8:
-                                hairpins_input(txt, file_path)
+                                gapped_motif_input(file_path, txt)
                             case 9:
-                                extend_match_input(txt)
+                                hairpins_input(txt, file_path)
                             case 10:
-                                print_alignment_score(txt)
+                                extend_match_input(txt)
                             case 11:
-                                markov_kmer_input(txt, file_path)
+                                print_alignment_score(txt)
                             case 12:
-                                txt_coverage_input(txt, strs)
+                                markov_kmer_input(txt, file_path)
                             case 13:
-                                neighbors_condensed_export_input(file_path, txt, strs)
+                                txt_coverage_input(txt, strs)
                             case 14:
+                                neighbors_condensed_export_input(file_path, txt, strs)
+                            case 15:
                                 menu_level = 0 # Go to the main menu
         
         except EOFSignal:

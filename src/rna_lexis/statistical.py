@@ -18,6 +18,8 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass
 from typing import Iterable, Iterator, Sequence
 
+import numpy as np
+
 from scipy.stats import binom, poisson
 
 try:
@@ -676,3 +678,99 @@ def union_coverage_variable(positions: Sequence[int], lengths: Sequence[int]) ->
             cur_start, cur_end = start, end
     total += cur_end - cur_start
     return total
+
+
+def spacing_periodicity_test(
+    positions: Sequence[int],
+    seq_len: int,
+    n_sim: int = 10_000,
+) -> dict:
+    """Test whether a motif's occurrences are more regularly spaced than chance.
+
+    Two complementary tests are applied:
+
+    **CV test (Monte Carlo)** — compares the coefficient of variation (CV =
+    SD/mean) of the m−1 consecutive gaps against a null distribution obtained
+    by placing m points uniformly at random in [0, seq_len).  A small p-value
+    means the spacings are more uniform than expected under random placement.
+    Null p-value: P(CV_null ≤ CV_obs).
+
+    **Rayleigh test (circular statistics)** — maps each position modulo the
+    candidate period T (median gap) to an angle θ = 2π·(pos mod T)/T, then
+    tests whether the angles cluster on the circle.  The mean resultant length
+    R ∈ [0,1] measures concentration; Z = m·R² is the test statistic.  A
+    small p-value confirms a dominant periodic signal at period T.
+
+    Parameters
+    ----------
+    positions : sequence of int
+        Sorted or unsorted start positions of exact motif occurrences.
+    seq_len : int
+        Total length of the sequence (used for the Monte Carlo null).
+    n_sim : int
+        Number of Monte Carlo iterations for the CV null distribution.
+
+    Returns
+    -------
+    dict with keys:
+        m, gaps, mean_gap, std_gap, cv_obs, cv_null_median, cv_null_p5,
+        p_cv, period, rayleigh_r, rayleigh_z, p_rayleigh, n_sim.
+    """
+    positions = sorted(positions)
+    m = len(positions)
+    gaps = [positions[i + 1] - positions[i] for i in range(m - 1)]
+
+    mean_gap = sum(gaps) / len(gaps)
+    std_gap = math.sqrt(sum((g - mean_gap) ** 2 for g in gaps) / len(gaps))
+    cv_obs = std_gap / mean_gap if mean_gap > 0 else 0.0
+
+    # Monte Carlo CV null: place m points uniformly at random in [0, seq_len)
+    # Using integers with replacement — collisions negligible when seq_len >> m.
+    rng = np.random.default_rng(seed=0)
+    samples = rng.integers(0, seq_len, size=(n_sim, m))
+    samples.sort(axis=1)
+    g_null = np.diff(samples, axis=1).astype(float)
+    mu_null = g_null.mean(axis=1)
+    sd_null = g_null.std(axis=1)
+    null_cvs = np.where(mu_null > 0, sd_null / mu_null, 0.0)
+
+    # P(CV_null ≤ CV_obs): small value → obs CV is surprisingly small (regular)
+    p_cv = float(np.mean(null_cvs <= cv_obs))
+    cv_null_median = float(np.median(null_cvs))
+    cv_null_p5 = float(np.percentile(null_cvs, 5))
+
+    # Candidate period: median of consecutive gaps
+    sorted_gaps = sorted(gaps)
+    n_g = len(sorted_gaps)
+    if n_g % 2 == 1:
+        period = sorted_gaps[n_g // 2]
+    else:
+        period = int(round((sorted_gaps[n_g // 2 - 1] + sorted_gaps[n_g // 2]) / 2.0))
+    period = max(period, 1)
+
+    # Rayleigh test at the candidate period
+    TWO_PI = 2.0 * math.pi
+    angles = [TWO_PI * (p % period) / period for p in positions]
+    C = sum(math.cos(a) for a in angles) / m
+    S = sum(math.sin(a) for a in angles) / m
+    R = math.sqrt(C * C + S * S)
+    Z = m * R * R
+    # Mardia & Jupp (2000) approximation; accurate for m ≥ 3
+    p_rayleigh = math.exp(-Z) * (1.0 + (2.0 * Z - Z * Z) / (4.0 * m))
+    p_rayleigh = max(0.0, min(1.0, p_rayleigh))
+
+    return {
+        'm': m,
+        'gaps': gaps,
+        'mean_gap': mean_gap,
+        'std_gap': std_gap,
+        'cv_obs': cv_obs,
+        'cv_null_median': cv_null_median,
+        'cv_null_p5': cv_null_p5,
+        'p_cv': p_cv,
+        'period': period,
+        'rayleigh_r': R,
+        'rayleigh_z': Z,
+        'p_rayleigh': p_rayleigh,
+        'n_sim': n_sim,
+    }
