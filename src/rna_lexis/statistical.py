@@ -714,7 +714,8 @@ def spacing_periodicity_test(
     -------
     dict with keys:
         m, gaps, mean_gap, std_gap, cv_obs, cv_null_median, cv_null_p5,
-        p_cv, period, rayleigh_r, rayleigh_z, p_rayleigh, n_sim.
+        p_cv, period, rayleigh_r, rayleigh_z, p_rayleigh,
+        delta, k_near_T, gaps_near_T, p_cluster, n_sim.
     """
     positions = sorted(positions)
     m = len(positions)
@@ -759,6 +760,17 @@ def spacing_periodicity_test(
     p_rayleigh = math.exp(-Z) * (1.0 + (2.0 * Z - Z * Z) / (4.0 * m))
     p_rayleigh = max(0.0, min(1.0, p_rayleigh))
 
+    # Gap cluster test: how many consecutive gaps fall within δ of T?
+    # Under H0 each gap is Uniform[0, seq_len], so P(gap ∈ [T-δ, T+δ]) = 2δ/seq_len.
+    # We Bonferroni-correct by n_g (number of gaps) because T is estimated from data.
+    delta = max(5, round(0.05 * period))
+    gaps_near_T = [g for g in gaps if abs(g - period) <= delta]
+    k_near_T = len(gaps_near_T)
+    p_window = min(1.0, 2 * delta / seq_len)
+    # P(X ≥ k_near_T) where X ~ Bin(n_g, p_window)
+    p_cluster_raw = float(1.0 - binom.cdf(k_near_T - 1, n_g, p_window))
+    p_cluster = min(1.0, n_g * p_cluster_raw)  # Bonferroni
+
     return {
         'm': m,
         'gaps': gaps,
@@ -772,5 +784,9 @@ def spacing_periodicity_test(
         'rayleigh_r': R,
         'rayleigh_z': Z,
         'p_rayleigh': p_rayleigh,
+        'delta': delta,
+        'k_near_T': k_near_T,
+        'gaps_near_T': gaps_near_T,
+        'p_cluster': p_cluster,
         'n_sim': n_sim,
     }

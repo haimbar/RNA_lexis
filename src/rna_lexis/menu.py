@@ -2130,48 +2130,88 @@ def spacing_test_input(txt):
         gap_str = (f"min={min(gaps)}, max={max(gaps)}, "
                    f"first 5: {', '.join(str(g) for g in gaps[:5])}, …")
 
-    W = 52
+    W = 54
     print(fmttxt([f"\nSpacing analysis for '{seq}'"], ['bold'], ['cyan']))
     print('-' * W)
-    print(f"  Occurrences (m)      : {m}")
-    print(f"  Sequence length (L)  : {L} nt")
-    print(f"  Positions            : {pos_str}")
-    print(f"  Consecutive gaps     : {gap_str}")
-    print()
-    print(f"  Mean gap             : {result['mean_gap']:.1f} nt")
-    print(f"  SD of gaps           : {result['std_gap']:.1f} nt")
-    print(f"  Observed CV          : {result['cv_obs']:.3f}  "
-          f"(null median {result['cv_null_median']:.3f}, "
-          f"5th pctile {result['cv_null_p5']:.3f})")
-    print(f"  p-value (CV test)    : {result['p_cv']:.4f}  "
-          f"[H0: random placement, {result['n_sim']:,} simulations]")
-    print()
-    print(f"  Candidate period (T) : {result['period']} nt  (median gap)")
-    print(f"  Rayleigh R           : {result['rayleigh_r']:.3f}"
-          f"  (0 = random, 1 = perfectly periodic)")
-    print(f"  Rayleigh Z           : {result['rayleigh_z']:.3f}")
-    print(f"  p-value (Rayleigh)   : {result['p_rayleigh']:.4f}")
+    print(f"  Occurrences (m)        : {m}")
+    print(f"  Sequence length (L)    : {L} nt")
+    print(f"  Positions              : {pos_str}")
+    print(f"  Consecutive gaps       : {gap_str}")
+    print(f"  Mean gap / SD          : {result['mean_gap']:.1f} / {result['std_gap']:.1f} nt")
     print()
 
-    sig_cv  = result['p_cv'] < 0.05
-    sig_ray = result['p_rayleigh'] < 0.05
-    if sig_cv and sig_ray:
+    T   = result['period']
+    dlt = result['delta']
+    print(fmttxt(["  Rayleigh test  (dominant period)"], ['bold'], ['white']))
+    p_ray_str = f"{result['p_rayleigh']:.4f}" if result['p_rayleigh'] >= 0.0001 else "<0.0001"
+    print(f"    Candidate period (T) : {T} nt  (median gap)")
+    print(f"    Rayleigh R           : {result['rayleigh_r']:.3f}"
+          f"  (0 = random, 1 = perfectly periodic)")
+    print(f"    p-value              : {p_ray_str}")
+    print()
+
+    near_str = (', '.join(str(g) for g in result['gaps_near_T'])
+                if result['gaps_near_T'] else 'none')
+    exp_near = (len(gaps)) * (2 * dlt / L)
+    p_cl_str = f"{result['p_cluster']:.4f}" if result['p_cluster'] >= 0.0001 else "<0.0001"
+    print(fmttxt(["  Gap cluster test  (gaps near T)"], ['bold'], ['white']))
+    print(f"    Tolerance (δ)        : ±{dlt} nt  (5 % of T)")
+    print(f"    Gaps in [T-δ, T+δ]  : {result['k_near_T']} of {len(gaps)}  ({near_str})")
+    print(f"    Expected under H0    : {exp_near:.2f}  [Bin({len(gaps)}, {2*dlt}/{L})]")
+    print(f"    p-value (Bonferroni) : {p_cl_str}")
+    print()
+
+    print(fmttxt(["  CV test  (overall spacing uniformity)"], ['bold'], ['white']))
+    print(f"    Observed CV          : {result['cv_obs']:.3f}"
+          f"  (null median {result['cv_null_median']:.3f},"
+          f" 5th pctile {result['cv_null_p5']:.3f})")
+    p_cv_str = f"{result['p_cv']:.4f}" if result['p_cv'] >= 0.0001 else "<0.0001"
+    print(f"    p-value              : {p_cv_str}"
+          f"  [{result['n_sim']:,} Monte Carlo simulations]")
+    print()
+
+    sig_ray     = result['p_rayleigh'] < 0.05
+    sig_cluster = result['p_cluster']  < 0.05
+    sig_cv      = result['p_cv']       < 0.05
+
+    if sig_ray or sig_cluster:
+        # Build a description of which tests passed
+        evidence = []
+        if sig_ray:
+            evidence.append(f"Rayleigh p = {p_ray_str}")
+        if sig_cluster:
+            evidence.append(f"cluster p = {p_cl_str}")
+        if sig_cv:
+            evidence.append(f"CV p = {p_cv_str}")
         print(fmttxt(
-            [f"  *** Significant periodic spacing at T = {result['period']} nt"
-             f" (both tests p < 0.05) ***"],
+            [f"  *** Significant periodic spacing at T = {T} nt"
+             f"  ({', '.join(evidence)}) ***"],
             ['bold'], ['green']
         ))
+        # Contextual note when gap pattern is mixed (CV not significant)
+        if not sig_cv:
+            small_gaps = [g for g in gaps if g < T * 0.15]
+            large_gaps = [g for g in gaps if g > T * 1.75]
+            notes = []
+            if small_gaps:
+                notes.append(
+                    f"small gaps ({', '.join(str(g) for g in small_gaps)}) "
+                    f"suggest tandem copies within the same period"
+                )
+            if large_gaps:
+                notes.append(
+                    f"large gaps ({', '.join(str(g) for g in large_gaps)}) "
+                    f"suggest one or more periods skipped"
+                )
+            if notes:
+                print(fmttxt(
+                    ["  Note: mixed gap sizes — " + "; ".join(notes) + "."],
+                    [''], ['yellow']
+                ))
     elif sig_cv:
         print(fmttxt(
-            [f"  Spacing more uniform than chance (CV p = {result['p_cv']:.4f}),"
-             f" but Rayleigh test not significant at T = {result['period']} nt."],
-            [''], ['yellow']
-        ))
-    elif sig_ray:
-        print(fmttxt(
-            [f"  Periodic signal at T = {result['period']} nt"
-             f" (Rayleigh p = {result['p_rayleigh']:.4f}),"
-             f" but overall spacing uniformity not significant."],
+            [f"  Spacings more uniform than chance (CV p = {p_cv_str}),"
+             f" but no dominant period detected."],
             [''], ['yellow']
         ))
     else:
