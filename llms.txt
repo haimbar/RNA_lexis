@@ -1,0 +1,588 @@
+# RNA_lexis — Agent / LLM API Reference
+
+> **File convention:** this file follows the [llms.txt](https://llmstxt.org) standard for
+> machine-readable package documentation. Place it at the repository root so that AI
+> agents and code-generation tools can discover it automatically.
+
+This document is written for AI agents (and developers) using RNA_lexis as a Python
+library. It covers the public API, data structures, and worked workflows. For the
+interactive terminal interface, see [docs/user_guide.md](docs/user_guide.md).
+
+---
+
+## Do not call
+
+These entry points block on user input and must never be called programmatically:
+
+- `rna_lexis.menu.menus()` — starts the interactive menu loop
+- `rna_lexis.__main__.main()` — same, via `python -m rna_lexis`
+- `rna_lexis.test_cli.main()` — CLI entry point; call sub-functions directly instead
+
+`stitch()` in `algorithms` is an internal helper with no stable interface; avoid direct use.
+
+---
+
+## Installation and imports
+
+```bash
+pip install .
+```
+
+```python
+from rna_lexis.algorithms import (
+    find_boundary, cores, find_all_matches, find_with_mutations,
+    find_longest_extensions, extend_match_pair, cover, core_nbrs,
+    cond_prob_core, count_kgrams, zscore, scramble_kmer_pvalues,
+    markov_kmer_pvalues, gen_hairpins, allow_mutation, is_bounded,
+    expand_to_boundary, extendRNA, Hairpin, contains_only_rna,
+)
+from rna_lexis.alignment import gotoh_global, gotoh_local, print_alignment, AlignmentResult
+from rna_lexis.io import (
+    read_text, save_session, load_session, is_valid_session,
+    fetch_enst_cdna, init_summary, init_summary_path, TEST_SUMMARY_SUFFIX,
+    SessionData,
+)
+from rna_lexis.statistical import (
+    MarkovBackground,
+    normalize_sequence,
+    score_exact_motifs,
+    rank_core_candidates,
+    mutation_family_tests,
+    best_mutation_family_per_motif,
+    find_gapped_motif_hits,
+    score_gapped_motif,
+    write_rows_csv,
+)
+```
+
+Backward-compatible imports from `rna_lexis.RNAlang` still work but new code should
+import from the sub-modules above.
+
+---
+
+## Data structures
+
+### `SessionData` (io)
+
+Dataclass representing a saved analysis session. All fields are required except `txtb`.
+
+```python
+@dataclass
+class SessionData:
+    file_path: str        # path to the source file (or ENST ID)
+    txt:       str        # lower-case nucleotide sequence (u→t if RNA)
+    is_rna:    bool       # True when the original sequence used 'u'
+    corelist:  List[str]  # core sequences ordered most-dominant first
+    xmotifs:   List[str]  # extended motifs (xmotifs) from find_boundary
+    dir:       str        # directory where output files are saved
+    stats:     dict       # summary statistics
+    txtb:      str        # optional: sequence with word-boundary markers
+```
+
+Construct from a JSON dict with `SessionData.from_dict(d)`.
+
+### `AlignmentResult` (alignment)
+
+```python
+@dataclass
+class AlignmentResult:
+    mode:        str   # "global" or "local"
+    aligned_a:   str   # first sequence with gap characters ('-')
+    aligned_b:   str   # second sequence with gap characters ('-')
+    markers:     str   # '|' match, '.' mismatch, ' ' gap
+    score:       int   # raw alignment score
+    matches:     int   # number of identical aligned columns
+    mismatches:  int   # number of non-gap mismatched columns
+    gaps:        int   # number of columns where at least one side is '-'
+```
+
+### `Hairpin` (algorithms)
+
+```python
+class Hairpin(NamedTuple):
+    start:    int   # first position of stem 1 (5' arm)
+    end:      int   # one-past-last position of stem 2 (3' arm)
+    stem_len: int   # number of paired bases in each arm
+    loop_len: int   # number of unpaired bases in the loop
+    stem_seq: str   # stem 1 sequence (5' arm only)
+    loop_seq: str   # loop sequence
+
+# Reconstruction:
+# stem1 = rna[hp.start : hp.start + hp.stem_len]
+# loop  = rna[hp.start + hp.stem_len : hp.start + hp.stem_len + hp.loop_len]
+# stem2 = rna[hp.start + hp.stem_len + hp.loop_len : hp.end]
+```
+
+### `MarkovBackground` (statistical)
+
+Frozen dataclass holding per-base and per-dinucleotide probabilities. Constructed
+internally by `score_exact_motifs` and related functions; you rarely need to build
+one directly, but it is available for custom scoring:
+
+```python
+bg = MarkovBackground.from_sequence(txt, order=1, pseudocount=0.5)
+p  = bg.dinuc_prob["ac"]   # P(c | a)
+```
+
+---
+
+## Module: `rna_lexis.io`
+
+### `read_text(filename, keepspacing=False) -> str`
+
+Read a nucleotide text file. Returns a lower-case string containing only `[a-z]`.
+Non-alphabetic characters are stripped (or collapsed to spaces when
+`keepspacing=True`). Raises `ValueError` if the file does not exist.
+
+### `fetch_enst_cdna(enst) -> tuple[str, str, str]`
+
+Fetch a cDNA sequence from the Ensembl REST API. Requires an internet connection.
+
+```python
+transcript_id, display_name, sequence = fetch_enst_cdna("ENST00000456328")
+```
+
+Raises `ValueError` if the ID does not start with `ENST`; `RuntimeError` if the
+API call fails.
+
+### `save_session(filename, data, debug=False) -> None`
+
+Serialize a `SessionData` (or plain dict) to `<filename>.json`. Do not include the
+`.json` extension in `filename`.
+
+### `load_session(filename) -> dict | None`
+
+Load a session dict from `<filename>` (full path, including `.json`). Returns
+`None` if the file is missing or malformed.
+
+### `is_valid_session(filepath) -> SessionData | None`
+
+Check whether `filepath` points to a valid session JSON. Returns a `SessionData`
+on success, `None` otherwise.
+
+### `init_summary_path(fn: str) -> str`
+
+Return the summary CSV path for a session base path: `f'{fn}_test_init.csv'`.
+Use this whenever you need to locate or open the summary file programmatically.
+
+```python
+csv_path = init_summary_path("/data/my_session")
+# → "/data/my_session_test_init.csv"
+```
+
+`TEST_SUMMARY_SUFFIX = "_test_init.csv"` is the constant used internally.
+
+### `init_summary(fn, xm, cores, txt, mutr=1/6, M=4, force=False) -> str`
+
+Write (or reopen) the initialisation summary CSV and open it in the default
+application. Returns the path to the written file.
+
+- Output file: `<fn>_test_init.csv` (use `init_summary_path(fn)` to compute).
+- If the file already exists, has the correct columns, and `force=False`, the
+  file is opened rather than regenerated.
+- Pass `force=True` to always regenerate (e.g. after recomputing xmotifs/cores).
+- For RNA/DNA sequences (alphabet ⊆ `{a,c,g,t,u}`), statistical columns are
+  automatically added (see below).
+
+**Core CSV columns** (all sequences):
+
+| column | description |
+|---|---|
+| `seq` | The motif or core sequence |
+| `xm` | 1 if xmotif, 0 otherwise |
+| `core` | 1 if core |
+| `len` | Sequence length |
+| `count` | Exact occurrences |
+| `n_approx` | Approximate occurrences (Hamming ≤ maxmut) |
+| `cover` | `len × count` |
+| `numt` | Total Hamming distance across approximate matches |
+| `pmut` | Observed mutation rate per site |
+| `p_stable` | Binomial p-value for sequence stability |
+| `maxmut` | Maximum mutations allowed |
+| `idx` | Index in the xmotif or core list |
+| `pos` | List of exact match positions |
+
+**Statistical columns** (RNA/DNA only, added automatically):
+
+| column | description |
+|---|---|
+| `expected_markov` | Expected count under Markov null |
+| `enrichment_markov` | `observed / expected` ratio |
+| `p_markov` | Poisson upper-tail p-value |
+| `q_markov` | BH FDR-adjusted p-value |
+| `statistically_supported` | `True` when q and enrichment thresholds are met |
+| `core_class` | `'supported'`, `'enriched_only'`, or `'not_supported'` |
+| `rank_statistical` | Primary rank |
+| `rank_coverage` | Secondary rank |
+| `coverage_bp` | Base-pairs covered by non-overlapping occurrences |
+| `xmotif_type_support` | Number of xmotif families containing this core |
+
+When statistical columns are present the CSV is sorted by `statistically_supported`
+descending, then `q_markov` ascending. Otherwise sorted by `p_stable` ascending.
+
+---
+
+## Module: `rna_lexis.algorithms`
+
+### `contains_only_rna(s, allowed_chars='atucg') -> bool`
+
+Return `True` if every character in `s` belongs to `allowed_chars`. Use to
+validate input before analysis.
+
+### `find_boundary(txt, minlen=7, maxlen=40, at_least=3) -> list[str]`
+
+Find all bounded recurring substrings (xmotifs) in `txt`. Primary motif-discovery
+step. May return duplicates; use `list(set(...))` to deduplicate.
+
+### `cores(txt, xmotifs, minclen=5) -> list[str]`
+
+Extract core sequences from xmotifs by iteratively selecting the highest-coverage
+motif and splitting remaining motifs around it. Returns cores ordered
+most-dominant first. **This is the second step of the standard pipeline.**
+
+### `find_all_matches(pattern, txt, ret='pos', group=0) -> list`
+
+Find all (possibly overlapping) case-insensitive regex matches of `pattern` in
+`txt`. Use `.` as a single-character wildcard.
+
+- `ret='pos'` → list of int start positions
+- `ret='str'` → list of matched strings
+
+### `find_with_mutations(seq, txt, mutr=1/6, M=4) -> tuple`
+
+Search for exact and approximate (Hamming) matches.
+
+```python
+exact_pos, approx, maxmut = find_with_mutations(seq, txt)
+# exact_pos: list[int]
+# approx:    list of (pos, matched_str, hamming_distance)
+# maxmut:    floor(len(seq) * mutr), capped at M
+```
+
+### `allow_mutation(s0, n=1) -> str`
+
+Build a regex matching `s0` with up to `n` substitutions. The number of mutations
+is capped at `floor(len(s0)/6)`.
+
+### `extend_match_pair(s, txt, pos1, pos2, mutr=1/6) -> tuple`
+
+Extend two exact seed occurrences left and right within a Hamming budget.
+
+```python
+left_ext, right_ext, ext1, ext2, total_ham = extend_match_pair(s, txt, pos1, pos2)
+```
+
+### `find_longest_extensions(s, txt, mutr=1/6, outfile='') -> list[dict]`
+
+Compute the longest extension for every pair of exact occurrences of `s`. Returns
+dicts with keys: `pos1`, `pos2`, `left_ext`, `right_ext`, `total_len`, `ext1`,
+`ext2`, `hamming`. Returns `[]` when `s` occurs fewer than twice.
+
+### `cover(s, txt, pwr=1.1) -> float`
+
+Weighted coverage score: `len(s) ** pwr * (1 + non_overlapping_occurrences)`.
+
+### `core_nbrs(core, corelist, txt, title='', wnd=75, rev=False) -> dict`
+
+Jaccard-style proximity score between `core` and every sequence in `corelist`
+within ±`wnd` windows. Returns a dict sorted by score.
+
+### `cond_prob_core(core, words, txt, wnd=75, rev=False) -> dict`
+
+Conditional probability `P(word | core)` for each word in `words`.
+
+### `count_kgrams(s, k, skip='_', at_least=2, return_sorted=True, rev=False) -> dict`
+
+Count all k-length substrings in `s`.
+
+### `zscore(x, robust=True) -> np.ndarray`
+
+Standardise to z-scores. `robust=True` uses median/IQR.
+
+### `markov_kmer_pvalues(txt, k, order=1) -> list[dict]`
+
+Analytical Markov k-mer enrichment test (no shuffling). For each k-mer, computes
+the expected count under a Markov null of the given order using the Prum/Schbath
+formula and tests with a Poisson exact p-value. BH-FDR correction applied
+separately for over- and under-representation.
+
+```python
+results = markov_kmer_pvalues(txt, k=6, order=1)
+# Each dict: kmer, real_count, expected_count,
+#            pvalue_over, evalue_over, pvalue_over_bh,
+#            pvalue_under, evalue_under, pvalue_under_bh, direction
+```
+
+### `scramble_kmer_pvalues(txt, k, N, seed=0) -> list[dict]`
+
+Shuffle-based permutation null for k-mer enrichment (legacy; prefer
+`markov_kmer_pvalues` for speed and reproducibility).
+
+### `gen_hairpins(rna, minSL=8, minLL=3, maxLL=40) -> list[Hairpin]`
+
+Find all non-overlapping hairpin stem-loop structures. Returns `[]` when none found.
+
+### `extendRNA(rna, xtype=0) -> str`
+
+Return a sequence variant: `0` = original, `1` = reverse, `2` = complement,
+`3` = reverse complement, `4` = all four concatenated.
+
+### `is_bounded(s, txt, positions=None) -> bool`
+
+Return `True` when `s` is a maximal word (cannot be extended without changing
+its occurrence set).
+
+### `expand_to_boundary(wd, txt, dir='b') -> str | None`
+
+Extend `wd` left (`'L'`), right (`'R'`), or both (`'b'`) until bounded.
+Returns `None` when `wd` occurs fewer than twice.
+
+### `print_core(txt, core, xm) -> list[str]`
+
+Return an aligned, count-annotated list of xmotifs containing `core`.
+
+---
+
+## Module: `rna_lexis.alignment`
+
+### `gotoh_global(a, b, match=2, mismatch=-1, gap_open=-5, gap_extend=-1) -> AlignmentResult`
+
+Global (Needleman–Wunsch) alignment with affine gap penalties.
+
+### `gotoh_local(a, b, match=2, mismatch=-1, gap_open=-5, gap_extend=-1) -> AlignmentResult`
+
+Local (Smith–Waterman) alignment with affine gap penalties.
+
+### `print_alignment(res, width=80) -> None`
+
+Print a formatted alignment to stdout.
+
+### `make_markers(aligned_a, aligned_b) -> tuple[str, int, int, int]`
+
+Build an alignment marker string; returns `(markers, matches, mismatches, gaps)`.
+
+---
+
+## Module: `rna_lexis.statistical`
+
+All functions accept lower-case nucleotide strings. Pass the output of
+`read_text()` or `normalize_sequence()` directly.
+
+### `normalize_sequence(seq: str) -> str`
+
+Strip non-nucleotide characters and lower-case. Converts `u→t`.
+
+```python
+normalize_sequence("AAUUxxCCgg")  # → "aattccgg"
+```
+
+### `score_exact_motifs(txt, motifs, xmotifs=None, markov_order=1, enrichment_threshold=10.0, min_xmotif_type_support=1) -> list[dict]`
+
+Score a list of exact motifs against a transcript-specific Markov background.
+
+```python
+rows = score_exact_motifs(txt, corelist, xmotifs=xmotifs)
+# Each dict: motif, exact_count, nonoverlap_count, coverage_bp,
+#            area_score, xmotif_type_support, inside_xmotif_count,
+#            outside_xmotif_count, expected_markov, enrichment_markov,
+#            p_markov, q_markov, statistically_supported, core_class,
+#            rank_statistical, rank_coverage
+```
+
+### `rank_core_candidates(txt, xmotifs, candidate_min_len=5, candidate_max_len=18, min_xmotif_type_support=2, enrichment_threshold=10.0, alpha=0.05) -> list[dict]`
+
+Enumerate all shared substrings of `xmotifs` within the length range, score each
+against the Markov background, and return a ranked list. Same columns as
+`score_exact_motifs`, plus `rank_statistical` and `rank_coverage`.
+
+### `mutation_family_tests(txt, motifs, mutr=1/6, enrichment_threshold=5.0, expected_max=5.0, alpha=0.05) -> list[dict]`
+
+Test each motif at every Hamming radius allowed by `mutr`. Returns one row per
+(motif, radius) pair.
+
+```python
+rows = mutation_family_tests(txt, ["TGTATATA"])
+# Each dict: motif, radius, family_count, expected_family,
+#            enrichment_family, p_family, q_family, decision
+# decision: 'mutation_supported' | 'exact_or_specific_only' | 'below_threshold'
+```
+
+### `best_mutation_family_per_motif(rows) -> list[dict]`
+
+Select the row with the strongest accepted decision for each motif from the output
+of `mutation_family_tests`. Returns one dict per motif.
+
+### `find_gapped_motif_hits(txt, left, right, min_gap=0, max_gap=30) -> list[dict]`
+
+Find all occurrences of `LEFT[gap:min_gap–max_gap]RIGHT` in `txt`.
+
+```python
+hits = find_gapped_motif_hits(txt, "TGT", "TATA", min_gap=0, max_gap=6)
+# Each dict: start, gap_length, matched_sequence
+```
+
+### `score_gapped_motif(txt, left, right, min_gap=0, max_gap=30) -> dict`
+
+Score a gapped pattern as a single family under the Markov background.
+
+```python
+score = score_gapped_motif(txt, "TGT", "TATA", min_gap=0, max_gap=6)
+# Keys: pattern, observed_count, expected_markov, enrichment_markov, p_markov
+```
+
+### `write_rows_csv(path, rows) -> str`
+
+Write a list of dicts to a CSV file. Returns the path written.
+
+---
+
+## Worked workflows
+
+### 1 — Standard pipeline: load → discover → save
+
+```python
+from rna_lexis.io import read_text, fetch_enst_cdna, save_session, init_summary, SessionData
+from rna_lexis.algorithms import contains_only_rna, find_boundary, cores
+
+# Load from file
+txt = read_text("my_sequence.fasta")
+
+# Or fetch from Ensembl
+tid, label, txt = fetch_enst_cdna("ENST00000419829")
+
+# RNA sequences contain 'u'; convert to 't' for internal processing
+is_rna = 'u' in txt and 't' not in txt
+if is_rna:
+    txt = txt.replace('u', 't')
+
+assert contains_only_rna(txt, allowed_chars='atcg'), "unexpected characters"
+
+# Discover xmotifs and extract cores
+xmotifs = list(set(find_boundary(txt, minlen=7, maxlen=40, at_least=3)))
+corelist = cores(txt, xmotifs, minclen=5)
+
+# Save session
+session = SessionData(
+    file_path=tid, txt=txt, is_rna=is_rna,
+    corelist=corelist, xmotifs=xmotifs,
+    dir="/path/to/output", stats={},
+)
+save_session("/path/to/output/ENST00000419829", session)
+
+# Write the initialisation summary CSV (opens automatically)
+init_summary("/path/to/output/ENST00000419829", xmotifs, corelist, txt)
+```
+
+### 2 — Score cores with Markov/FDR statistics
+
+```python
+from rna_lexis.statistical import score_exact_motifs
+
+rows = score_exact_motifs(txt, corelist, xmotifs=xmotifs)
+supported = [r for r in rows if r['statistically_supported']]
+for r in supported[:10]:
+    print(r['motif'], f"q={r['q_markov']:.2e}", f"enrich={r['enrichment_markov']:.1f}")
+```
+
+### 3 — Rank shared core candidates from xmotifs
+
+```python
+from rna_lexis.statistical import rank_core_candidates, write_rows_csv
+
+rows = rank_core_candidates(
+    txt, xmotifs,
+    candidate_min_len=5, candidate_max_len=18,
+    enrichment_threshold=10.0, alpha=0.05,
+)
+write_rows_csv("/path/to/output/ranked_cores.csv", rows)
+```
+
+### 4 — Mutation-family scoring
+
+```python
+from rna_lexis.statistical import mutation_family_tests, best_mutation_family_per_motif
+
+rows = mutation_family_tests(txt, corelist, enrichment_threshold=5.0, alpha=0.05)
+best = best_mutation_family_per_motif(rows)
+for r in best:
+    print(r['motif'], f"radius={r['radius']}", r['decision'])
+```
+
+### 5 — Gapped motif search
+
+```python
+from rna_lexis.statistical import score_gapped_motif, find_gapped_motif_hits
+
+score = score_gapped_motif(txt, "TGT", "TATA", min_gap=0, max_gap=6)
+print(score['pattern'], f"observed={score['observed_count']}",
+      f"expected={score['expected_markov']:.2f}", f"p={score['p_markov']:.2e}")
+
+hits = find_gapped_motif_hits(txt, "TGT", "TATA", min_gap=0, max_gap=6)
+for h in hits:
+    print(f"pos={h['start']}  gap={h['gap_length']}  {h['matched_sequence']}")
+```
+
+### 6 — Search and extension analysis
+
+```python
+from rna_lexis.algorithms import find_with_mutations, find_longest_extensions
+
+exact, approx, maxmut = find_with_mutations("gcaugcua", txt, mutr=1/6)
+print(f"{len(exact)} exact, {len(approx)} approximate (up to {maxmut} mismatches)")
+
+pairs = find_longest_extensions("gcaugcua", txt, mutr=1/6)
+if pairs:
+    best = pairs[0]
+    print(f"Longest extension: {best['total_len']} nt, Hamming={best['hamming']}")
+```
+
+### 7 — Analytical k-mer enrichment
+
+```python
+from rna_lexis.algorithms import markov_kmer_pvalues
+
+results = markov_kmer_pvalues(txt, k=6, order=1)
+over = [r for r in results if r['pvalue_over_bh'] < 0.05]
+for r in over[:10]:
+    print(r['kmer'], r['real_count'], f"expected={r['expected_count']:.2f}",
+          f"q={r['pvalue_over_bh']:.2e}")
+```
+
+### 8 — Alignment
+
+```python
+from rna_lexis.alignment import gotoh_global, print_alignment
+
+a, b = txt[100:160], txt[340:400]
+res = gotoh_global(a, b)
+print_alignment(res)
+normalised = res.score / gotoh_global(a, a).score
+print(f"Normalised score: {normalised:.3f}")
+```
+
+### 9 — Load an existing session
+
+```python
+from rna_lexis.io import is_valid_session
+import glob
+
+sessions = [sd for p in glob.glob("/path/to/output/*.json")
+            if (sd := is_valid_session(p))]
+txt, corelist, xmotifs = sessions[0].txt, sessions[0].corelist, sessions[0].xmotifs
+```
+
+---
+
+## Input constraints
+
+| Constraint | Detail |
+|---|---|
+| Sequence characters | `read_text` returns `[a-z]` only; pass this directly to all algorithm functions |
+| RNA vs DNA | If input contains `'u'` (and no `'t'`), replace `u→t` before calling algorithms; set `is_rna=True` in SessionData |
+| Statistical functions | Expect lower-case, `u`-free sequences; call `normalize_sequence()` if unsure |
+| Minimum length for mutations | `find_with_mutations` requires `len(seq) >= 1/mutr` (default 6 nt) to apply substitutions |
+| Minimum occurrences for `cover()` | Returns 0 when `s` appears fewer than twice |
+| `find_longest_extensions` | Returns `[]` when seed occurs fewer than twice; O(n²) in occurrences |
+| `markov_kmer_pvalues` | Runs in O(len(txt) × k) — effectively instant for any k |
+| `scramble_kmer_pvalues` | O(N × len(txt)); use N ≥ 1000 for stable p-values |
+| `fetch_enst_cdna` | Requires active internet; 45-second timeout per request |
