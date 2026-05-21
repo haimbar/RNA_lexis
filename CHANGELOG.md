@@ -1,5 +1,44 @@
 # Changelog
 
+## [0.1.2] - 2026-05-21
+
+### Added
+
+- **Motif spacing / periodicity test** (Sequence operations → 6).  Given a motif
+  with m ≥ 3 exact occurrences, two statistical tests determine whether the copies
+  are spaced more regularly than random placement would produce:
+
+  **Gap cluster test** (primary) — estimates the candidate period T as the median
+  consecutive gap, then counts how many of the m−1 gaps fall within δ = max(5, 5%·T)
+  of T.  The count is tested against Bin(m−1, 2δ/L) with Bonferroni correction
+  for the fact that T is estimated from the same data.  This test is sensitive to
+  partial periodicity — a few tightly-clustered gaps among otherwise irregular
+  spacing — and handles tandem copies (tiny gaps) and skipped periods (gaps ≈ 2T)
+  correctly.
+
+  **Rayleigh test** (confirmatory) — maps all m positions modulo T to angles on a
+  circle and tests whether they cluster together (Mardia & Jupp, 2000 approximation).
+  The mean resultant length R ∈ [0,1] measures concentration; Z = m·R².
+
+  Either test reaching p < 0.05 gives a positive verdict.  When gap sizes are
+  mixed, the output identifies small gaps (< 15%·T) as likely tandem copies and
+  large gaps (> 175%·T) as likely skipped periods.
+
+  A warning is shown when m < 6 (low power).  m = 2 reports the single gap only.
+
+### Changed
+
+- **Spacing test output** — gap cluster result is now shown first (it is the
+  primary test); Rayleigh follows as confirmation.  The obsolete CV test
+  (Monte Carlo coefficient-of-variation) has been removed: it was not sensitive
+  to the common biological pattern of a few near-equal gaps among otherwise
+  variable spacing.
+
+- **`spacing_periodicity_test` API** — the function no longer accepts `n_sim`
+  and no longer returns the CV-related keys (`cv_obs`, `cv_null_median`,
+  `cv_null_p5`, `p_cv`, `n_sim`).  The `numpy` import is no longer required in
+  `statistical.py`.
+
 ## [0.1.1] - 2026-05-21
 
 ### Added

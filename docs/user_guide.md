@@ -284,15 +284,16 @@ The detail view is a plain HTML page showing every nucleotide in the selected ra
  3. Motif extensions
  4. Print core
  5. Rank core motifs (Markov/FDR)
- 6. Mutation-family scoring
- 7. Gapped motif search
- 8. Export hairpins to CSV
- 9. Extend match pair
-10. Alignment score for two sequences
-11. K-mer Markov analysis
-12. Covered area
-13. Core neighbors (text export)
-14. Back
+ 6. Motif spacing / periodicity test
+ 7. Mutation-family scoring
+ 8. Gapped motif search
+ 9. Export hairpins to CSV
+10. Extend match pair
+11. Alignment score for two sequences
+12. K-mer Markov analysis
+13. Covered area
+14. Core neighbors (text export)
+15. Back
 ```
 
 #### 2.1 Find all matches
@@ -410,7 +411,41 @@ enrichment ratio exceeds the minimum enrichment.
 
 Up to 15 supported candidates are printed to the terminal after the CSV is saved.
 
-#### 2.6 Mutation-family scoring
+#### 2.6 Motif spacing / periodicity test
+
+Tests whether the exact occurrences of a motif are spaced more regularly than
+random placement would produce.  Requires m ≥ 3 occurrences; a warning is
+shown when m < 6 (low power).
+
+**Prompt:**
+
+| Prompt | Notes |
+|---|---|
+| Sequence to test | Exact matches are found; approximate matches are not used |
+
+**Two statistical tests are run:**
+
+**Gap cluster test** (primary) — estimates the candidate period T as the median
+of the m−1 consecutive gaps, then counts how many gaps fall within
+δ = max(5, 5%·T) of T.  Under the null hypothesis of uniform random placement
+each gap is Uniform[0, L], giving an expected count of (m−1) × 2δ/L.  The
+observed count is tested against Bin(m−1, 2δ/L); the p-value is
+Bonferroni-corrected by (m−1) because T is derived from the same data.
+
+**Rayleigh test** (confirmatory) — maps all m positions modulo T to angles
+θᵢ = 2π(pᵢ mod T)/T on a circle and tests whether they cluster.  The mean
+resultant length R ∈ [0,1] quantifies concentration (0 = uniform, 1 = all
+coincide); Z = m·R² is the test statistic.  The Mardia & Jupp (2000)
+approximation gives the p-value.
+
+Either test reaching p < 0.05 produces a green "Significant" verdict.  When
+gap sizes are mixed, the output automatically notes:
+
+- **Small gaps** (< 15%·T) — likely tandem copies within the same period
+  window.
+- **Large gaps** (> 175%·T) — likely one or more periods skipped.
+
+#### 2.7 Mutation-family scoring
 
 Tests one or more motifs at every Hamming radius allowed by the mutation cap.
 For each motif and radius, the complete neighbourhood — all sequences within that
@@ -442,7 +477,7 @@ Two files are written:
 | `exact_or_specific_only` | Only the exact sequence (radius 0) is enriched |
 | `below_threshold` | No radius passes the enrichment + FDR criteria |
 
-#### 2.7 Gapped motif search
+#### 2.8 Gapped motif search
 
 Finds all occurrences of an anchor-gap-anchor pattern `LEFT[gap:min–max]RIGHT`
 and scores the whole family under the Markov background.
@@ -475,11 +510,11 @@ The family-level statistics (`pattern`, `observed_count`, `expected_markov`,
 (`start`, `gap_length`, `matched_sequence`) vary by row.  Up to 20 hits are
 printed to the terminal.
 
-#### 2.8 Export hairpins to CSV
+#### 2.9 Export hairpins to CSV
 
 Exports all detected hairpin regions for the loaded sequence to a CSV file. Each row contains the start position, end position, stem sequence, loop sequence, and full hairpin sequence.
 
-#### 2.9 Extend match pair
+#### 2.10 Extend match pair
 
 Finds all exact occurrences of a seed sequence and, for every pair of occurrences, greedily extends both copies left and right as far as possible while keeping the Hamming distance between the two extended copies within a user-defined rate.  The result reveals how much context around two repeats remains mutually similar.
 
@@ -521,7 +556,7 @@ Save all pairs to CSV [Enter for extensions_<seed>.csv, Ctrl+D to skip]:
 
 Press **Enter** to save to the default filename, type a custom name, or press **Ctrl+D** to skip. The CSV contains one row per pair with columns: `rank`, `pos1`, `pos2`, `left_ext`, `right_ext`, `total_len`, `hamming`, `ext1`, `ext2`.
 
-#### 2.10 Alignment score for two sequences
+#### 2.11 Alignment score for two sequences
 
 Aligns two substrings extracted from the loaded text by position.
 
@@ -541,7 +576,7 @@ The alignment is printed with gap symbols and the following scores:
 - **Bit score** — length-independent score computed with the Karlin–Altschul formula (λ = 1.28, K = 0.46); comparable across alignments of different lengths.
 - **E-value** — expected number of alignments with a score this high or better by chance, using the full transcript as the reference database. Values below 10⁻³ are considered significant.
 
-#### 2.11 K-mer Markov analysis
+#### 2.12 K-mer Markov analysis
 
 Computes analytical p-values for every observed k-mer using a Markov-model null — no shuffling or random seeds required.  For each k-mer the expected count is derived from the Prum/Schbath formula conditioned on shorter k-mer frequencies; the observed count is then tested against a Poisson(expected) null.  Two one-sided p-values are reported per k-mer, testing for over- and under-representation separately.  All results are saved to a CSV file sorted by the more extreme of the two p-values.
 
@@ -580,11 +615,11 @@ Computes analytical p-values for every observed k-mer using a Markov-model null 
 
 Rows are sorted by `min(pvalue_over, pvalue_under)` so the most extreme k-mers appear first.  BH correction is applied separately within each family of *m* tests.
 
-#### 2.12 Covered area
+#### 2.13 Covered area
 
 Computes and prints the coverage score for a single sequence: `length^a times occurrences`, where *a* is a configurable exponent (default 1.2, matching the session setting).
 
-#### 2.13 Core neighbors (text export)
+#### 2.14 Core neighbors (text export)
 
 Exports the sequence regions associated with a query core and its neighbourhood as a CSV file, so that individual region sequences can be copied directly into other tools (e.g. **Alignment score for two sequences**, **Search with mutations**).
 
