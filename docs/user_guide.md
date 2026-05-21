@@ -293,10 +293,11 @@ The detail view is a plain HTML page showing every nucleotide in the selected ra
 11. Mutation-family scoring
 12. Alignment score for two sequences
 13. K-mer Markov analysis
+14. Batch spacing test (all cores & motifs)
 
-14. Export hairpins to CSV                ← other
+15. Export hairpins to CSV                ← other
 
-15. Back
+16. Back
 ```
 
 #### 2.1 Find all matches
@@ -652,7 +653,41 @@ Computes analytical p-values for every observed k-mer using a Markov-model null 
 
 Rows are sorted by `min(pvalue_over, pvalue_under)` so the most extreme k-mers appear first.  BH correction is applied separately within each family of *m* tests.
 
-#### 2.14 Export hairpins to CSV
+#### 2.14 Batch spacing test (all cores & motifs)
+
+Runs the spacing / periodicity test (gap cluster + Rayleigh) on every core and
+xmotif in the current session simultaneously and saves a ranked CSV.  Sequences
+with fewer than 3 occurrences are skipped automatically.
+
+**Prompts:**
+
+| Prompt | Default | Notes |
+|---|:---:|---|
+| Mutations: 0 = exact only, or N for 1-per-N-nt | 0 | Same rate as the single-sequence spacing test; maximum N is 6 |
+| Output CSV file | `<session>_spacing_batch.csv` | |
+
+Each sequence is tagged as `core`, `xmotif`, or `both` depending on which list it
+appears in (the union is tested, with duplicates counted once).  Results are sorted
+by `p_cluster` ascending so the most periodically spaced sequences appear first.
+The top 10 are printed to the terminal; all results are saved to the CSV.
+
+**Output CSV columns:**
+
+| Column | Description |
+|---|---|
+| `motif` | Sequence tested |
+| `type` | `core`, `xmotif`, or `both` |
+| `m` | Number of occurrences used |
+| `period` | Candidate period T (median gap) |
+| `delta` | Tolerance window δ = max(5, 5%·T) |
+| `k_near_T` | Gaps within [T−δ, T+δ] |
+| `n_gaps` | Total consecutive gaps (m − 1) |
+| `p_cluster` | Bonferroni-corrected Binomial p-value (primary sort key) |
+| `rayleigh_r` | Mean resultant length R |
+| `p_rayleigh` | Rayleigh p-value |
+| `significant` | `True` if either p < 0.05 |
+
+#### 2.15 Export hairpins to CSV
 
 Exports all detected hairpin regions for the loaded sequence to a CSV file. Each row contains the start position, end position, stem sequence, loop sequence, and full hairpin sequence.
 

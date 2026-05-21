@@ -2243,6 +2243,94 @@ def spacing_test_input(txt):
     safe_input(fmttxt(["\nPress Enter to continue"], [''], ['white']))
 
 
+def batch_spacing_test_input(file_path, txt, strs):
+    """Run the spacing/periodicity test on all cores and xmotifs and save a ranked CSV."""
+    mutr_str = safe_input(fmttxt(
+        ["Mutations: 0 = exact only, or enter N for 1-per-N-nt (max 6) [default: 0]: "],
+        ['bold'], ['yellow']
+    )).strip()
+    try:
+        mutr_n = int(mutr_str) if mutr_str else 0
+    except ValueError:
+        mutr_n = 0
+    mutr = 0.0 if mutr_n <= 0 else min(1.0 / mutr_n, 1.0 / 6.0)
+
+    default_out = f'{file_path}_spacing_batch.csv'
+    out_str = safe_input(fmttxt(
+        ['Output CSV file', f'[default: {default_out}]: '],
+        ['bold', ''], ['yellow', 'cyan']
+    ) + ' ').strip()
+    out_csv = out_str if out_str else default_out
+
+    L = len(txt)
+    cores_set   = set(strs['corelist'])
+    xmotifs_set = set(strs['xmotifs'])
+    all_seqs    = cores_set | xmotifs_set
+
+    print(fmttxt([f"\nTesting {len(all_seqs)} sequences..."], [''], ['white']))
+
+    rows = []
+    skipped = 0
+    for seq in all_seqs:
+        in_core   = seq in cores_set
+        in_xmotif = seq in xmotifs_set
+        seq_type  = 'both' if (in_core and in_xmotif) else ('core' if in_core else 'xmotif')
+
+        if mutr > 0:
+            exact_pos, approx, _ = find_with_mutations(seq, txt, mutr=mutr)
+            positions = sorted(set(exact_pos) | {a[0] for a in approx})
+        else:
+            positions = find_all_matches(seq, txt)
+
+        if len(positions) < 3:
+            skipped += 1
+            continue
+
+        r = spacing_periodicity_test(positions, L)
+        rows.append({
+            'motif':      seq,
+            'type':       seq_type,
+            'm':          r['m'],
+            'period':     r['period'],
+            'delta':      r['delta'],
+            'k_near_T':   r['k_near_T'],
+            'n_gaps':     len(r['gaps']),
+            'p_cluster':  round(r['p_cluster'],  6),
+            'rayleigh_r': round(r['rayleigh_r'], 4),
+            'p_rayleigh': round(r['p_rayleigh'], 6),
+            'significant': r['p_cluster'] < 0.05 or r['p_rayleigh'] < 0.05,
+        })
+
+    if not rows:
+        print(fmttxt(["\nNo sequences with m ≥ 3 occurrences found."], ['bold'], ['red']))
+        safe_input(fmttxt(["Press Enter to continue"], [''], ['white']))
+        return
+
+    rows.sort(key=lambda x: x['p_cluster'])
+    write_rows_csv(out_csv, rows)
+
+    n_sig = sum(1 for x in rows if x['significant'])
+    W = 68
+    print(fmttxt(
+        [f"\nBatch spacing test — {len(rows)} sequences tested, {skipped} skipped (m < 3)"],
+        ['bold'], ['cyan']))
+    print(f"  Significant (p < 0.05 on either test): {n_sig}")
+    print('-' * W)
+    print(fmttxt(["  Top results by gap cluster p-value (up to 10):"], ['bold'], ['white']))
+    hdr = f"  {'Motif':<20} {'Type':<7} {'m':>3} {'T':>6} {'p_cluster':>10} {'p_rayleigh':>10} {'':>3}"
+    print(hdr)
+    print(f"  {'-'*20} {'-'*7} {'-'*3} {'-'*6} {'-'*10} {'-'*10} {'-'*3}")
+    for row in rows[:10]:
+        p_cl  = f"{row['p_cluster']:.4f}"  if row['p_cluster']  >= 0.0001 else "<0.0001"
+        p_ray = f"{row['p_rayleigh']:.4f}" if row['p_rayleigh'] >= 0.0001 else "<0.0001"
+        flag  = "***" if row['significant'] else ""
+        motif = row['motif'] if len(row['motif']) <= 20 else row['motif'][:17] + "…"
+        print(f"  {motif:<20} {row['type']:<7} {row['m']:>3} {row['period']:>6} "
+              f"{p_cl:>10} {p_ray:>10} {flag:>3}")
+    print(fmttxt([f"\n  Results saved to: {out_csv}"], [''], ['green']))
+    safe_input(fmttxt(["\nPress Enter to continue"], [''], ['white']))
+
+
 _FASTA_EXTENSIONS = {'.fasta', '.fa', '.fna', '.fas'}
 
 
@@ -2329,6 +2417,7 @@ def menus():
                 "Extend match pair", "Covered area", "Core neighbors (text export)",
                 "Rank core motifs (Markov/FDR)", "Mutation-family scoring",
                 "Alignment score for two sequences", "K-mer Markov analysis",
+                "Batch spacing test (all cores & motifs)",
                 "Export hairpins to CSV", "Back"]]
     if not defvals['datadir']:
         cwd = os.getcwd()
@@ -2414,7 +2503,7 @@ def menus():
                     init_summary(file_path, strs['xmotifs'], strs['corelist'], txt)
                 else:
                     # Sequence ops menu uses 3 color blocks; other menus use a single split.
-                    _seq_splits = [(9, 'yellow'), (13, 'white')]
+                    _seq_splits = [(9, 'yellow'), (14, 'white')]
                     val = show_menu(file_path, menu_ttl[menu_level], submenu[menu_level],
                                     clr=defvals['clr'],
                                     split={0: 4, 1: 6}.get(menu_level),
@@ -2558,10 +2647,12 @@ blockquote{{border-left:4px solid #ccc;margin:1em 0;padding:0.5em 1em;color:#555
                                 print_alignment_score(txt)
                             case 13:
                                 markov_kmer_input(txt, file_path)
-                            # Block 3 — other
                             case 14:
-                                hairpins_input(txt, file_path)
+                                batch_spacing_test_input(file_path, txt, strs)
+                            # Block 3 — other
                             case 15:
+                                hairpins_input(txt, file_path)
+                            case 16:
                                 menu_level = 0 # Go to the main menu
         
         except EOFSignal:

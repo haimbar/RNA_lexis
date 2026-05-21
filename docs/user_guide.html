@@ -494,10 +494,11 @@
 11. Mutation-family scoring
 12. Alignment score for two sequences
 13. K-mer Markov analysis
+14. Batch spacing test (all cores &amp; motifs)
 
-14. Export hairpins to CSV                ← other
+15. Export hairpins to CSV                ← other
 
-15. Back</code></pre>
+16. Back</code></pre>
 <h4 id="find-all-matches">2.1 Find all matches</h4>
 <p>Searches the full text for a query sequence (minimum 4 characters). Use <code>.</code> as a single-character wildcard. Reports the number of matches and prints each match with its position in the text.</p>
 <h4 id="search-with-mutations">2.2 Search with mutations</h4>
@@ -1182,7 +1183,92 @@
 </tbody>
 </table>
 <p>Rows are sorted by <code>min(pvalue_over, pvalue_under)</code> so the most extreme k-mers appear first. BH correction is applied separately within each family of <em>m</em> tests.</p>
-<h4 id="export-hairpins-to-csv">2.14 Export hairpins to CSV</h4>
+<h4 id="batch-spacing-test-all-cores-motifs">2.14 Batch spacing test (all cores &amp; motifs)</h4>
+<p>Runs the spacing / periodicity test (gap cluster + Rayleigh) on every core and xmotif in the current session simultaneously and saves a ranked CSV. Sequences with fewer than 3 occurrences are skipped automatically.</p>
+<p><strong>Prompts:</strong></p>
+<table>
+<colgroup>
+<col style="width: 27%" />
+<col style="width: 45%" />
+<col style="width: 27%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>Prompt</th>
+<th style="text-align: center;">Default</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Mutations: 0 = exact only, or N for 1-per-N-nt</td>
+<td style="text-align: center;">0</td>
+<td>Same rate as the single-sequence spacing test; maximum N is 6</td>
+</tr>
+<tr class="even">
+<td>Output CSV file</td>
+<td style="text-align: center;"><code>&lt;session&gt;_spacing_batch.csv</code></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p>Each sequence is tagged as <code>core</code>, <code>xmotif</code>, or <code>both</code> depending on which list it appears in (the union is tested, with duplicates counted once). Results are sorted by <code>p_cluster</code> ascending so the most periodically spaced sequences appear first. The top 10 are printed to the terminal; all results are saved to the CSV.</p>
+<p><strong>Output CSV columns:</strong></p>
+<table>
+<thead>
+<tr class="header">
+<th>Column</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>motif</code></td>
+<td>Sequence tested</td>
+</tr>
+<tr class="even">
+<td><code>type</code></td>
+<td><code>core</code>, <code>xmotif</code>, or <code>both</code></td>
+</tr>
+<tr class="odd">
+<td><code>m</code></td>
+<td>Number of occurrences used</td>
+</tr>
+<tr class="even">
+<td><code>period</code></td>
+<td>Candidate period T (median gap)</td>
+</tr>
+<tr class="odd">
+<td><code>delta</code></td>
+<td>Tolerance window δ = max(5, 5%·T)</td>
+</tr>
+<tr class="even">
+<td><code>k_near_T</code></td>
+<td>Gaps within [T−δ, T+δ]</td>
+</tr>
+<tr class="odd">
+<td><code>n_gaps</code></td>
+<td>Total consecutive gaps (m − 1)</td>
+</tr>
+<tr class="even">
+<td><code>p_cluster</code></td>
+<td>Bonferroni-corrected Binomial p-value (primary sort key)</td>
+</tr>
+<tr class="odd">
+<td><code>rayleigh_r</code></td>
+<td>Mean resultant length R</td>
+</tr>
+<tr class="even">
+<td><code>p_rayleigh</code></td>
+<td>Rayleigh p-value</td>
+</tr>
+<tr class="odd">
+<td><code>significant</code></td>
+<td><code>True</code> if either p &lt; 0.05</td>
+</tr>
+</tbody>
+</table>
+<h4 id="export-hairpins-to-csv">2.15 Export hairpins to CSV</h4>
 <p>Exports all detected hairpin regions for the loaded sequence to a CSV file. Each row contains the start position, end position, stem sequence, loop sequence, and full hairpin sequence.</p>
 <hr />
 <h3 id="open-core-file">3 - Open Core file</h3>
