@@ -16,7 +16,17 @@
 
 ```bash
 rna_lexis           # after pip install (console script)
+rna_lexis_stat      # alias for the same interactive menu
 python -m rna_lexis # without installing
+```
+
+For batch statistical workflows without entering the interactive menu:
+
+```bash
+rna_lexis_stat_cli score-exact       --fasta FILE --motifs m1 m2 …
+rna_lexis_stat_cli rank-cores        --fasta FILE
+rna_lexis_stat_cli mutation-families --fasta FILE --motifs m1 m2 …
+rna_lexis_stat_cli gapped-motif      --fasta FILE --left LEFT --right RIGHT
 ```
 
 At startup the tool checks the **last used directory** (remembered from the previous session) for saved session files (`.json`). If no last-used directory is recorded it falls back to the **default data directory** (set by the user in *Change setting*), and then to the current working directory:
@@ -77,7 +87,7 @@ After loading a sequence the tool automatically:
 
 - **Parses** the text to find xmotifs and cores.
 - **Saves a session file** (`<name>.json`) containing the sequence, xmotifs, cores, and summary statistics. On the next run, if this is the only session file in the directory, it is loaded automatically and the parsing step is skipped.
-- **Creates a summary CSV** (`<name>_init.csv`) with per-sequence statistics (length, occurrence count, mutation rate, etc.) and opens it in your default spreadsheet application.
+- **Creates a summary CSV** (`<name>_test_init.csv`) with per-sequence statistics (length, occurrence count, mutation rate, stability p-value, and — for RNA/DNA sequences — Markov enrichment and FDR q-values) and opens it in your default spreadsheet application.
 
 To re-open that CSV at any time, use **Open Core file** from the main menu. See below, in the Main Menu section.
 
@@ -268,17 +278,20 @@ The detail view is a plain HTML page showing every nucleotide in the selected ra
 
 ```
 --- Sequence operations ---
-1. Find all matches
-2. Search with mutations
-3. Motif extensions
-4. Print core
-5. Export hairpins to CSV
-6. Extend match pair
-7. Alignment score for two sequences
-8. K-mer Markov analysis
-9. Covered area
-10. Core neighbors (text export)
-11. Back
+ 1. Find all matches
+ 2. Search with mutations
+ 3. Motif extensions
+ 4. Print core
+ 5. Rank core motifs (Markov/FDR)
+ 6. Mutation-family scoring
+ 7. Gapped motif search
+ 8. Export hairpins to CSV
+ 9. Extend match pair
+10. Alignment score for two sequences
+11. K-mer Markov analysis
+12. Covered area
+13. Core neighbors (text export)
+14. Back
 ```
 
 #### 2.1 Find all matches
@@ -359,11 +372,113 @@ Press **Enter** to save to the default filename (based on the motif), type a cus
 
 Given a sequence, finds and prints the xmotifs that contain it as a core.
 
-#### 2.5 Export hairpins to CSV
+#### 2.5 Rank core motifs (Markov/FDR)
+
+Enumerates all shared substrings of the current xmotifs within a configurable
+length range, scores each candidate against a transcript-specific Markov
+background, and saves a ranked CSV.  Candidates are accepted as *statistically
+supported* when the FDR-corrected q-value is below the threshold **and** the
+enrichment ratio exceeds the minimum enrichment.
+
+**Prompts:**
+
+| Prompt | Default | Notes |
+|---|:---:|---|
+| Candidate minimum core length | 5 | Shortest substring to test |
+| Candidate maximum core length | 18 | Longest substring to test |
+| Minimum xmotif-type support | 2 | Candidate must appear in at least this many xmotif families |
+| Minimum Markov enrichment | 10 | `observed / expected` ratio threshold |
+| FDR q-value threshold | 0.05 | Benjamini–Hochberg threshold |
+| Output CSV file | `<session>_ranked_cores_markov.csv` | |
+
+**Output CSV columns:**
+
+| Column | Description |
+|---|---|
+| `motif` | Candidate core sequence |
+| `exact_count` | Number of exact occurrences in the transcript |
+| `expected_markov` | Expected count under the Markov null |
+| `enrichment_markov` | `observed / expected` ratio |
+| `p_markov` | Poisson upper-tail p-value |
+| `q_markov` | BH-adjusted p-value |
+| `statistically_supported` | `True` if q and enrichment thresholds are met |
+| `coverage_bp` | Base-pairs covered by non-overlapping occurrences |
+| `xmotif_type_support` | Number of distinct xmotif families containing this candidate |
+| `rank_statistical` | Primary rank (statistical support first) |
+| `rank_coverage` | Secondary rank (coverage) |
+
+Up to 15 supported candidates are printed to the terminal after the CSV is saved.
+
+#### 2.6 Mutation-family scoring
+
+Tests one or more motifs at every Hamming radius allowed by the mutation cap.
+For each motif and radius, the complete neighbourhood — all sequences within that
+Hamming distance — is counted and scored against the Markov background.  The
+best-supported radius per motif is written to a separate `_best.csv` file.
+
+**Prompts:**
+
+| Prompt | Default | Notes |
+|---|:---:|---|
+| Motif source | 1 | 1 = enter a motif, 2 = current cores, 3 = current xmotifs |
+| Motif | | Only shown when source = 1; blank to cancel |
+| Mutation search cap: 1 per N letters | 6 | Sets the maximum Hamming radius tested |
+| Minimum family enrichment | 5 | Enrichment threshold for the full Hamming neighbourhood |
+| Maximum expected family count | 5 | Families with a higher expected count are not scored |
+| FDR q-value threshold | 0.05 | BH threshold applied across all (motif, radius) pairs |
+| Output CSV file | `<session>_mutation_family_tests.csv` | Full results |
+
+Two files are written:
+- **Full results** (`_mutation_family_tests.csv`): one row per (motif, radius) pair.
+- **Best radius** (`_mutation_family_tests_best.csv`): one row per motif showing
+  the strongest accepted radius.
+
+**Decision values in `_best.csv`:**
+
+| Decision | Meaning |
+|---|---|
+| `mutation_supported` | Family is statistically enriched at this radius |
+| `exact_or_specific_only` | Only the exact sequence (radius 0) is enriched |
+| `below_threshold` | No radius passes the enrichment + FDR criteria |
+
+#### 2.7 Gapped motif search
+
+Finds all occurrences of an anchor-gap-anchor pattern `LEFT[gap:min–max]RIGHT`
+and scores the whole family under the Markov background.
+
+**Prompts:**
+
+| Prompt | Default | Notes |
+|---|:---:|---|
+| Left anchor sequence | | Blank to cancel |
+| Right anchor sequence | | Blank to cancel |
+| Minimum gap length | 0 | |
+| Maximum gap length | 30 | |
+| Output CSV file | `<session>_gapped_motif.csv` | |
+
+**Output CSV columns:**
+
+| Column | Description |
+|---|---|
+| `pattern` | Pattern string, e.g. `ACGU[gap:0-30]UGCA` |
+| `observed_count` | Number of pattern hits found |
+| `expected_markov` | Expected count under the Markov null |
+| `enrichment_markov` | `observed / expected` |
+| `p_markov` | Poisson upper-tail p-value |
+| `start` | Start position of each hit (one row per hit) |
+| `gap_length` | Gap length for this hit |
+| `matched_sequence` | Full matched sequence including the gap |
+
+The family-level statistics (`pattern`, `observed_count`, `expected_markov`,
+`enrichment_markov`, `p_markov`) are the same on every row; per-hit columns
+(`start`, `gap_length`, `matched_sequence`) vary by row.  Up to 20 hits are
+printed to the terminal.
+
+#### 2.8 Export hairpins to CSV
 
 Exports all detected hairpin regions for the loaded sequence to a CSV file. Each row contains the start position, end position, stem sequence, loop sequence, and full hairpin sequence.
 
-#### 2.6 Extend match pair
+#### 2.9 Extend match pair
 
 Finds all exact occurrences of a seed sequence and, for every pair of occurrences, greedily extends both copies left and right as far as possible while keeping the Hamming distance between the two extended copies within a user-defined rate.  The result reveals how much context around two repeats remains mutually similar.
 
@@ -405,7 +520,7 @@ Save all pairs to CSV [Enter for extensions_<seed>.csv, Ctrl+D to skip]:
 
 Press **Enter** to save to the default filename, type a custom name, or press **Ctrl+D** to skip. The CSV contains one row per pair with columns: `rank`, `pos1`, `pos2`, `left_ext`, `right_ext`, `total_len`, `hamming`, `ext1`, `ext2`.
 
-#### 2.7 Alignment score for two sequences
+#### 2.10 Alignment score for two sequences
 
 Aligns two substrings extracted from the loaded text by position.
 
@@ -425,7 +540,7 @@ The alignment is printed with gap symbols and the following scores:
 - **Bit score** — length-independent score computed with the Karlin–Altschul formula (λ = 1.28, K = 0.46); comparable across alignments of different lengths.
 - **E-value** — expected number of alignments with a score this high or better by chance, using the full transcript as the reference database. Values below 10⁻³ are considered significant.
 
-#### 2.8 K-mer Markov analysis
+#### 2.11 K-mer Markov analysis
 
 Computes analytical p-values for every observed k-mer using a Markov-model null — no shuffling or random seeds required.  For each k-mer the expected count is derived from the Prum/Schbath formula conditioned on shorter k-mer frequencies; the observed count is then tested against a Poisson(expected) null.  Two one-sided p-values are reported per k-mer, testing for over- and under-representation separately.  All results are saved to a CSV file sorted by the more extreme of the two p-values.
 
@@ -464,11 +579,11 @@ Computes analytical p-values for every observed k-mer using a Markov-model null 
 
 Rows are sorted by `min(pvalue_over, pvalue_under)` so the most extreme k-mers appear first.  BH correction is applied separately within each family of *m* tests.
 
-#### 2.9 Covered area
+#### 2.12 Covered area
 
 Computes and prints the coverage score for a single sequence: `length^a times occurrences`, where *a* is a configurable exponent (default 1.2, matching the session setting).
 
-#### 2.10 Core neighbors (text export)
+#### 2.13 Core neighbors (text export)
 
 Exports the sequence regions associated with a query core and its neighbourhood as a CSV file, so that individual region sequences can be copied directly into other tools (e.g. **Alignment score for two sequences**, **Search with mutations**).
 
@@ -500,7 +615,12 @@ Results are also printed to the terminal. The CSV is opened automatically in you
 
 ### 3 - Open Core file
 
-Opens the summary CSV (`<name>_init.csv`) in your default spreadsheet application. If the file is already open, the existing window is brought to the foreground rather than opening a second copy.
+Opens (or regenerates) the summary CSV (`<name>_test_init.csv`) in your default
+spreadsheet application.  If the file already exists and contains the statistical
+columns, it is opened directly.  If it is missing or was created by an older
+version (and lacks the statistical columns), it is regenerated automatically.
+If the file is already open in a spreadsheet application, the existing window is
+brought to the foreground rather than opening a second copy.
 
 ---
 
@@ -584,8 +704,10 @@ The `rna_lexis` package is organised into focused sub-modules. New code should i
 | `rna_lexis.alignment` | Gotoh global and local alignment with affine gap penalties (`gotoh_global`, `gotoh_local`, `print_alignment`, `AlignmentResult`). |
 | `rna_lexis.plots` | All matplotlib and Plotly visualisation functions — sequence logos, z-score plots, k-mer histograms, frequency-rank plots, coverage plots, sequence-hit diagrams. |
 | `rna_lexis.io` | File and session I/O (`read_text`, `save_session`, `load_session`, `is_valid_session`, `init_summary`), Ensembl REST API fetching (`fetch_enst_cdna`), and platform-aware file opening utilities. |
+| `rna_lexis.statistical` | Transcript-specific Markov background scoring, Poisson/FDR motif enrichment tests, mutation-family scoring, and gapped-motif search. Key functions: `score_exact_motifs`, `rank_core_candidates`, `mutation_family_tests`, `best_mutation_family_per_motif`, `find_gapped_motif_hits`, `score_gapped_motif`. |
 | `rna_lexis.dialogs` | Thin tkinter wrappers for native file/directory chooser dialogs (`openFile`, `openDir`). |
 | `rna_lexis.menu` | Interactive CLI menu — all user-facing prompts, menus, and session management. |
+| `rna_lexis.test_cli` | Batch command-line interface for statistical workflows. Entry point: `rna_lexis_stat_cli`. Sub-commands: `score-exact`, `rank-cores`, `mutation-families`, `gapped-motif`. |
 | `rna_lexis.RNAlang` | Backward-compatibility shim. Re-exports every public symbol from the modules above so that existing code using `from rna_lexis.RNAlang import …` or `import rna_lexis.RNAlang as RNA` continues to work without modification. |
 
 ### Example — using sub-modules directly

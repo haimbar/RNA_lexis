@@ -4,4 +4,7 @@ from . import plots
 from . import io
 from . import dialogs
 from . import menu
+from . import statistical
 from . import RNAlang  # backward-compatibility shim
+
+__version__ = "0.1.0"

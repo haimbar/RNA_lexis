@@ -1,5 +1,110 @@
 # Changelog
 
+## [0.1.0] - 2026-05-20
+
+### Added
+
+- **Statistical layer in the initialisation summary.**  When a sequence is loaded
+  (or the summary is regenerated), `init_summary` now scores every xmotif and
+  core against a transcript-specific first-order Markov background and appends
+  the following columns to `<session>_test_init.csv`:
+
+  | Column | Description |
+  |---|---|
+  | `nonoverlap_count` | Non-overlapping occurrence count |
+  | `coverage_bp` | Base-pairs covered by non-overlapping occurrences |
+  | `area_score` | `length × nonoverlap_count` coverage proxy |
+  | `xmotif_type_support` | Number of distinct xmotif families containing this core |
+  | `inside_xmotif_count` / `outside_xmotif_count` | Occurrences inside vs. outside xmotifs |
+  | `expected_markov` | Expected count under a transcript-specific Markov model |
+  | `enrichment_markov` | `observed / expected` enrichment ratio |
+  | `p_markov` | Poisson upper-tail p-value for motif enrichment |
+  | `q_markov` | Benjamini–Hochberg FDR-adjusted p-value across all tested motifs |
+  | `statistically_supported` | Boolean: `q_markov` below threshold **and** enriched |
+  | `core_class` | `'supported'`, `'enriched_only'`, or `'not_supported'` |
+  | `rank_statistical` | Rank by statistical support (primary) |
+  | `rank_coverage` | Rank by coverage (secondary) |
+
+  The CSV is now **sorted by statistical support first** (`statistically_supported`
+  descending, `q_markov` ascending), falling back to `p_stable` for non-RNA/DNA
+  sessions or sequences where the statistical layer is not applicable.
+  Statistical columns are only added when the loaded sequence alphabet is a
+  subset of `{a, c, g, t, u}`.
+
+- **Output filename changed: `_init.csv` → `_test_init.csv`.**  The initialisation
+  summary is now written to `<session>_test_init.csv`.  Old `_init.csv` files are
+  not read or overwritten; they can be safely kept or deleted.  When an existing
+  `_test_init.csv` is found and already contains all four statistical columns
+  (`expected_markov`, `enrichment_markov`, `p_markov`, `q_markov`), it is opened
+  directly without regenerating.  If statistical columns are absent (e.g. a file
+  written by an older run), the summary is regenerated automatically.
+
+- **`init_summary` `force` parameter.**  `init_summary(fn, xm, cores, txt,
+  force=False)` accepts a new keyword argument.  When `force=True` the summary
+  is always regenerated, bypassing the caching check.
+
+- **Three new Sequence operations menu items:**
+
+  - **Rank core motifs (Markov/FDR)** — Interactive wrapper around
+    `rank_core_candidates`.  Enumerates all shared substrings of xmotifs within a
+    configurable length range, scores each candidate against the Markov background,
+    and saves a ranked CSV (`<session>_ranked_cores_markov.csv`).  Prompts: minimum
+    and maximum candidate length, minimum xmotif-type support, minimum enrichment,
+    FDR threshold, and output file path.
+
+  - **Mutation-family scoring** — Interactive wrapper around
+    `mutation_family_tests` / `best_mutation_family_per_motif`.  Tests one or more
+    motifs (typed, from the current cores, or from the current xmotifs) at every
+    Hamming radius allowed by the mutation cap, scores each family against the
+    Markov background, and reports the best-supported radius per motif.  Output:
+    `<session>_mutation_family_tests.csv` (all radii) and
+    `<session>_mutation_family_tests_best.csv` (one row per motif).
+
+  - **Gapped motif search** — Interactive wrapper around `score_gapped_motif` /
+    `find_gapped_motif_hits`.  Searches for all occurrences of a
+    `LEFT[gap:min–max]RIGHT` anchor pattern, scores the whole family under the
+    Markov background, and saves a CSV with per-hit positions and the family-level
+    enrichment statistics (`<session>_gapped_motif.csv`).
+
+- **`rna_lexis.statistical` module** (`statistical.py`).  New pure-Python module
+  providing all statistical primitives:
+  - `MarkovBackground` — frozen dataclass computing first-order (or higher)
+    Markov transition probabilities with pseudocount smoothing.
+  - `score_exact_motifs` — scores a list of exact motifs against the Markov
+    background; returns enrichment, p-values, FDR q-values, and classification.
+  - `rank_core_candidates` — enumerates shared sub-strings of xmotifs, scores
+    them, and returns a ranked table.
+  - `mutation_family_tests` — tests Hamming-radius families across all allowed
+    radii and applies Markov/FDR filtering.
+  - `best_mutation_family_per_motif` — selects the strongest accepted radius per
+    motif from the full family-test table.
+  - `find_gapped_motif_hits` — finds all `LEFT[gap]RIGHT` pattern hits with
+    per-hit gap lengths and positions.
+  - `score_gapped_motif` — scores a gapped pattern as a single family under the
+    Markov background.
+  - `write_rows_csv` — convenience helper to write a list of dicts to a CSV.
+
+- **`rna_lexis_stat_cli` console script** (`test_cli.py`).  A new command-line
+  interface for batch statistical workflows:
+
+  ```
+  rna_lexis_stat_cli score-exact     --fasta FILE --motifs m1 m2 …
+  rna_lexis_stat_cli rank-cores      --fasta FILE
+  rna_lexis_stat_cli mutation-families --fasta FILE --motifs m1 m2 …
+  rna_lexis_stat_cli gapped-motif    --fasta FILE --left LEFT --right RIGHT
+  ```
+
+- **`rna_lexis_stat` console script** — alias for `rna_lexis` (same interactive
+  menu).
+
+### Changed
+
+- **Sequence operations submenu re-numbered.**  The three new statistical items
+  are inserted after *Print core* (item 4) as items 5, 6, and 7.  The existing
+  items 5–11 shift to 8–14.
+
+- **`__version__` set to `"0.1.0"`** in `rna_lexis/__init__.py`.
+
 ## [0.0.10] - 2026-05-03
 
 ### Changed

@@ -14,11 +14,16 @@ called **xmotifs** and extracts their shorter conserved cores. From there you ca
 - Search for exact and approximate (mutation-tolerant) matches
 - Extend matching pairs greedily to find the longest shared context
 - Fetch sequences directly from the Ensembl REST API by transcript ID
+- **Score motifs against a transcript-specific Markov background with FDR correction**
+- **Test mutation-tolerant motif families for statistical enrichment**
+- **Search for anchor-gap-anchor gapped motif patterns**
 
-## Initialisation summary (`_init.csv`)
+## Initialisation summary (`_test_init.csv`)
 
 When a sequence is loaded for the first time, an initialisation CSV is written that
-characterises every xmotif and core. Key columns:
+characterises every xmotif and core. The file is named `<session>_test_init.csv`.
+
+### Core columns (all sequences)
 
 | column | description |
 |---|---|
@@ -32,6 +37,28 @@ characterises every xmotif and core. Key columns:
 | `p_stable` | Binomial p-value for sequence stability (see below) |
 | `maxmut` | maximum mutations allowed by the search (`floor(len × mutr)`, capped at `M`) |
 
+### Statistical columns (RNA/DNA sequences only)
+
+For sequences whose alphabet is a subset of `{a, c, g, t, u}`, the following
+columns are also added by scoring each motif against a transcript-specific
+first-order Markov background:
+
+| column | description |
+|---|---|
+| `expected_markov` | Expected count under the Markov null |
+| `enrichment_markov` | `observed / expected` enrichment ratio |
+| `p_markov` | Poisson upper-tail p-value for motif enrichment |
+| `q_markov` | Benjamini–Hochberg FDR-adjusted p-value across all tested motifs |
+| `statistically_supported` | `True` if `q_markov` is below threshold and the motif is enriched |
+| `core_class` | `'supported'`, `'enriched_only'`, or `'not_supported'` |
+| `rank_statistical` | Primary rank (by statistical support) |
+| `rank_coverage` | Secondary rank (by coverage) |
+| `coverage_bp` | Base-pairs covered by non-overlapping occurrences |
+| `xmotif_type_support` | Number of distinct xmotif families containing this core |
+
+When statistical columns are present the CSV is sorted by `statistically_supported`
+(descending) then `q_markov` (ascending). Otherwise it is sorted by `p_stable`.
+
 ### Stability p-value (`p_stable`)
 
 Each sequence is tested against the null hypothesis that every site mutates independently
@@ -43,7 +70,7 @@ p_stable = P(X ≤ numt)   where   X ~ Bin(len × N_total, mutr)
 
 `N_total = count + n_approx` is the total number of occurrences used as evidence.
 A small `p_stable` means the sequence appears **more conserved than expected by
-chance**, i.e., it is stable.  The CSV is sorted by `p_stable` ascending.
+chance**, i.e., it is stable.
 A sequence with no strong conservation signal will have `p_stable ≈ 0.5`.
 
 ## Maximal core extension
@@ -99,6 +126,45 @@ shorter context.  BH-FDR correction is applied across all sub-k-mers tested.  Th
 output CSV includes `pvalue_over`, `pvalue_under`, `pvalue_bh`, `direction`, and
 `significant`; the shortest level reaching significance is printed to the terminal.
 
+## Statistical motif analysis
+
+### Rank core motifs (Markov/FDR)
+
+The *Rank core motifs (Markov/FDR)* option (Sequence operations → 5) enumerates
+all shared substrings of the current xmotifs within a configurable length range,
+scores each candidate against the transcript-specific Markov background, and saves
+a ranked CSV. Candidates are ranked first by statistical support (`q_markov` below
+threshold, enrichment above threshold), then by coverage.
+
+### Mutation-family scoring
+
+The *Mutation-family scoring* option (Sequence operations → 6) tests one or more
+motifs at every Hamming radius allowed by the mutation cap. For each motif and
+radius, the full neighbourhood of sequences within that distance is counted and
+scored against the Markov background. The result shows whether the approximate
+family as a whole is enriched beyond chance — going beyond simply allowing
+mismatches. The best-supported radius per motif is saved to a `_best.csv` file.
+
+### Gapped motif search
+
+The *Gapped motif search* option (Sequence operations → 7) finds all occurrences
+of a pattern of the form `LEFT[gap:min–max]RIGHT`: two exact anchor sequences
+separated by a variable-length gap. The whole family is scored under the Markov
+background, and individual hits (with exact positions and gap lengths) are saved
+to a CSV.
+
+### Batch CLI (`rna_lexis_stat_cli`)
+
+A separate command-line interface supports batch statistical workflows without
+entering the interactive menu:
+
+```
+rna_lexis_stat_cli score-exact       --fasta FILE --motifs m1 m2 …
+rna_lexis_stat_cli rank-cores        --fasta FILE
+rna_lexis_stat_cli mutation-families --fasta FILE --motifs m1 m2 …
+rna_lexis_stat_cli gapped-motif      --fasta FILE --left LEFT --right RIGHT
+```
+
 ## Requirements
 
 - Python 3.10 or newer
@@ -116,6 +182,12 @@ After installation, launch the interactive menu with:
 
 ```
 rna_lexis
+```
+
+Or with the statistical-workflow alias:
+
+```
+rna_lexis_stat
 ```
 
 Or, without installing:

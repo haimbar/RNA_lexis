@@ -27,6 +27,14 @@ from rna_lexis.io import (
     open_file_with_default_software, _find_valid_sessions, fetch_enst_cdna,
     load_prefs, save_prefs,
 )
+from rna_lexis.statistical import (
+    best_mutation_family_per_motif,
+    find_gapped_motif_hits,
+    mutation_family_tests,
+    rank_core_candidates,
+    score_gapped_motif,
+    write_rows_csv,
+)
 
 
 class EOFSignal(Exception):
@@ -1640,6 +1648,167 @@ def markov_kmer_input(txt, file_path=''):
     safe_input(fmttxt(['Press Enter to continue'], [''], ['white']))
 
 
+def statistical_core_input(file_path, txt, strs):
+    """Interactive Markov/FDR core-candidate ranking."""
+    min_len = safe_input(fmttxt(['Candidate minimum core length', '[default: 5]: '],
+                                ['bold', ''], ['yellow', 'cyan']) + ' ').strip()
+    max_len = safe_input(fmttxt(['Candidate maximum core length', '[default: 18]: '],
+                                ['bold', ''], ['yellow', 'cyan']) + ' ').strip()
+    support = safe_input(fmttxt(['Minimum xmotif-type support', '[default: 2]: '],
+                                ['bold', ''], ['yellow', 'cyan']) + ' ').strip()
+    enrich = safe_input(fmttxt(['Minimum Markov enrichment', '[default: 10]: '],
+                               ['bold', ''], ['yellow', 'cyan']) + ' ').strip()
+    alpha = safe_input(fmttxt(['FDR q-value threshold', '[default: 0.05]: '],
+                              ['bold', ''], ['yellow', 'cyan']) + ' ').strip()
+
+    min_len = int(min_len) if min_len else 5
+    max_len = int(max_len) if max_len else 18
+    support = int(support) if support else 2
+    enrich = float(enrich) if enrich else 10.0
+    alpha = float(alpha) if alpha else 0.05
+
+    default_out = f'{file_path}_ranked_cores_markov.csv'
+    out_csv = safe_input(fmttxt(['Output CSV file', f'[default: {default_out}]: '],
+                                ['bold', ''], ['yellow', 'cyan']) + ' ').strip()
+    if not out_csv:
+        out_csv = default_out
+
+    print(fmttxt(['Scoring shared core candidates with Markov/FDR support...'],
+                 [''], ['cyan']))
+    rows = rank_core_candidates(
+        txt,
+        strs['xmotifs'],
+        candidate_min_len=min_len,
+        candidate_max_len=max_len,
+        min_xmotif_type_support=support,
+        enrichment_threshold=enrich,
+        alpha=alpha,
+    )
+    write_rows_csv(out_csv, rows)
+
+    supported = [r for r in rows if r.get('statistically_supported')]
+    print(fmttxt([f'Candidates tested: {len(rows)}',
+                  f'Statistically supported: {len(supported)}'],
+                 ['bold', ''], ['white', 'green']))
+    for row in supported[:15]:
+        print(f"  {row['rank_statistical']:>3}. {row['motif']:<18} "
+              f"count={row['exact_count']:<3} enrich={row['enrichment_markov']:.2f} "
+              f"q={row['q_markov']:.2e} coverage={row['coverage_bp']}")
+    print(fmttxt([f'Results saved to: {out_csv}'], [''], ['green']))
+    open_file_with_default_software(out_csv)
+
+    safe_input(fmttxt(['Press Enter to continue'], [''], ['white']))
+
+
+def mutation_family_input(file_path, txt, strs):
+    """Interactive mutation-aware motif-family scoring."""
+    source = safe_input(fmttxt(['Motif source',
+                                '[1: enter motif, 2: current cores, 3: current xmotifs; default: 1]: '],
+                               ['bold', ''], ['yellow', 'cyan']) + ' ').strip()
+    if source == '2':
+        motifs = strs['corelist']
+    elif source == '3':
+        motifs = strs['xmotifs']
+    else:
+        motif = safe_input(fmttxt(['Motif', '[blank to cancel]: '],
+                                  ['bold', ''], ['yellow', 'cyan']) + ' ').strip()
+        if not motif:
+            return
+        motifs = [motif]
+
+    mutr_str = safe_input(fmttxt(['Mutation search cap: 1 per N letters', '[default: 6]: '],
+                                 ['bold', ''], ['yellow', 'cyan']) + ' ').strip()
+    enrich = safe_input(fmttxt(['Minimum family enrichment', '[default: 5]: '],
+                               ['bold', ''], ['yellow', 'cyan']) + ' ').strip()
+    expected = safe_input(fmttxt(['Maximum expected family count', '[default: 5]: '],
+                                 ['bold', ''], ['yellow', 'cyan']) + ' ').strip()
+    alpha = safe_input(fmttxt(['FDR q-value threshold', '[default: 0.05]: '],
+                              ['bold', ''], ['yellow', 'cyan']) + ' ').strip()
+
+    mutr = 1 / float(mutr_str) if mutr_str and float(mutr_str) > 0 else 1 / 6
+    enrich = float(enrich) if enrich else 5.0
+    expected = float(expected) if expected else 5.0
+    alpha = float(alpha) if alpha else 0.05
+
+    default_out = f'{file_path}_mutation_family_tests.csv'
+    out_csv = safe_input(fmttxt(['Output CSV file', f'[default: {default_out}]: '],
+                                ['bold', ''], ['yellow', 'cyan']) + ' ').strip()
+    if not out_csv:
+        out_csv = default_out
+    best_csv = os.path.splitext(out_csv)[0] + '_best.csv'
+
+    print(fmttxt([f'Testing {len(motifs)} motif(s) across allowed Hamming radii...'],
+                 [''], ['cyan']))
+    rows = mutation_family_tests(
+        txt,
+        motifs,
+        mutr=mutr,
+        enrichment_threshold=enrich,
+        expected_max=expected,
+        alpha=alpha,
+    )
+    best = best_mutation_family_per_motif(rows)
+    write_rows_csv(out_csv, rows)
+    write_rows_csv(best_csv, best)
+
+    decisions = {}
+    for row in best:
+        decisions[row['decision']] = decisions.get(row['decision'], 0) + 1
+    print(fmttxt([f'Motifs summarized: {len(best)}',
+                  ', '.join(f'{k}: {v}' for k, v in sorted(decisions.items()))],
+                 ['bold', ''], ['white', 'green']))
+    for row in best[:15]:
+        print(f"  {row['motif']:<18} radius={row['radius']} "
+              f"family={row['family_count']:<3} enrich={row['enrichment_family']:.2f} "
+              f"q={row['q_family']:.2e} {row['decision']}")
+    print(fmttxt([f'Full tests saved to: {out_csv}',
+                  f'Best radius per motif saved to: {best_csv}'],
+                 ['', ''], ['green', 'green']))
+    open_file_with_default_software(best_csv)
+    safe_input(fmttxt(['Press Enter to continue'], [''], ['white']))
+
+
+def gapped_motif_input(file_path, txt):
+    """Interactive anchor-gap-anchor motif search and scoring."""
+    left = safe_input(fmttxt(['Left anchor sequence', '[blank to cancel]: '],
+                             ['bold', ''], ['yellow', 'cyan']) + ' ').strip()
+    if not left:
+        return
+    right = safe_input(fmttxt(['Right anchor sequence', '[blank to cancel]: '],
+                              ['bold', ''], ['yellow', 'cyan']) + ' ').strip()
+    if not right:
+        return
+    min_gap_s = safe_input(fmttxt(['Minimum gap length', '[default: 0]: '],
+                                  ['bold', ''], ['yellow', 'cyan']) + ' ').strip()
+    max_gap_s = safe_input(fmttxt(['Maximum gap length', '[default: 30]: '],
+                                  ['bold', ''], ['yellow', 'cyan']) + ' ').strip()
+    min_gap = int(min_gap_s) if min_gap_s else 0
+    max_gap = int(max_gap_s) if max_gap_s else 30
+
+    default_out = f'{file_path}_gapped_motif.csv'
+    out_csv = safe_input(fmttxt(['Output CSV file', f'[default: {default_out}]: '],
+                                ['bold', ''], ['yellow', 'cyan']) + ' ').strip()
+    if not out_csv:
+        out_csv = default_out
+
+    score = score_gapped_motif(txt, left, right, min_gap=min_gap, max_gap=max_gap)
+    hits = find_gapped_motif_hits(txt, left, right, min_gap=min_gap, max_gap=max_gap)
+    rows = [{**score, **hit} for hit in hits] if hits else [score]
+    write_rows_csv(out_csv, rows)
+
+    print(fmttxt([score['pattern'],
+                  f"observed={score['observed_count']}, expected={score['expected_markov']:.3g}, "
+                  f"enrichment={score['enrichment_markov']:.2f}, p={score['p_markov']:.2e}"],
+                 ['bold', ''], ['white', 'cyan']))
+    for hit in hits[:20]:
+        print(f"  pos={hit['start']:<6} gap={hit['gap_length']:<3} {hit['matched_sequence']}")
+    if len(hits) > 20:
+        print(f"  ... and {len(hits) - 20} more")
+    print(fmttxt([f'Results saved to: {out_csv}'], [''], ['green']))
+    open_file_with_default_software(out_csv)
+    safe_input(fmttxt(['Press Enter to continue'], [''], ['white']))
+
+
 def sequence_hits_input(fn, txt):
     """Prompt for up to 3 sequences + mutation rate and plot their occurrences.
 
@@ -1938,7 +2107,10 @@ def menus():
     submenu = [["Plots", "Sequence operations", "Open Core file", "Summary statistics",
                "Show settings", "Change setting", "Open User Guide", "Load new input", "Quit"],
                ["Core neighbors (detailed)", "Core neighbors (condensed)", "K-mers", "Logo", "Coverage", "Motif Match/Mutation", "Back"],
-               ["Find all matches", "Search with mutations", "Motif extensions", "Print core", "Export hairpins to CSV", "Extend match pair", "Alignment score for two sequences", "K-mer Markov analysis", "Covered area", "Core neighbors (text export)", "Back"]]
+               ["Find all matches", "Search with mutations", "Motif extensions", "Print core",
+                "Rank core motifs (Markov/FDR)", "Mutation-family scoring", "Gapped motif search",
+                "Export hairpins to CSV", "Extend match pair", "Alignment score for two sequences",
+                "K-mer Markov analysis", "Covered area", "Core neighbors (text export)", "Back"]]
     if not defvals['datadir']:
         cwd = os.getcwd()
         valid = _find_valid_sessions(cwd)
@@ -2024,7 +2196,7 @@ def menus():
                 else:
                     val = show_menu(file_path, menu_ttl[menu_level], submenu[menu_level],
                                     clr=defvals['clr'],
-                                    split={0: 4, 1: 6, 2: 10}.get(menu_level))
+                                    split={0: 4, 1: 6, 2: 7}.get(menu_level))
                     # Top level menu:
                     if menu_level == 0:
                         # Quit:
@@ -2038,8 +2210,7 @@ def menus():
                             continue
                         # show the core file (CSV)
                         if val == 3:
-                            out_csv = f'{file_path}_init.csv'
-                            open_file_with_default_software(out_csv)
+                            init_summary(file_path, strs['xmotifs'], strs['corelist'], txt, force=True)
                         if val == 4:
                             print_stats(txt, strs)
                             continue
@@ -2070,10 +2241,7 @@ def menus():
                                                               'xmotifs': strs['xmotifs'],
                                                               'dir': workdir,
                                                               'stats': stats})
-                                out_csv = f'{file_path}_init.csv'
-                                if os.path.isfile(out_csv):
-                                    os.remove(out_csv)
-                                init_summary(file_path, strs['xmotifs'], strs['corelist'], txt)
+                                init_summary(file_path, strs['xmotifs'], strs['corelist'], txt, force=True)
                             continue
                         # Open the user guide in the default browser:
                         if val == 7:
@@ -2143,18 +2311,24 @@ blockquote{{border-left:4px solid #ccc;margin:1em 0;padding:0.5em 1em;color:#555
                             case 4:
                                 print_core_input(txt, strs)
                             case 5:
-                                hairpins_input(txt, file_path)
+                                statistical_core_input(file_path, txt, strs)
                             case 6:
-                                extend_match_input(txt)
+                                mutation_family_input(file_path, txt, strs)
                             case 7:
-                                print_alignment_score(txt)
+                                gapped_motif_input(file_path, txt)
                             case 8:
-                                markov_kmer_input(txt, file_path)
+                                hairpins_input(txt, file_path)
                             case 9:
-                                txt_coverage_input(txt, strs)
+                                extend_match_input(txt)
                             case 10:
-                                neighbors_condensed_export_input(file_path, txt, strs)
+                                print_alignment_score(txt)
                             case 11:
+                                markov_kmer_input(txt, file_path)
+                            case 12:
+                                txt_coverage_input(txt, strs)
+                            case 13:
+                                neighbors_condensed_export_input(file_path, txt, strs)
+                            case 14:
                                 menu_level = 0 # Go to the main menu
         
         except EOFSignal:

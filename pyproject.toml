@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "RNA_lexis"
-version = "0.0.10"
+version = "0.1.0"
 authors = [
   { name="Haim Bar", email="haim.bar@uconn.edu" },
 ]
@@ -25,3 +25,5 @@ dependencies = ["matplotlib>=3.5.0", "numpy",
 
 [project.scripts]
 rna_lexis = "rna_lexis.menu:main"
+rna_lexis_stat = "rna_lexis.menu:main"
+rna_lexis_stat_cli = "rna_lexis.test_cli:main"

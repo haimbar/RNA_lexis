@@ -18,6 +18,14 @@ from platformdirs import user_config_dir
 from scipy.stats import binom as _binom
 
 from rna_lexis.algorithms import find_with_mutations
+from rna_lexis.statistical import score_exact_motifs
+
+TEST_SUMMARY_SUFFIX = "_test_init.csv"
+
+
+def init_summary_path(fn: str) -> str:
+    """Return the test-build summary CSV path for a session base path."""
+    return f'{fn}{TEST_SUMMARY_SUFFIX}'
 
 
 # ---------------------------------------------------------------------------
@@ -293,16 +301,25 @@ def fetch_enst_cdna(enst: str):
     raise RuntimeError(f"Could not fetch transcript {enst}: {last_error}")
 
 
-def init_summary(fn, xm, cores, txt, mutr=1/6, M = 4):
+def init_summary(fn, xm, cores, txt, mutr=1/6, M = 4, force=False):
     '''Input: xmotifs, cores, and the gene sequence. Output: a
     report summarizing the properties of the sequences.'''
-    out_csv = f'{fn}_init.csv'
-    if os.path.isfile(out_csv):
+    out_csv = init_summary_path(fn)
+    if os.path.isfile(out_csv) and not force:
         try:
-            open_file_with_default_software(out_csv)
+            with open(out_csv, 'r', encoding='utf-8', errors='ignore') as handle:
+                header = handle.readline().strip().split(',')
         except Exception:
-            pass
-        return out_csv
+            header = []
+        required_test_columns = {'expected_markov', 'enrichment_markov', 'p_markov', 'q_markov'}
+        if required_test_columns.issubset(set(header)):
+            try:
+                open_file_with_default_software(out_csv)
+            except Exception:
+                pass
+            return out_csv
+        print(f"Existing summary lacks statistical columns; regenerating: {out_csv}")
+
 
     xm_cores = xm + list(set(cores) - set(xm))
     txt_lower = txt.lower()
@@ -351,8 +368,51 @@ def init_summary(fn, xm, cores, txt, mutr=1/6, M = 4):
 
     # Create DataFrame once from all records (not row-by-row append)
     df = pd.DataFrame(records)
-    df = df.sort_values(by='p_stable', ascending=True)
-    out_csv = f'{fn}_init.csv'
+
+    # Statistical layer: Markov enrichment/FDR columns for RNA/DNA sequences only.
+    if set(txt_lower).issubset(set('acgtu')):
+        try:
+            score_rows = score_exact_motifs(
+                txt_lower,
+                xm_cores,
+                xmotifs=xm,
+                markov_order=1,
+                enrichment_threshold=10.0,
+                min_xmotif_type_support=1,
+            )
+            score_map = {row['motif'].lower(): row for row in score_rows}
+            mapped_columns = {
+                'nonoverlap_count': 'nonoverlap_count',
+                'coverage_bp': 'coverage_bp',
+                'area_score': 'area_score',
+                'xmotif_type_support': 'xmotif_type_support',
+                'inside_xmotif_count': 'inside_xmotif_count',
+                'outside_xmotif_count': 'outside_xmotif_count',
+                'expected_markov': 'expected_markov',
+                'enrichment_markov': 'enrichment_markov',
+                'p_markov': 'p_markov',
+                'q_markov': 'q_markov',
+                'statistically_supported': 'statistically_supported',
+                'core_class': 'core_class',
+                'rank_statistical': 'rank_statistical',
+                'rank_coverage': 'rank_coverage',
+            }
+            for out_col, score_col in mapped_columns.items():
+                df[out_col] = df['seq'].map(
+                    lambda s: score_map.get(str(s).lower(), {}).get(score_col)
+                )
+        except Exception as exc:
+            df['statistical_support_error'] = str(exc)
+
+    if 'q_markov' in df.columns:
+        df = df.sort_values(
+            by=['statistically_supported', 'q_markov', 'p_stable'],
+            ascending=[False, True, True],
+            na_position='last',
+        )
+    else:
+        df = df.sort_values(by='p_stable', ascending=True)
+    out_csv = init_summary_path(fn)
     tried = []
     for candidate in [
         out_csv,
