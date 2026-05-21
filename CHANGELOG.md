@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.1.3] - 2026-05-21
+
+### Added
+
+- **Mutation support for spacing / periodicity test** — after entering the motif,
+  a second prompt asks for a mutation rate (0 = exact only; enter N for 1-per-N-nt,
+  maximum N = 6).  When rate > 0, `find_with_mutations` is used and exact +
+  approximate positions are merged (deduplicated) before the gap-cluster and
+  Rayleigh tests.  The output header shows the match mode and exact/approx counts.
+
+### Changed
+
+- **Sequence operations menu reordered** into three visually distinct color blocks:
+  - Items 1–9 (bold cyan) — single-sequence analysis: Find all matches, Search
+    with mutations, Motif extensions, Print core, Motif spacing / periodicity test,
+    Gapped motif search, Extend match pair, Covered area, Core neighbors (text export).
+  - Items 10–13 (bold yellow) — statistical analysis: Rank core motifs (Markov/FDR),
+    Mutation-family scoring, Alignment score for two sequences, K-mer Markov analysis.
+  - Item 14 (dim white) — other: Export hairpins to CSV.
+  A blank line separates each block.
+
+- **`gen_menu` / `show_menu`** accept a new `splits` parameter (list of
+  `(boundary_index, color)` pairs) for multi-block menu coloring; existing `split`
+  (single int) behavior is unchanged.
+
 ## [0.1.2] - 2026-05-21
 
 ### Added
