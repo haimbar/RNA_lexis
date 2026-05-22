@@ -2390,7 +2390,7 @@ def batch_spacing_test_input(file_path, txt, strs):
     safe_input(fmttxt(["\nPress Enter to continue"], [''], ['white']))
 
 
-_FASTA_EXTENSIONS = {'.fasta', '.fa', '.fna', '.fas'}
+
 
 
 def _clear_workspace(workdir, file_path):
@@ -2403,13 +2403,17 @@ def _clear_workspace(workdir, file_path):
         return False
 
     all_files = [f for f in os.listdir(workdir) if os.path.isfile(os.path.join(workdir, f))]
-    input_file = os.path.basename(file_path)
-    fasta_files = {f for f in all_files if os.path.splitext(f)[1].lower() in _FASTA_EXTENSIONS}
-    to_keep = fasta_files | {input_file}
+    # Keep only the original input file and its session JSON.
+    # Deliberately NOT keeping all .fa files — logo plots generate temporary
+    # .fa intermediates that should be treated as output and deleted.
+    input_basename = os.path.basename(file_path)
+    input_stem = os.path.splitext(input_basename)[0]
+    session_json = input_stem + '.json'
+    to_keep = {f for f in all_files if f in {input_basename, session_json}}
     to_delete = sorted(f for f in all_files if f not in to_keep)
 
     if not to_delete:
-        print(fmttxt(["No files to delete (only FASTA files found)."], [''], ['green']))
+        print(fmttxt(["No output files to delete."], [''], ['green']))
         safe_input(fmttxt(["Press Enter to continue"], [''], ['white']))
         return False
 
