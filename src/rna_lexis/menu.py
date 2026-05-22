@@ -1632,7 +1632,12 @@ def markov_kmer_input(txt, file_path=''):
     fn_str = safe_input(fmttxt(['Output CSV file',
                                  f'[default: {os.path.basename(default_csv)}]: '],
                                 ['bold', ''], ['yellow', 'cyan']) + ' ').strip()
-    out_csv = fn_str if fn_str else default_csv
+    if not fn_str:
+        out_csv = default_csv
+    elif not os.path.isabs(fn_str):
+        out_csv = os.path.join(os.path.dirname(file_path) or '.', fn_str)
+    else:
+        out_csv = fn_str
 
     print(fmttxt([f'Computing Markov p-values for k={k}, order={order} …'],
                  [''], ['cyan']))
@@ -2255,12 +2260,17 @@ def batch_spacing_test_input(file_path, txt, strs):
         mutr_n = 0
     mutr = 0.0 if mutr_n <= 0 else min(1.0 / mutr_n, 1.0 / 6.0)
 
-    default_out = f'{file_path}_spacing_batch.csv'
+    default_out = f'{os.path.splitext(file_path)[0]}_spacing_batch.csv'
     out_str = safe_input(fmttxt(
-        ['Output CSV file', f'[default: {default_out}]: '],
+        ['Output CSV file', f'[default: {os.path.basename(default_out)}]: '],
         ['bold', ''], ['yellow', 'cyan']
     ) + ' ').strip()
-    out_csv = out_str if out_str else default_out
+    if not out_str:
+        out_csv = default_out
+    elif not os.path.isabs(out_str):
+        out_csv = os.path.join(os.path.dirname(file_path) or '.', out_str)
+    else:
+        out_csv = out_str
 
     L = len(txt)
     cores_set   = set(strs['corelist'])
