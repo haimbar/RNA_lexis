@@ -231,18 +231,29 @@ def choose_enst(datadir=''):
     """Interactively prompt for an Ensembl transcript ID and load its cDNA.
 
     Before hitting the network, the function looks for a cached session JSON
-    whose filename starts with the bare transcript ID in datadir.  If a cached
-    file is found it is loaded and returned immediately.  Otherwise the cDNA
-    sequence is fetched via the Ensembl REST API, the user is prompted for a
-    save directory, and a minimal session dict is returned.
+    whose filename starts with the bare transcript ID.  The search walks the
+    parent of datadir (so sessions in any sibling gene directory are found).
+    If a cached file is found it is loaded and returned immediately.  Otherwise
+    the cDNA sequence is fetched via the Ensembl REST API, the user is prompted
+    for a save directory, and a minimal session dict is returned.
 
     Args:
-        datadir: Directory to search for cached session files (default: '').
+        datadir: Directory used to locate cached session files (default: '').
 
     Returns:
         A session dict with keys ``file_path``, ``txt``, ``txtb``, ``is_rna``,
         ``source`` (``'ensembl'``), ``enst``, and ``dir``.
     """
+    # Search the parent of datadir so cached sessions in sibling gene dirs
+    # are also found (e.g. NEAT1 session inside ~/Desktop/temp/NEAT1/ while
+    # the current datadir is ~/Desktop/temp/NORAD/).
+    _search_root = (os.path.dirname(datadir.rstrip(os.sep))
+                    if datadir else '') or datadir or ''
+    # Open the save-directory dialog at the parent level so the user sees all
+    # sibling gene directories and can easily navigate to the correct one,
+    # rather than defaulting to the previous gene's directory.
+    _save_init = _search_root or None
+
     while True:
         enst = safe_input(fmttxt(["Enter Ensembl transcript ID (ENST...): "],
                                  ['bold'], ['yellow']))
@@ -251,9 +262,9 @@ def choose_enst(datadir=''):
             print(fmttxt(["Please enter a transcript ID."], ['bold'], ['red']))
             continue
         base_id = enst.split('.')[0]  # strip version suffix (e.g. ENST00000123.5 -> ENST00000123)
-        if datadir and os.path.isdir(datadir):
+        if _search_root and os.path.isdir(_search_root):
             matches = [os.path.join(root, f)
-                       for root, _, files in os.walk(datadir)
+                       for root, _, files in os.walk(_search_root)
                        for f in files
                        if f.startswith(base_id) and f.endswith('.json')]
             if matches:
@@ -269,10 +280,14 @@ def choose_enst(datadir=''):
             pseudo_name = f"{tid}_{label}".replace(" ", "_")
             print(fmttxt([f"Fetched {tid} ({label}), length={len(txt)} nt"],
                          [''], ['green']))
-            print(fmttxt([f"Choose the directory to save the data"],
-                         [''], ['yellow']))
-            path = openDir(initial_dir=datadir or None)
-            print(path)
+            print(fmttxt([f"Choose the directory to SAVE this session's data:"],
+                         ['bold'], ['yellow']))
+            path = openDir(initial_dir=_save_init)
+            if not path:
+                print(fmttxt(["No directory selected — session not saved. Try again or press Ctrl+D to cancel."],
+                             ['bold'], ['red']))
+                continue
+            print(fmttxt([f"Session will be saved to:", path], ['', ''], ['green', 'cyan']))
             return({
                 'file_path': pseudo_name,
                 'txt': txt,
@@ -330,8 +345,14 @@ def load_from_paste(datadir=''):
     if name == '':
         name = default_name
 
-    print(fmttxt(["Choose the directory to save the data"], [''], ['yellow']))
-    path = openDir(initial_dir=datadir or None)
+    # Open the dialog at the parent of datadir so users see all sibling gene
+    # directories rather than defaulting to the previous gene's directory.
+    _save_init = (os.path.dirname(datadir.rstrip(os.sep))
+                  if datadir else '') or datadir or None
+    print(fmttxt(["Choose the directory to SAVE this session's data:"], ['bold'], ['yellow']))
+    path = openDir(initial_dir=_save_init)
+    if not path:
+        raise ValueError("No save directory selected.")
 
     return {
         'file_path': name,
