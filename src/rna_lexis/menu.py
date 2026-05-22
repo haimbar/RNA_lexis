@@ -58,8 +58,8 @@ def _prompt_save(plotly=False, session_dir=''):
                             ['bold', ''], ['yellow', 'cyan']) + ' ').strip()
     scale = 1
     if fn:
-        if session_dir and not os.path.isabs(fn):
-            fn = os.path.join(session_dir, fn)
+        if not os.path.isabs(fn):
+            fn = os.path.join(session_dir or os.getcwd(), fn)
         root = os.path.splitext(fn)[0]
         fmt_hint = ('[1: PNG standard (default), 2: PNG high-res 3x, 3: SVG, 4: HTML]'
                     if plotly else
@@ -500,7 +500,7 @@ def _collect_neighbors_params(fn, txt, strs):
     if ttl == '':
         ttl = default_ttl
 
-    fn_out, scale = _prompt_save(plotly=True, session_dir=os.path.dirname(fn))
+    fn_out, scale = _prompt_save(plotly=True, session_dir=os.path.dirname(os.path.abspath(fn)))
 
     xrange = safe_input(fmttxt(["Enter the range to plot (leave blank for all, or use 'min, max')",
                                  "[Default: '']"], ['bold', ''], ['yellow', 'cyan']) + " ")
@@ -616,7 +616,7 @@ def neighbors_condensed_export_input(fn, txt, strs):
     if not fn_out:
         fn_out = default_out
     elif not os.path.isabs(fn_out):
-        fn_out = os.path.join(os.path.dirname(fn) or '.', fn_out)
+        fn_out = os.path.join(os.path.dirname(os.path.abspath(fn)), fn_out)
 
     export_nbrs_condensed(seq, wds, txt, sortby='CP', wd=wd, xrange=xrange, file=fn_out)
 
@@ -662,18 +662,18 @@ def kmers_input(fn, txt, defvals):
                             ['bold',''], ["yellow", "cyan"]) + " ")
         if zmin == '':
             zmin = 1.96
-        fn_out, scale = _prompt_save(session_dir=os.path.dirname(fn))
+        fn_out, scale = _prompt_save(session_dir=os.path.dirname(os.path.abspath(fn)))
         if val == 1:
             plotzscore(kmers, float(zmin), robust=False, file=fn_out, scale=scale)
         else:
             plotzscore(kmers, float(zmin), robust=True, file=fn_out, scale=scale)
         return None
     if val == 3:
-        fn_out, scale = _prompt_save(session_dir=os.path.dirname(fn))
+        fn_out, scale = _prompt_save(session_dir=os.path.dirname(os.path.abspath(fn)))
         plotkmerhist(kmers, k, file=fn_out, scale=scale)
         return None
     if val == 4:
-        fn_out, scale = _prompt_save(session_dir=os.path.dirname(fn))
+        fn_out, scale = _prompt_save(session_dir=os.path.dirname(os.path.abspath(fn)))
         plot_frequency_rank(kmers, k, file=fn_out, scale=scale)
 
 
@@ -736,13 +736,13 @@ def logo_input(txt, strs, file_path=''):
         if fmt == '':
             fmt = "pdf"
         fmt = fmt.lower()
-    session_dir = os.path.dirname(file_path) if file_path else ''
+    session_dir = os.path.dirname(os.path.abspath(file_path)) if file_path else ''
     default_fn = s0 + "_logo"
     fn = safe_input(fmttxt([f"Enter the output file name: [{default_fn}]"], ['bold'], ['yellow']))
     if fn == '':
         fn = os.path.join(session_dir, default_fn) if session_dir else default_fn
-    elif not os.path.isabs(fn) and session_dir:
-        fn = os.path.join(session_dir, fn)
+    elif not os.path.isabs(fn):
+        fn = os.path.join(session_dir or os.getcwd(), fn)
     plot_logo(s0, k, txt, muts=nmut, outfile=fn, fmt=fmt)
 
 
@@ -773,7 +773,7 @@ def coverage_input(txt, strs, file_path=''):
     cvrs = dict()
     for i in range(len(wds)):
         cvrs[wds[i]] = cover(wds[i], txt, pwr=pwr)
-    fn_out, scale = _prompt_save(session_dir=os.path.dirname(file_path))
+    fn_out, scale = _prompt_save(session_dir=os.path.dirname(os.path.abspath(file_path)) if file_path else '')
     plot_coverage(txt, cvrs, pwr, file=fn_out, scale=scale)
 
 
@@ -1124,9 +1124,9 @@ def extend_match_input(txt, file_path='', default_mutr=1/6):
     if results:
         import csv, re as _re
         slug = _re.sub(r'[^a-zA-Z0-9_-]', '_', seq)[:40]
-        session_dir = os.path.dirname(file_path) if file_path else ''
+        session_dir = os.path.dirname(os.path.abspath(file_path)) if file_path else os.getcwd()
         _default_csv = f'extensions_{slug}.csv'
-        default_fn = os.path.join(session_dir, _default_csv) if session_dir else _default_csv
+        default_fn = os.path.join(session_dir, _default_csv)
         fn_str = safe_input(
             fmttxt(['Save all pairs to CSV', f'[Enter for {_default_csv}, Ctrl+D to skip]: '],
                    ['bold', ''], ['yellow', 'cyan']) + ' '
@@ -1135,7 +1135,7 @@ def extend_match_input(txt, file_path='', default_mutr=1/6):
             fn_str = fn_str.strip()
             if not fn_str:
                 fn_csv = default_fn
-            elif not os.path.isabs(fn_str) and session_dir:
+            elif not os.path.isabs(fn_str):
                 fn_csv = os.path.join(session_dir, fn_str)
             else:
                 fn_csv = fn_str
@@ -1341,9 +1341,9 @@ def motif_extensions_input(txt, file_path=''):
     if results:
         import csv, re as _re
         slug = _re.sub(r'[^a-zA-Z0-9_-]', '_', motif)[:40]
-        session_dir = os.path.dirname(file_path) if file_path else ''
+        session_dir = os.path.dirname(os.path.abspath(file_path)) if file_path else os.getcwd()
         _default_csv = f'extensions_{slug}.csv'
-        default_fn = os.path.join(session_dir, _default_csv) if session_dir else _default_csv
+        default_fn = os.path.join(session_dir, _default_csv)
         fn_str = safe_input(
             fmttxt(['Save all pairs to CSV', f'[Enter for {_default_csv}, Ctrl+D to skip]: '],
                    ['bold', ''], ['yellow', 'cyan']) + ' '
@@ -1352,7 +1352,7 @@ def motif_extensions_input(txt, file_path=''):
             fn_str = fn_str.strip()
             if not fn_str:
                 fn_csv = default_fn
-            elif not os.path.isabs(fn_str) and session_dir:
+            elif not os.path.isabs(fn_str):
                 fn_csv = os.path.join(session_dir, fn_str)
             else:
                 fn_csv = fn_str
@@ -1412,7 +1412,7 @@ def hairpins_input(txt, file_path, minSL=8, minLL=3, maxLL=40):
     if not fn:
         fn = default_out
     elif not os.path.isabs(fn):
-        fn = os.path.join(os.path.dirname(file_path) or '.', fn)
+        fn = os.path.join(os.path.dirname(os.path.abspath(file_path)), fn)
 
     print(fmttxt(['Searching for hairpins...'], [''], ['cyan']))
     hairpins = gen_hairpins(txt, minSL=minSL, minLL=minLL, maxLL=maxLL)
@@ -1450,7 +1450,7 @@ def markov_input(txt, file_path=''):
                                ['bold', ''], ['yellow', 'cyan']) + ' ').strip()
     k = int(k_str) if k_str.isdigit() and int(k_str) > 1 else 6
 
-    base = os.path.splitext(file_path)[0] if file_path else 'sequence'
+    base = os.path.splitext(os.path.abspath(file_path))[0] if file_path else os.path.join(os.getcwd(), 'sequence')
     default_csv = f'{base}_kmer{k}_markov.csv'
     fn_str = safe_input(fmttxt(['Output CSV file',
                                  f'[default: {os.path.basename(default_csv)}]: '],
@@ -1458,7 +1458,7 @@ def markov_input(txt, file_path=''):
     if not fn_str:
         out_csv = default_csv
     elif not os.path.isabs(fn_str):
-        out_csv = os.path.join(os.path.dirname(file_path) or '.', fn_str)
+        out_csv = os.path.join(os.path.dirname(os.path.abspath(file_path)), fn_str)
     else:
         out_csv = fn_str
 
@@ -1518,7 +1518,7 @@ def decompose_motif_input(txt, file_path=''):
     except ValueError:
         alpha = 0.05
 
-    base = os.path.splitext(file_path)[0] if file_path else 'sequence'
+    base = os.path.splitext(os.path.abspath(file_path))[0] if file_path else os.path.join(os.getcwd(), 'sequence')
     default_csv = f'{base}_decompose_{motif}.csv'
     fn_str = safe_input(fmttxt(['Output CSV file',
                                  f'[default: {os.path.basename(default_csv)}]: '],
@@ -1526,7 +1526,7 @@ def decompose_motif_input(txt, file_path=''):
     if not fn_str:
         out_csv = default_csv
     elif not os.path.isabs(fn_str):
-        out_csv = os.path.join(os.path.dirname(file_path) or '.', fn_str)
+        out_csv = os.path.join(os.path.dirname(os.path.abspath(file_path)), fn_str)
     else:
         out_csv = fn_str
 
@@ -1601,7 +1601,7 @@ def scramble_input(txt, file_path=''):
                                   ['bold', ''], ['yellow', 'cyan']) + ' ').strip()
     seed = int(seed_str) if seed_str.lstrip('-').isdigit() else 0
 
-    base = os.path.splitext(file_path)[0] if file_path else 'sequence'
+    base = os.path.splitext(os.path.abspath(file_path))[0] if file_path else os.path.join(os.getcwd(), 'sequence')
     default_csv = f'{base}_kmer{k}_pvalues.csv'
     fn_str = safe_input(fmttxt(['Output CSV file',
                                  f'[default: {os.path.basename(default_csv)}]: '],
@@ -1609,7 +1609,7 @@ def scramble_input(txt, file_path=''):
     if not fn_str:
         out_csv = default_csv
     elif not os.path.isabs(fn_str):
-        out_csv = os.path.join(os.path.dirname(file_path) or '.', fn_str)
+        out_csv = os.path.join(os.path.dirname(os.path.abspath(file_path)), fn_str)
     else:
         out_csv = fn_str
 
@@ -1663,7 +1663,7 @@ def markov_kmer_input(txt, file_path=''):
     order = int(order_str) if order_str.isdigit() and int(order_str) <= max_order else 1
     order = min(order, max_order)
 
-    base = os.path.splitext(file_path)[0] if file_path else 'sequence'
+    base = os.path.splitext(os.path.abspath(file_path))[0] if file_path else os.path.join(os.getcwd(), 'sequence')
     default_csv = f'{base}_kmer{k}_order{order}_markov_pvalues.csv'
     fn_str = safe_input(fmttxt(['Output CSV file',
                                  f'[default: {os.path.basename(default_csv)}]: '],
@@ -1671,7 +1671,7 @@ def markov_kmer_input(txt, file_path=''):
     if not fn_str:
         out_csv = default_csv
     elif not os.path.isabs(fn_str):
-        out_csv = os.path.join(os.path.dirname(file_path) or '.', fn_str)
+        out_csv = os.path.join(os.path.dirname(os.path.abspath(file_path)), fn_str)
     else:
         out_csv = fn_str
 
@@ -1725,13 +1725,14 @@ def statistical_core_input(file_path, txt, strs):
     enrich = float(enrich) if enrich else 10.0
     alpha = float(alpha) if alpha else 0.05
 
-    default_out = f'{os.path.splitext(file_path)[0]}_ranked_cores_markov.csv'
+    _abs_fp = os.path.abspath(file_path)
+    default_out = f'{os.path.splitext(_abs_fp)[0]}_ranked_cores_markov.csv'
     out_csv = safe_input(fmttxt(['Output CSV file', f'[default: {os.path.basename(default_out)}]: '],
                                 ['bold', ''], ['yellow', 'cyan']) + ' ').strip()
     if not out_csv:
         out_csv = default_out
     elif not os.path.isabs(out_csv):
-        out_csv = os.path.join(os.path.dirname(file_path) or '.', out_csv)
+        out_csv = os.path.join(os.path.dirname(_abs_fp), out_csv)
 
     print(fmttxt(['Scoring shared core candidates with Markov/FDR support...'],
                  [''], ['cyan']))
@@ -1790,13 +1791,14 @@ def mutation_family_input(file_path, txt, strs):
     expected = float(expected) if expected else 5.0
     alpha = float(alpha) if alpha else 0.05
 
-    default_out = f'{os.path.splitext(file_path)[0]}_mutation_family_tests.csv'
+    _abs_fp = os.path.abspath(file_path)
+    default_out = f'{os.path.splitext(_abs_fp)[0]}_mutation_family_tests.csv'
     out_csv = safe_input(fmttxt(['Output CSV file', f'[default: {os.path.basename(default_out)}]: '],
                                 ['bold', ''], ['yellow', 'cyan']) + ' ').strip()
     if not out_csv:
         out_csv = default_out
     elif not os.path.isabs(out_csv):
-        out_csv = os.path.join(os.path.dirname(file_path) or '.', out_csv)
+        out_csv = os.path.join(os.path.dirname(_abs_fp), out_csv)
     best_csv = os.path.splitext(out_csv)[0] + '_best.csv'
 
     print(fmttxt([f'Testing {len(motifs)} motif(s) across allowed Hamming radii...'],
@@ -1847,13 +1849,14 @@ def gapped_motif_input(file_path, txt):
     min_gap = int(min_gap_s) if min_gap_s else 0
     max_gap = int(max_gap_s) if max_gap_s else 30
 
-    default_out = f'{os.path.splitext(file_path)[0]}_gapped_motif.csv'
+    _abs_fp = os.path.abspath(file_path)
+    default_out = f'{os.path.splitext(_abs_fp)[0]}_gapped_motif.csv'
     out_csv = safe_input(fmttxt(['Output CSV file', f'[default: {os.path.basename(default_out)}]: '],
                                 ['bold', ''], ['yellow', 'cyan']) + ' ').strip()
     if not out_csv:
         out_csv = default_out
     elif not os.path.isabs(out_csv):
-        out_csv = os.path.join(os.path.dirname(file_path) or '.', out_csv)
+        out_csv = os.path.join(os.path.dirname(_abs_fp), out_csv)
 
     score = score_gapped_motif(txt, left, right, min_gap=min_gap, max_gap=max_gap)
     hits = find_gapped_motif_hits(txt, left, right, min_gap=min_gap, max_gap=max_gap)
@@ -1895,7 +1898,7 @@ def sequence_hits_input(fn, txt):
                                    ['bold', ''], ['yellow', 'cyan']) + ' ').strip()
     mutr = 1 / (float(mutr_str) if mutr_str else 6)
 
-    fn_out, scale = _prompt_save(plotly=True, session_dir=os.path.dirname(fn))
+    fn_out, scale = _prompt_save(plotly=True, session_dir=os.path.dirname(os.path.abspath(fn)))
 
     cnd = safe_input(fmttxt(['Condense x-axis (skip large empty regions)?', '[y/N]: '],
                              ['bold', ''], ['yellow', 'cyan']) + ' ')
@@ -1957,7 +1960,7 @@ def sequence_hits_input(fn, txt):
         det_file = safe_input(fmttxt(['Output HTML file',
                                        f'[default: {os.path.splitext(os.path.basename(fn))[0]}_detail.html]: '],
                                       ['bold', ''], ['yellow', 'cyan']) + ' ').strip()
-        _session_dir = os.path.dirname(fn)
+        _session_dir = os.path.dirname(os.path.abspath(fn))
         if not det_file:
             det_file = os.path.splitext(fn)[0] + '_detail.html'
         else:
@@ -2314,7 +2317,7 @@ def batch_spacing_test_input(file_path, txt, strs):
     if not out_str:
         out_csv = default_out
     elif not os.path.isabs(out_str):
-        out_csv = os.path.join(os.path.dirname(file_path) or '.', out_str)
+        out_csv = os.path.join(os.path.dirname(os.path.abspath(file_path)), out_str)
     else:
         out_csv = out_str
 
@@ -2540,6 +2543,15 @@ def menus():
                     if defvals['datadir']:
                         prefs['last_used_dir'] = defvals['datadir']
                         save_prefs(prefs)
+                    # Ensure file_path is always absolute.
+                    # Paste/ENST sessions store only a bare name; anchor it to
+                    # the session directory so os.path.dirname() works correctly
+                    # on every OS (macOS chdir() is not reliable enough).
+                    if not os.path.isabs(file_path):
+                        _anchor = (workdir or defvals.get('datadir') or
+                                   os.path.dirname(globals().get('fn', '')) or
+                                   os.getcwd())
+                        file_path = os.path.join(_anchor, os.path.basename(file_path))
                     globals()['fn'] = file_path + ".json"
                     stats = {
                         'txt_len':      len(txt),
