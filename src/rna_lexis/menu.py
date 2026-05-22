@@ -43,11 +43,12 @@ class EOFSignal(Exception):
     pass
 
 
-def _prompt_save(plotly=False):
+def _prompt_save(plotly=False, session_dir=''):
     """Prompt for an output file name and format.
 
     Args:
-        plotly: when True, include HTML as an extra format option.
+        plotly:      when True, include HTML as an extra format option.
+        session_dir: directory to prepend when the user types a bare filename.
 
     Returns:
         (filepath, scale) — filepath is '' if the user chose screen-only.
@@ -57,6 +58,8 @@ def _prompt_save(plotly=False):
                             ['bold', ''], ['yellow', 'cyan']) + ' ').strip()
     scale = 1
     if fn:
+        if session_dir and not os.path.isabs(fn):
+            fn = os.path.join(session_dir, fn)
         root = os.path.splitext(fn)[0]
         fmt_hint = ('[1: PNG standard (default), 2: PNG high-res 3x, 3: SVG, 4: HTML]'
                     if plotly else
@@ -497,7 +500,7 @@ def _collect_neighbors_params(fn, txt, strs):
     if ttl == '':
         ttl = default_ttl
 
-    fn_out, scale = _prompt_save(plotly=True)
+    fn_out, scale = _prompt_save(plotly=True, session_dir=os.path.dirname(fn))
 
     xrange = safe_input(fmttxt(["Enter the range to plot (leave blank for all, or use 'min, max')",
                                  "[Default: '']"], ['bold', ''], ['yellow', 'cyan']) + " ")
@@ -659,22 +662,22 @@ def kmers_input(fn, txt, defvals):
                             ['bold',''], ["yellow", "cyan"]) + " ")
         if zmin == '':
             zmin = 1.96
-        fn_out, scale = _prompt_save()
+        fn_out, scale = _prompt_save(session_dir=os.path.dirname(fn))
         if val == 1:
             plotzscore(kmers, float(zmin), robust=False, file=fn_out, scale=scale)
         else:
             plotzscore(kmers, float(zmin), robust=True, file=fn_out, scale=scale)
         return None
     if val == 3:
-        fn_out, scale = _prompt_save()
+        fn_out, scale = _prompt_save(session_dir=os.path.dirname(fn))
         plotkmerhist(kmers, k, file=fn_out, scale=scale)
         return None
     if val == 4:
-        fn_out, scale = _prompt_save()
+        fn_out, scale = _prompt_save(session_dir=os.path.dirname(fn))
         plot_frequency_rank(kmers, k, file=fn_out, scale=scale)
 
 
-def logo_input(txt, strs):
+def logo_input(txt, strs, file_path=''):
     """Interactive handler for generating a WebLogo sequence logo.
 
     Prompts for a core/motif sequence, the number of flanking bases to
@@ -733,14 +736,17 @@ def logo_input(txt, strs):
         if fmt == '':
             fmt = "pdf"
         fmt = fmt.lower()
-    fn = s0 + "_logo"
-    fn = safe_input(fmttxt([f"Enter the output file name: [{fn}]"],['bold'], ['yellow']))
+    session_dir = os.path.dirname(file_path) if file_path else ''
+    default_fn = s0 + "_logo"
+    fn = safe_input(fmttxt([f"Enter the output file name: [{default_fn}]"], ['bold'], ['yellow']))
     if fn == '':
-        fn = s0 + "_logo"
-    plot_logo(s0, k , txt, muts=nmut, outfile=fn, fmt=fmt)
+        fn = os.path.join(session_dir, default_fn) if session_dir else default_fn
+    elif not os.path.isabs(fn) and session_dir:
+        fn = os.path.join(session_dir, fn)
+    plot_logo(s0, k, txt, muts=nmut, outfile=fn, fmt=fmt)
 
 
-def coverage_input(txt, strs):
+def coverage_input(txt, strs, file_path=''):
     """Interactive handler for the weighted-coverage bar chart.
 
     Prompts for which string list to use (cores or xmotifs), the length
@@ -748,8 +754,9 @@ def coverage_input(txt, strs):
     cover() for each selected string and delegates to plot_coverage().
 
     Args:
-        txt:  Full source sequence.
-        strs: Session strings dict with keys ``'corelist'`` and ``'xmotifs'``.
+        txt:       Full source sequence.
+        strs:      Session strings dict with keys ``'corelist'`` and ``'xmotifs'``.
+        file_path: Session file path; used to anchor relative output filenames.
     """
     wds = safe_input(fmttxt(["Enter the strings to include in calculation",
                         "[1: cores (default), 2: xmotifs]"], ['bold',''], ["yellow", "cyan"]) + " ")
@@ -766,7 +773,7 @@ def coverage_input(txt, strs):
     cvrs = dict()
     for i in range(len(wds)):
         cvrs[wds[i]] = cover(wds[i], txt, pwr=pwr)
-    fn_out, scale = _prompt_save()
+    fn_out, scale = _prompt_save(session_dir=os.path.dirname(file_path))
     plot_coverage(txt, cvrs, pwr, file=fn_out, scale=scale)
 
 
@@ -994,7 +1001,7 @@ def search_input(txt, mutr=1/6, M=4):
     safe_input(fmttxt(['Press Enter to continue'], [''], ['white']))
 
 
-def extend_match_input(txt, default_mutr=1/6):
+def extend_match_input(txt, file_path='', default_mutr=1/6):
     """Prompt for a seed sequence and mutation rate, then find and display the
     longest Hamming-bounded extension for every pair of exact seed occurrences."""
     RED   = '\033[31m'
@@ -1117,14 +1124,21 @@ def extend_match_input(txt, default_mutr=1/6):
     if results:
         import csv, re as _re
         slug = _re.sub(r'[^a-zA-Z0-9_-]', '_', seq)[:40]
-        default_fn = f'extensions_{slug}.csv'
+        session_dir = os.path.dirname(file_path) if file_path else ''
+        _default_csv = f'extensions_{slug}.csv'
+        default_fn = os.path.join(session_dir, _default_csv) if session_dir else _default_csv
         fn_str = safe_input(
-            fmttxt(['Save all pairs to CSV', f'[Enter for {default_fn}, Ctrl+D to skip]: '],
+            fmttxt(['Save all pairs to CSV', f'[Enter for {_default_csv}, Ctrl+D to skip]: '],
                    ['bold', ''], ['yellow', 'cyan']) + ' '
         )
         if fn_str is not None:
             fn_str = fn_str.strip()
-            fn_csv = fn_str if fn_str else default_fn
+            if not fn_str:
+                fn_csv = default_fn
+            elif not os.path.isabs(fn_str) and session_dir:
+                fn_csv = os.path.join(session_dir, fn_str)
+            else:
+                fn_csv = fn_str
             with open(fn_csv, 'w', newline='') as _f:
                 w = csv.writer(_f)
                 w.writerow(['rank', 'pos1', 'pos2', 'left_ext', 'right_ext',
@@ -1141,7 +1155,7 @@ def extend_match_input(txt, default_mutr=1/6):
     safe_input(fmttxt(['Press Enter to continue'], [''], ['white']))
 
 
-def motif_extensions_input(txt):
+def motif_extensions_input(txt, file_path=''):
     """Prompt for a motif, find matches (exact or with mutations), then extend
     each pair of exact occurrences and display lengths, Hamming distances, and
     colour-coded alignments."""
@@ -1327,14 +1341,21 @@ def motif_extensions_input(txt):
     if results:
         import csv, re as _re
         slug = _re.sub(r'[^a-zA-Z0-9_-]', '_', motif)[:40]
-        default_fn = f'extensions_{slug}.csv'
+        session_dir = os.path.dirname(file_path) if file_path else ''
+        _default_csv = f'extensions_{slug}.csv'
+        default_fn = os.path.join(session_dir, _default_csv) if session_dir else _default_csv
         fn_str = safe_input(
-            fmttxt(['Save all pairs to CSV', f'[Enter for {default_fn}, Ctrl+D to skip]: '],
+            fmttxt(['Save all pairs to CSV', f'[Enter for {_default_csv}, Ctrl+D to skip]: '],
                    ['bold', ''], ['yellow', 'cyan']) + ' '
         )
         if fn_str is not None:
             fn_str = fn_str.strip()
-            fn_csv = fn_str if fn_str else default_fn
+            if not fn_str:
+                fn_csv = default_fn
+            elif not os.path.isabs(fn_str) and session_dir:
+                fn_csv = os.path.join(session_dir, fn_str)
+            else:
+                fn_csv = fn_str
             with open(fn_csv, 'w', newline='') as _f:
                 w = csv.writer(_f)
                 w.writerow(['rank', 'pos1', 'pos2', 'left_ext', 'right_ext',
@@ -1434,7 +1455,12 @@ def markov_input(txt, file_path=''):
     fn_str = safe_input(fmttxt(['Output CSV file',
                                  f'[default: {os.path.basename(default_csv)}]: '],
                                 ['bold', ''], ['yellow', 'cyan']) + ' ').strip()
-    out_csv = fn_str if fn_str else default_csv
+    if not fn_str:
+        out_csv = default_csv
+    elif not os.path.isabs(fn_str):
+        out_csv = os.path.join(os.path.dirname(file_path) or '.', fn_str)
+    else:
+        out_csv = fn_str
 
     print(fmttxt([f'Computing Markov p-values for k={k} …'], [''], ['cyan']))
     results = markov_kmer_pvalues(txt, k=k)
@@ -1497,7 +1523,12 @@ def decompose_motif_input(txt, file_path=''):
     fn_str = safe_input(fmttxt(['Output CSV file',
                                  f'[default: {os.path.basename(default_csv)}]: '],
                                 ['bold', ''], ['yellow', 'cyan']) + ' ').strip()
-    out_csv = fn_str if fn_str else default_csv
+    if not fn_str:
+        out_csv = default_csv
+    elif not os.path.isabs(fn_str):
+        out_csv = os.path.join(os.path.dirname(file_path) or '.', fn_str)
+    else:
+        out_csv = fn_str
 
     print(fmttxt([f'Decomposing {motif!r} …'], [''], ['cyan']))
     results = decompose_motif(txt, motif, alpha=alpha, min_k=min_k)
@@ -1575,7 +1606,12 @@ def scramble_input(txt, file_path=''):
     fn_str = safe_input(fmttxt(['Output CSV file',
                                  f'[default: {os.path.basename(default_csv)}]: '],
                                 ['bold', ''], ['yellow', 'cyan']) + ' ').strip()
-    out_csv = fn_str if fn_str else default_csv
+    if not fn_str:
+        out_csv = default_csv
+    elif not os.path.isabs(fn_str):
+        out_csv = os.path.join(os.path.dirname(file_path) or '.', fn_str)
+    else:
+        out_csv = fn_str
 
     print(fmttxt([f'Running {N} shuffles with k={k} …'], [''], ['cyan']))
     results = scramble_kmer_pvalues(txt, k=k, N=N, seed=seed)
@@ -1689,11 +1725,13 @@ def statistical_core_input(file_path, txt, strs):
     enrich = float(enrich) if enrich else 10.0
     alpha = float(alpha) if alpha else 0.05
 
-    default_out = f'{file_path}_ranked_cores_markov.csv'
-    out_csv = safe_input(fmttxt(['Output CSV file', f'[default: {default_out}]: '],
+    default_out = f'{os.path.splitext(file_path)[0]}_ranked_cores_markov.csv'
+    out_csv = safe_input(fmttxt(['Output CSV file', f'[default: {os.path.basename(default_out)}]: '],
                                 ['bold', ''], ['yellow', 'cyan']) + ' ').strip()
     if not out_csv:
         out_csv = default_out
+    elif not os.path.isabs(out_csv):
+        out_csv = os.path.join(os.path.dirname(file_path) or '.', out_csv)
 
     print(fmttxt(['Scoring shared core candidates with Markov/FDR support...'],
                  [''], ['cyan']))
@@ -1752,11 +1790,13 @@ def mutation_family_input(file_path, txt, strs):
     expected = float(expected) if expected else 5.0
     alpha = float(alpha) if alpha else 0.05
 
-    default_out = f'{file_path}_mutation_family_tests.csv'
-    out_csv = safe_input(fmttxt(['Output CSV file', f'[default: {default_out}]: '],
+    default_out = f'{os.path.splitext(file_path)[0]}_mutation_family_tests.csv'
+    out_csv = safe_input(fmttxt(['Output CSV file', f'[default: {os.path.basename(default_out)}]: '],
                                 ['bold', ''], ['yellow', 'cyan']) + ' ').strip()
     if not out_csv:
         out_csv = default_out
+    elif not os.path.isabs(out_csv):
+        out_csv = os.path.join(os.path.dirname(file_path) or '.', out_csv)
     best_csv = os.path.splitext(out_csv)[0] + '_best.csv'
 
     print(fmttxt([f'Testing {len(motifs)} motif(s) across allowed Hamming radii...'],
@@ -1807,11 +1847,13 @@ def gapped_motif_input(file_path, txt):
     min_gap = int(min_gap_s) if min_gap_s else 0
     max_gap = int(max_gap_s) if max_gap_s else 30
 
-    default_out = f'{file_path}_gapped_motif.csv'
-    out_csv = safe_input(fmttxt(['Output CSV file', f'[default: {default_out}]: '],
+    default_out = f'{os.path.splitext(file_path)[0]}_gapped_motif.csv'
+    out_csv = safe_input(fmttxt(['Output CSV file', f'[default: {os.path.basename(default_out)}]: '],
                                 ['bold', ''], ['yellow', 'cyan']) + ' ').strip()
     if not out_csv:
         out_csv = default_out
+    elif not os.path.isabs(out_csv):
+        out_csv = os.path.join(os.path.dirname(file_path) or '.', out_csv)
 
     score = score_gapped_motif(txt, left, right, min_gap=min_gap, max_gap=max_gap)
     hits = find_gapped_motif_hits(txt, left, right, min_gap=min_gap, max_gap=max_gap)
@@ -1853,7 +1895,7 @@ def sequence_hits_input(fn, txt):
                                    ['bold', ''], ['yellow', 'cyan']) + ' ').strip()
     mutr = 1 / (float(mutr_str) if mutr_str else 6)
 
-    fn_out, scale = _prompt_save(plotly=True)
+    fn_out, scale = _prompt_save(plotly=True, session_dir=os.path.dirname(fn))
 
     cnd = safe_input(fmttxt(['Condense x-axis (skip large empty regions)?', '[y/N]: '],
                              ['bold', ''], ['yellow', 'cyan']) + ' ')
@@ -1915,10 +1957,14 @@ def sequence_hits_input(fn, txt):
         det_file = safe_input(fmttxt(['Output HTML file',
                                        f'[default: {os.path.splitext(os.path.basename(fn))[0]}_detail.html]: '],
                                       ['bold', ''], ['yellow', 'cyan']) + ' ').strip()
+        _session_dir = os.path.dirname(fn)
         if not det_file:
             det_file = os.path.splitext(fn)[0] + '_detail.html'
-        elif not det_file.lower().endswith('.html'):
-            det_file += '.html'
+        else:
+            if not det_file.lower().endswith('.html'):
+                det_file += '.html'
+            if not os.path.isabs(det_file) and _session_dir:
+                det_file = os.path.join(_session_dir, det_file)
         plot_sequence_hits_detailed(seq_data, txt, det_start, det_end,
                                     title=title, file=det_file)
 
@@ -2616,9 +2662,9 @@ blockquote{{border-left:4px solid #ccc;margin:1em 0;padding:0.5em 1em;color:#555
                             case 3:
                                 kmers_input(file_path, txt, defvals)
                             case 4:
-                                logo_input(txt, strs)
+                                logo_input(txt, strs, file_path)
                             case 5:
-                                coverage_input(txt, strs)
+                                coverage_input(txt, strs, file_path)
                             case 6:
                                 sequence_hits_input(file_path, txt)
                             case 7:
@@ -2635,7 +2681,7 @@ blockquote{{border-left:4px solid #ccc;margin:1em 0;padding:0.5em 1em;color:#555
                             case 2:
                                 search_input(txt)
                             case 3:
-                                motif_extensions_input(txt)
+                                motif_extensions_input(txt, file_path)
                             case 4:
                                 print_core_input(txt, strs)
                             case 5:
@@ -2643,7 +2689,7 @@ blockquote{{border-left:4px solid #ccc;margin:1em 0;padding:0.5em 1em;color:#555
                             case 6:
                                 gapped_motif_input(file_path, txt)
                             case 7:
-                                extend_match_input(txt)
+                                extend_match_input(txt, file_path)
                             case 8:
                                 txt_coverage_input(txt, strs)
                             case 9:
