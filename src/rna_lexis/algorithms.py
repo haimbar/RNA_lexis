@@ -287,9 +287,10 @@ def cores(txt, xmotifs, minclen=6):
     as a core if it appears as a substring in at least two xmotifs that have no
     containment relationship (neither is a substring of the other).
 
-    Only xmotif-length values of k are tried.  Between two consecutive xmotif
-    lengths the candidate pool is unchanged, so no new cores can emerge at
-    intermediate k values.
+    All integer k values from the starting length down to minclen are tried.
+    Skipping intermediate values (as was done previously) can miss cores whose
+    length does not coincide with any xmotif length — most critically when the
+    minimum xmotif length is raised above minclen.
 
     Args:
         txt:      Source text (unused; kept for API compatibility).
@@ -310,7 +311,8 @@ def cores(txt, xmotifs, minclen=6):
     # xmotif has that length.  Start from the 2nd-longest in that case.
     n_at_longest = sum(1 for xm in xmotifs if len(xm) == lengths[0])
     start_idx = 0 if n_at_longest > 1 else 1
-    k_values = [L for L in lengths[start_idx:] if L >= minclen]
+    k_start = lengths[start_idx] if start_idx < len(lengths) else lengths[0]
+    k_values = list(range(k_start, minclen - 1, -1))
 
     cores_found = set()
 

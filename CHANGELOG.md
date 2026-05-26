@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.1.5] - 2026-05-26
+
+### Fixed
+
+- **`cores()` missed short cores when `minxmlen` > `mincorelen`** — the function
+  previously iterated only over k values that coincided with actual xmotif lengths,
+  skipping intermediate lengths where valid shared cores could exist.  A core of
+  length L was silently missed whenever no xmotif had exactly length L (e.g.
+  `TGTATATA` at length 8 was found with `minxmlen=7` but lost with `minxmlen=10`,
+  even though the same three xmotifs containing it were present in both cases).
+  The fix iterates every integer k from the starting length down to `minclen`,
+  letting the pool update naturally at each xmotif-length boundary.
+
 ## [0.1.3] - 2026-05-21
 
 ### Added
