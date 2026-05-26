@@ -292,6 +292,13 @@ within ±`wnd` windows. Returns a dict sorted by score.
 
 Conditional probability `P(word | core)` for each word in `words`.
 
+### `compute_default_wd(txt, corelist) -> int`
+
+Adaptive neighbourhood half-width W(N) = clamp(⌊N·ln2 / (2·ñ)⌋, 20, 80), where N
+is `len(txt)` and ñ is the median occurrence count of sequences in `corelist`.
+Holds the null co-occurrence probability near 0.5 independent of transcript length.
+Used as the suggested default for all neighbourhood-width prompts.
+
 ### `count_kgrams(s, k, skip='_', at_least=2, return_sorted=True, rev=False) -> dict`
 
 Count all k-length substrings in `s`.

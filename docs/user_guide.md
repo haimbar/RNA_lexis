@@ -139,12 +139,14 @@ Visualises how a chosen core sequence co-occurs with its neighbours across the f
 | Prompt | Default | Notes |
 |:---|:---:|:---|
 | Sequence to analyse | no default | Must be present in the text |
-| Neighbourhood width | 40 | Number of positions on each side of the sequence |
+| Neighbourhood width | adaptive W(N) | Number of positions on each side of the sequence |
 | Strings to include | 2 (xmotifs) | 1 = cores, 2 = xmotifs |
 | Plot title | `<file> <sequence>` | Free text |
 | Output file name | *(screen only)* | Leave blank to display interactively |
 | Output format | 1 (PNG standard) | 1 = PNG, 2 = PNG high-res (3×), 3 = SVG, 4 = HTML |
 | X-axis range | *(full range)* | `min, max` e.g. `100, 500` |
+
+The adaptive default W(N) = clamp(⌊N·ln2 / (2·ñ)⌋, 20, 80), where N is the transcript length and ñ is the median occurrence count of the detected cores. This keeps the null co-occurrence probability near 0.5 regardless of transcript length. The computed value is shown at the prompt; press Enter to accept it or type a different integer.
 
 The interactive HTML plot is always shown on screen. If an output file name is given, the plot is also saved to disk in the chosen format.
 
@@ -165,7 +167,7 @@ A compact three-band overview of the same neighbourhood data, designed for long 
 | Prompt | Default | Notes |
 |:---|:---:|:---|
 | Sequence to analyse | no default | Must be present in the text |
-| Neighbourhood width | 40 | Number of positions on each side of the sequence |
+| Neighbourhood width | adaptive W(N) | Number of positions on each side of the sequence |
 | Strings to include | 2 (xmotifs) | 1 = cores, 2 = xmotifs |
 | Plot title | `<file> <sequence>` | Free text |
 | Output file name | *(screen only)* | Leave blank to display interactively |
@@ -510,7 +512,7 @@ Every occurrence of s0, its single-nucleotide mutations, and all its neighbours 
 | Prompt | Default | Notes |
 |:---|:---:|:---|
 | Sequence to analyse | no default | Must be present in the text |
-| Neighbourhood width | 40 | Half-window used for interval expansion and gap merging |
+| Neighbourhood width | adaptive W(N) | Half-window used for interval expansion and gap merging |
 | Strings to include | 2 (xmotifs) | 1 = cores, 2 = xmotifs |
 | X-axis range | *(full range)* | `min, max` e.g. `100, 500` — limits which positions are considered |
 | Output CSV file | `<session>_<seq>_regions.csv` | In the session directory; leave blank to use the default |
