@@ -15,6 +15,7 @@ from rna_lexis.algorithms import (
     find_all_matches, print_core, find_with_mutations, extend_match_pair,
     find_longest_extensions, gen_hairpins,
     scramble_kmer_pvalues, markov_kmer_pvalues, decompose_motif,
+    compute_default_wd,
 )
 from rna_lexis.alignment import gotoh_global, gotoh_local, print_alignment
 from rna_lexis.plots import (
@@ -523,10 +524,11 @@ def _collect_neighbors_params(fn, txt, strs):
         return None
 
     seq = seq.lower()
-    wd_prompt = fmttxt(['Enter neighborhood width:', '[default: 40]'],
+    default_wd = compute_default_wd(txt, strs["corelist"])
+    wd_prompt = fmttxt(['Enter neighborhood width:', f'[default: {default_wd}]'],
                        ['bold', ''], ['yellow', 'cyan'])
     wd = safe_input(wd_prompt + " ")
-    wd = 40 if wd == '' else int(wd)
+    wd = default_wd if wd == '' else int(wd)
 
     wds_prompt = fmttxt(['Enter the strings to include in calculation ',
                          '[1: cores, or 2: xmotifs (default)]'],
@@ -629,9 +631,10 @@ def neighbors_condensed_export_input(fn, txt, strs):
         return
 
     seq = seq.lower()
-    wd = safe_input(fmttxt(['Enter neighborhood width:', '[default: 40]'],
+    default_wd = compute_default_wd(txt, strs["corelist"])
+    wd = safe_input(fmttxt(['Enter neighborhood width:', f'[default: {default_wd}]'],
                             ['bold', ''], ['yellow', 'cyan']) + " ")
-    wd = 40 if wd == '' else int(wd)
+    wd = default_wd if wd == '' else int(wd)
 
     wds_prompt = fmttxt(['Enter the strings to include ',
                          '[1: cores, or 2: xmotifs (default)]'],

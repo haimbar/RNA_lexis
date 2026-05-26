@@ -1410,3 +1410,25 @@ def scramble_kmer_pvalues(txt: str, k: int, N: int, seed: int = 0) -> list:
         })
     results.sort(key=lambda x: min(x['pvalue_over'], x['pvalue_under']))
     return results
+
+
+def compute_default_wd(txt, corelist, w_min=20, w_max=80):
+    """Return the adaptive neighbourhood half-width W for a transcript.
+
+    Uses W(N) = clamp(floor(N * ln2 / (2 * n_tilde)), w_min, w_max), where
+    n_tilde is the median occurrence count of the cores in txt.  This keeps
+    the null co-occurrence probability for the typical core at 0.5 regardless
+    of transcript length (see windowsize.tex for the derivation).
+
+    Falls back to w_max when corelist is empty or all counts are zero.
+    """
+    N = len(txt)
+    if not corelist:
+        return w_max
+    counts = [len(find_all_matches(c, txt)) for c in corelist]
+    counts = [c for c in counts if c > 0]
+    if not counts:
+        return w_max
+    n_tilde = statistics.median(counts)
+    w = math.floor(N * math.log(2) / (2 * n_tilde))
+    return max(w_min, min(w_max, w))
