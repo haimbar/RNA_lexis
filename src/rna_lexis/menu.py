@@ -394,7 +394,7 @@ def choose_input_source(datadir=''):
 
 # fmttxt([menu_ttl[menu_level]], ['bold'], ['yellow'])
 
-def gen_menu(ttl, sttl, opts, clr='True', split=None, splits=None):
+def gen_menu(ttl, sttl, opts, clr='True', split=None, splits=None, labels=None):
     """Render a numbered menu to stdout.
 
     Clears the screen (via print_hdr) if clr is truthy, prints a decorated
@@ -413,6 +413,9 @@ def gen_menu(ttl, sttl, opts, clr='True', split=None, splits=None):
                 starts a new color block (bold, except 'white' which is dim).
                 A blank line is printed between blocks.  Takes precedence
                 over split when both are given.
+        labels: List of group-header strings, one per color block defined by
+                splits (including the first block).  Each label is printed in
+                dim italic above the first item of its block.
     """
     print_hdr(ttl, clr)
     if not opts:
@@ -426,9 +429,24 @@ def gen_menu(ttl, sttl, opts, clr='True', split=None, splits=None):
     hd = '-'*declen + f" {sttl} " + '-'*declen
     print(hd)
     _split_boundaries = {b for b, _ in splits} if splits else set()
+    # Map each block's starting item index to its (color, label) for quick lookup.
+    _block_info = {}
+    if splits and labels:
+        _block_info[0] = ('cyan', labels[0] if len(labels) > 0 else None)
+        for k, (boundary, blk_color) in enumerate(splits):
+            lbl = labels[k + 1] if k + 1 < len(labels) else None
+            _block_info[boundary] = (blk_color, lbl)
+    if 0 in _block_info:
+        color, lbl = _block_info[0]
+        if lbl:
+            print(fmttxt([f"  {lbl}:"], ['dim'], [color]))
     for i in range(len(opts)):
         if splits is not None and i > 0 and i in _split_boundaries:
             print()   # blank line between color blocks
+            if i in _block_info:
+                color, lbl = _block_info[i]
+                if lbl:
+                    print(fmttxt([f"  {lbl}:"], ['dim'], [color]))
         if opts[i] == 'Quit':
             print(fmttxt([f"{i+1}. {opts[i]}"], ['bold'], ['red']))
         elif opts[i] == 'Back':
@@ -449,7 +467,7 @@ def gen_menu(ttl, sttl, opts, clr='True', split=None, splits=None):
     print('-'*hbarlen + '\n')
 
 
-def show_menu(fn, ttl, submenu, clr: True, split=None, splits=None):
+def show_menu(fn, ttl, submenu, clr: True, split=None, splits=None, labels=None):
     """Display a menu and block until the user enters a valid selection.
 
     Calls gen_menu() to render the numbered list, then loops reading input
@@ -464,12 +482,13 @@ def show_menu(fn, ttl, submenu, clr: True, split=None, splits=None):
         split:   Forwarded to gen_menu; items before this index are styled as
                  primary, items from this index onward as utility.
         splits:  Forwarded to gen_menu for multi-block coloring.
+        labels:  Forwarded to gen_menu for group-header annotations.
 
     Returns:
         Integer in [0, len(submenu)] representing the user's choice.
         Returns -1 on EOFError (Ctrl+D).
     """
-    gen_menu(fn, ttl, submenu, clr, split=split, splits=splits)
+    gen_menu(fn, ttl, submenu, clr, split=split, splits=splits, labels=labels)
     while True:
         try:
             main_prompt = fmttxt(['Select a menu option', f'[1-{len(submenu)}]'], 
@@ -2597,10 +2616,12 @@ def menus():
                 else:
                     # Sequence ops menu uses 3 color blocks; other menus use a single split.
                     _seq_splits = [(9, 'yellow'), (14, 'white')]
+                    _seq_labels = ["single-sequence analysis", "statistical analysis", "other"]
                     val = show_menu(file_path, menu_ttl[menu_level], submenu[menu_level],
                                     clr=defvals['clr'],
                                     split={0: 4, 1: 6}.get(menu_level),
-                                    splits=_seq_splits if menu_level == 2 else None)
+                                    splits=_seq_splits if menu_level == 2 else None,
+                                    labels=_seq_labels if menu_level == 2 else None)
                     # Top level menu:
                     if menu_level == 0:
                         # Quit:
