@@ -10,6 +10,11 @@ from re import sub
 from math import ceil, floor, log10, log, exp
 
 from rna_lexis.dialogs import openFile, openDir
+from importlib.metadata import version as _pkg_version
+try:
+    __version__ = _pkg_version("RNA_lexis")
+except Exception:
+    __version__ = ""
 from rna_lexis.algorithms import (
     count_kgrams, contains_only_rna, cover, find_boundary, cores,
     find_all_matches, print_core, find_with_mutations, extend_match_pair,
@@ -172,7 +177,7 @@ def print_hdr(fn, clr=True):
     if clr == True:
         print("\033c", end="")
         # Package name banner: white text on light-blue background
-        print("\033[104m\033[97m     RNA_lexis     \033[0m")
+        print(f"\033[104m\033[97m     RNA_lexis {__version__}    \033[0m")
         print(fmttxt(["\nFile:\t", fn],['bold', ''], ['white', 'white']))
         print('\n')
     else:
