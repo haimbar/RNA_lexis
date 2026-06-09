@@ -87,15 +87,23 @@ Construct from a JSON dict with `SessionData.from_dict(d)`.
 ```python
 @dataclass
 class AlignmentResult:
-    mode:        str   # "global" or "local"
-    aligned_a:   str   # first sequence with gap characters ('-')
-    aligned_b:   str   # second sequence with gap characters ('-')
-    markers:     str   # '|' match, '.' mismatch, ' ' gap
-    score:       int   # raw alignment score
-    matches:     int   # number of identical aligned columns
-    mismatches:  int   # number of non-gap mismatched columns
-    gaps:        int   # number of columns where at least one side is '-'
+    mode:        str            # "global" or "local"
+    aligned_a:   str            # first sequence with gap characters ('-')
+    aligned_b:   str            # second sequence with gap characters ('-')
+    markers:     str            # '|' match, '.' mismatch, ' ' gap
+    score:       int            # raw alignment score
+    matches:     int            # number of identical aligned columns
+    mismatches:  int            # number of non-gap mismatched columns
+    gaps:        int            # number of columns where at least one side is '-'
+    start_a:     Optional[int]  # 0-indexed start of local region in a (local only)
+    end_a:       Optional[int]  # 0-indexed exclusive end in a (local only)
+    start_b:     Optional[int]  # 0-indexed start of local region in b (local only)
+    end_b:       Optional[int]  # 0-indexed exclusive end in b (local only)
 ```
+
+`start_a`/`end_a`/`start_b`/`end_b` are `None` for global alignment.  For local
+alignment `a[start_a:end_a]` and `b[start_b:end_b]` are the portions of the input
+sequences that were actually aligned.
 
 ### `Hairpin` (algorithms)
 
@@ -179,9 +187,13 @@ Write (or reopen) the initialisation summary CSV and open it in the default
 application. Returns the path to the written file.
 
 - Output file: `<fn>_test_init.csv` (use `init_summary_path(fn)` to compute).
-- If the file already exists, has the correct columns, and `force=False`, the
-  file is opened rather than regenerated.
-- Pass `force=True` to always regenerate (e.g. after recomputing xmotifs/cores).
+- A SHA-256 hash of the inputs (`xm`, `cores`, `txt`, `mutr`, `M`) is stored in
+  a `.chk` sidecar file.  If the CSV already exists, has the required statistical
+  columns, and the hash matches the current inputs, the file is opened without
+  regeneration.  Regeneration is triggered automatically when inputs change.
+- Pass `force=True` to bypass the hash check and always regenerate.
+- On Linux, if LibreOffice already has the file open (detected via its lock file),
+  `xdg-open` is skipped; `wmctrl` / `xdotool` is tried to raise the window.
 - For RNA/DNA sequences (alphabet ⊆ `{a,c,g,t,u}`), statistical columns are
   automatically added (see below).
 
@@ -359,11 +371,16 @@ Global (Needleman–Wunsch) alignment with affine gap penalties.
 
 ### `gotoh_local(a, b, match=2, mismatch=-1, gap_open=-5, gap_extend=-1) -> AlignmentResult`
 
-Local (Smith–Waterman) alignment with affine gap penalties.
+Local (Smith–Waterman) alignment with affine gap penalties.  Populates
+`start_a`, `end_a`, `start_b`, `end_b` in the result so callers can identify
+which portion of each input sequence was aligned (`a[start_a:end_a]`,
+`b[start_b:end_b]`).
 
 ### `print_alignment(res, width=80) -> None`
 
-Print a formatted alignment to stdout.
+Print a formatted alignment to stdout.  For local alignments, also prints
+`"Best local region: seq1[X:Y] (N bp), seq2[Z:W] (M bp)"` before the
+alignment block.
 
 ### `make_markers(aligned_a, aligned_b) -> tuple[str, int, int, int]`
 
@@ -606,13 +623,22 @@ for r in over[:10]:
 ### 8 — Alignment
 
 ```python
-from rna_lexis.alignment import gotoh_global, print_alignment
+from rna_lexis.alignment import gotoh_global, gotoh_local, print_alignment
 
+# Global alignment of two explicit windows (recommended when window boundaries
+# are known in advance):
 a, b = txt[100:160], txt[340:400]
 res = gotoh_global(a, b)
 print_alignment(res)
 normalised = res.score / gotoh_global(a, a).score
 print(f"Normalised score: {normalised:.3f}")
+
+# Local alignment — reports which sub-region was the best match:
+res_local = gotoh_local(a, b)
+print_alignment(res_local)  # prints "Best local region: seq1[X:Y], seq2[Z:W]"
+# Access position fields:
+print(a[res_local.start_a:res_local.end_a])  # aligned portion of a
+print(b[res_local.start_b:res_local.end_b])  # aligned portion of b
 ```
 
 ### 9 — Load an existing session

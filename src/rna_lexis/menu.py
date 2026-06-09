@@ -926,8 +926,10 @@ def print_alignment_score(txt):
     """
     n = len(txt)
     while True:
-        p1 = safe_input(fmttxt(["Enter start position of first sequence", f"[0-{n-1}]"],
+        p1 = safe_input(fmttxt(["Enter start position of first sequence", f"[0-{n-1}, blank to cancel]"],
                                 ['bold', ''], ['yellow', 'cyan']) + " ")
+        if p1 == '':
+            return None
         try:
             p1 = int(p1)
             if 0 <= p1 < n:
@@ -937,8 +939,10 @@ def print_alignment_score(txt):
             print(fmttxt(["Invalid input! Please enter an integer."], ['bold'], ['red']))
 
     while True:
-        p2 = safe_input(fmttxt(["Enter start position of second sequence", f"[0-{n-1}]"],
+        p2 = safe_input(fmttxt(["Enter start position of second sequence", f"[0-{n-1}, blank to cancel]"],
                                 ['bold', ''], ['yellow', 'cyan']) + " ")
+        if p2 == '':
+            return None
         try:
             p2 = int(p2)
             if 0 <= p2 < n:
@@ -949,8 +953,10 @@ def print_alignment_score(txt):
 
     max_len = min(n - p1, n - p2)
     while True:
-        ln = safe_input(fmttxt(["Enter sequence length", f"[1-{max_len}]"],
+        ln = safe_input(fmttxt(["Enter sequence length", f"[1-{max_len}, blank to cancel]"],
                                 ['bold', ''], ['yellow', 'cyan']) + " ")
+        if ln == '':
+            return None
         try:
             ln = int(ln)
             if 1 <= ln <= max_len:
@@ -963,21 +969,25 @@ def print_alignment_score(txt):
     s2 = txt[p2:p2 + ln]
 
     while True:
-        mode = safe_input(fmttxt(["Alignment type", "[1: Local (default), 2: Global]"],
+        mode = safe_input(fmttxt(["Alignment type", "[1: Global (default), 2: Local]"],
                                   ['bold', ''], ['yellow', 'cyan']) + " ")
         if mode in ('', '1'):
-            res = gotoh_local(s1, s2)
+            res = gotoh_global(s1, s2)
             break
         elif mode == '2':
-            res = gotoh_global(s1, s2)
+            res = gotoh_local(s1, s2)
             break
         print(fmttxt(["Please enter 1 or 2."], ['bold'], ['red']))
 
     print_alignment(res)
 
     # ── Normalised score (self-alignment) ────────────────────────────────
-    # Self-alignment score = ln * match (match default = 2)
-    self_score = ln * 2
+    # For local alignment use the actual aligned length, not the requested window.
+    if res.mode == "local" and res.start_a is not None:
+        score_len = res.end_a - res.start_a
+    else:
+        score_len = ln
+    self_score = score_len * 2
     norm = res.score / self_score if self_score > 0 else 0.0
     print(fmttxt([f"Normalised score (self-alignment):  {norm:.3f}  "
                   f"[self-score = {self_score}]"], [''], ['cyan']))
@@ -988,7 +998,7 @@ def print_alignment_score(txt):
     _LAM, _K = 1.28, 0.46
     if res.score > 0:
         bit = (_LAM * res.score - log(_K)) / log(2)
-        eval = _K * ln * len(txt) * exp(-_LAM * res.score)
+        eval = _K * score_len * len(txt) * exp(-_LAM * res.score)
         print(fmttxt([f"Bit score:                          {bit:.1f} bits"], [''], ['cyan']))
         print(fmttxt([f"E-value (vs transcript len {len(txt)}):  {eval:.2e}"], [''], ['cyan']))
     else:
@@ -2643,7 +2653,7 @@ def menus():
                             continue
                         # show the core file (CSV)
                         if val == 3:
-                            init_summary(file_path, strs['xmotifs'], strs['corelist'], txt, force=True)
+                            init_summary(file_path, strs['xmotifs'], strs['corelist'], txt)
                         if val == 4:
                             print_stats(txt, strs)
                             continue

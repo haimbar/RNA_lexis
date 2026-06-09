@@ -1,5 +1,40 @@
 # Changelog
 
+## [0.1.6] - 2026-06-09
+
+### Fixed
+
+- **"Open Core file" no longer regenerates the CSV on every click** — a SHA-256
+  hash of the current inputs (xmotifs, corelist, sequence, and scoring parameters)
+  is now stored in a `.chk` sidecar file alongside the CSV.  If the file exists,
+  has the required statistical columns, and the inputs have not changed, it is opened
+  directly without regeneration.  Regeneration still happens automatically when
+  inputs change.
+
+- **"Open Core file" no longer opens a second LibreOffice window on Linux** — before
+  calling `xdg-open`, RNA_lexis now checks for a LibreOffice lock file
+  (`.~lock.<filename>#`).  If present, `wmctrl` or `xdotool` is tried first to
+  raise the existing window; no new `xdg-open` call is made regardless.
+
+- **"Alignment score for two sequences" prompts now support blank-to-cancel** — the
+  three numeric input prompts ("Enter start position of first/second sequence",
+  "Enter sequence length") now accept a bare Enter as a cancel signal and return
+  immediately to the menu.
+
+- **"Alignment score for two sequences" default changed from Local to Global** —
+  Smith–Waterman local alignment can return a shorter region than the window the
+  user specified, which was surprising.  The default is now Needleman–Wunsch global
+  alignment; local alignment is still available as option 2.
+
+- **Local alignment now reports the best-matching region's position** — `AlignmentResult`
+  gains four optional fields (`start_a`, `end_a`, `start_b`, `end_b`) populated by
+  `gotoh_local`; `print_alignment` shows `"Best local region: seq1[X:Y] (N bp),
+  seq2[Z:W] (M bp)"` when these are set.
+
+- **Normalised score and E-value corrected for local alignment** — the self-alignment
+  denominator and E-value query length now use the actual aligned region length rather
+  than the user-requested window length.
+
 ## [0.1.5] - 2026-05-26
 
 ### Fixed

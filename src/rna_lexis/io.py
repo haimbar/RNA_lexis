@@ -1,5 +1,6 @@
 """File I/O, session management, and network fetch utilities."""
 
+import hashlib
 import os
 import os.path
 import re
@@ -155,6 +156,56 @@ def is_valid_session(filepath: str) -> Optional[SessionData]:
         return None
 
 
+def _is_file_open_in_libreoffice(filepath):
+    """Return True if *filepath* is currently locked by LibreOffice."""
+    dirpath = os.path.dirname(os.path.abspath(filepath))
+    basename = os.path.basename(filepath)
+    return os.path.exists(os.path.join(dirpath, f'.~lock.{basename}#'))
+
+
+def _try_raise_libreoffice_window(filepath):
+    """Attempt to raise the LibreOffice window for *filepath* to the foreground.
+    Returns True if a window-manager command succeeded."""
+    stem = os.path.splitext(os.path.basename(filepath))[0]
+    for cmd in (
+        ['wmctrl', '-a', stem],
+        ['xdotool', 'search', '--name', stem, 'windowactivate', '--sync'],
+    ):
+        try:
+            if subprocess.run(cmd, capture_output=True, timeout=3).returncode == 0:
+                return True
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            pass
+    return False
+
+
+def _summary_inputs_hash(xm, cores, txt, mutr, M):
+    """Stable hash of the parameters that determine the content of the summary CSV."""
+    payload = json.dumps(
+        [sorted(xm), sorted(set(cores) - set(xm)), txt, mutr, M],
+        sort_keys=True, default=str,
+    )
+    return hashlib.sha256(payload.encode()).hexdigest()[:20]
+
+
+def _read_summary_hash(csv_path):
+    """Return the stored input hash for *csv_path*, or None if absent/unreadable."""
+    try:
+        with open(csv_path + '.chk', 'r') as fh:
+            return fh.read().strip() or None
+    except Exception:
+        return None
+
+
+def _write_summary_hash(csv_path, h):
+    """Persist *h* alongside *csv_path* for future change-detection."""
+    try:
+        with open(csv_path + '.chk', 'w') as fh:
+            fh.write(h)
+    except Exception:
+        pass
+
+
 def open_file_with_default_software(filename):
     """Opens a file using the default application for the current OS."""
     if platform.system() == 'Windows':
@@ -162,9 +213,11 @@ def open_file_with_default_software(filename):
     elif platform.system() == 'Darwin':
         subprocess.run(['open', filename], check=True) # For macOS
     else:
-        # Assume Linux or other POSIX-like system
-        # xdg-open is a common standard on many Linux distributions
-        subprocess.run(['xdg-open', filename], check=True)
+        # On Linux, skip xdg-open if LibreOffice already has the file open.
+        if _is_file_open_in_libreoffice(filename):
+            _try_raise_libreoffice_window(filename)
+        else:
+            subprocess.run(['xdg-open', filename], check=True)
 
 
 def _close_in_excel(filepath):
@@ -305,6 +358,7 @@ def init_summary(fn, xm, cores, txt, mutr=1/6, M = 4, force=False):
     '''Input: xmotifs, cores, and the gene sequence. Output: a
     report summarizing the properties of the sequences.'''
     out_csv = init_summary_path(fn)
+    current_hash = _summary_inputs_hash(xm, cores, txt, mutr, M)
     if os.path.isfile(out_csv) and not force:
         try:
             with open(out_csv, 'r', encoding='utf-8', errors='ignore') as handle:
@@ -313,12 +367,16 @@ def init_summary(fn, xm, cores, txt, mutr=1/6, M = 4, force=False):
             header = []
         required_test_columns = {'expected_markov', 'enrichment_markov', 'p_markov', 'q_markov'}
         if required_test_columns.issubset(set(header)):
-            try:
-                open_file_with_default_software(out_csv)
-            except Exception:
-                pass
-            return out_csv
-        print(f"Existing summary lacks statistical columns; regenerating: {out_csv}")
+            stored_hash = _read_summary_hash(out_csv)
+            if stored_hash is None or stored_hash == current_hash:
+                try:
+                    open_file_with_default_software(out_csv)
+                except Exception:
+                    pass
+                return out_csv
+            print(f"Input parameters changed; regenerating: {out_csv}")
+        else:
+            print(f"Existing summary lacks statistical columns; regenerating: {out_csv}")
 
 
     xm_cores = xm + list(set(cores) - set(xm))
@@ -422,6 +480,7 @@ def init_summary(fn, xm, cores, txt, mutr=1/6, M = 4, force=False):
     ]:
         try:
             df.to_csv(candidate, index=False)
+            _write_summary_hash(candidate, current_hash)
             print(f"Wrote summary to: {candidate}")
             open_file_with_default_software(candidate)
             return candidate
@@ -429,6 +488,7 @@ def init_summary(fn, xm, cores, txt, mutr=1/6, M = 4, force=False):
             if platform.system() == 'Windows' and _close_in_excel(candidate):
                 try:
                     df.to_csv(candidate, index=False)
+                    _write_summary_hash(candidate, current_hash)
                     print(f"Wrote summary to: {candidate}")
                     open_file_with_default_software(candidate)
                     return candidate

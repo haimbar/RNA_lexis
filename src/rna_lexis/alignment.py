@@ -1,14 +1,14 @@
 """Sequence alignment with affine gap penalties (Gotoh global and local)."""
 
-from dataclasses import dataclass
-from typing import Tuple
+from dataclasses import dataclass, field
+from typing import Optional, Tuple
 
 NEG_INF = -10**15  # sufficiently small for typical scoring ranges
 
 
 @dataclass
 class AlignmentResult:
-    mode: str                 # "global" or "local"
+    mode: str                       # "global" or "local"
     aligned_a: str
     aligned_b: str
     markers: str
@@ -16,6 +16,10 @@ class AlignmentResult:
     matches: int
     mismatches: int
     gaps: int
+    start_a: Optional[int] = None   # 0-indexed start in input a (local only)
+    end_a: Optional[int] = None     # 0-indexed exclusive end in input a (local only)
+    start_b: Optional[int] = None   # 0-indexed start in input b (local only)
+    end_b: Optional[int] = None     # 0-indexed exclusive end in input b (local only)
 
 
 def score_sub(a: str, b: str, match: int, mismatch: int) -> int:
@@ -65,7 +69,13 @@ def print_alignment(res: AlignmentResult, width: int = 80) -> None:
         width: Number of alignment columns per printed block (default 80).
     """
     print(f"{res.mode.upper()} ALIGNMENT (affine gaps)")
-    print(f"Score: {res.score} | matches: {res.matches} | mismatches: {res.mismatches} | gaps: {res.gaps}\n")
+    print(f"Score: {res.score} | matches: {res.matches} | mismatches: {res.mismatches} | gaps: {res.gaps}")
+    if res.mode == "local" and res.start_a is not None:
+        len_a = res.end_a - res.start_a
+        len_b = res.end_b - res.start_b
+        print(f"Best local region: seq1[{res.start_a}:{res.end_a}] ({len_a} bp), "
+              f"seq2[{res.start_b}:{res.end_b}] ({len_b} bp)")
+    print()
     for i in range(0, len(res.aligned_a), width):
         print(res.aligned_a[i:i+width])
         print(res.markers[i:i+width])
@@ -323,6 +333,10 @@ def gotoh_local(a: str, b: str, match: int = 2, mismatch: int = -1,
             j -= 1
             state = prev
 
+    # i and j now point to the DP cell where traceback stopped (not consumed),
+    # so the aligned region in a is a[i:best_i] and in b is b[j:best_j].
+    local_start_a, local_start_b = i, j
+
     aligned_a = "".join(reversed(out_a))
     aligned_b = "".join(reversed(out_b))
     markers, matches, mismatches, gaps = make_markers(aligned_a, aligned_b)
@@ -335,5 +349,9 @@ def gotoh_local(a: str, b: str, match: int = 2, mismatch: int = -1,
         score=best_score,
         matches=matches,
         mismatches=mismatches,
-        gaps=gaps
+        gaps=gaps,
+        start_a=local_start_a,
+        end_a=best_i,
+        start_b=local_start_b,
+        end_b=best_j,
     )
