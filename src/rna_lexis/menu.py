@@ -319,15 +319,14 @@ def load_from_paste(datadir=''):
 
     Returns:
         A session dict with keys ``file_path``, ``txt``, ``txtb``, ``is_rna``,
-        ``source`` (``'paste'``), and ``dir``.
-
-    Raises:
-        ValueError: If no sequence characters are found in the pasted text.
+        ``source`` (``'paste'``), and ``dir``; or None if the user cancels
+        (empty paste, no sequence characters, or no save directory selected).
     """
     print(fmttxt(["Paste sequence. Press Enter on an empty line to finish."], ['bold'], ['yellow']))
     first = input().strip()
     if not first:
-        raise ValueError("No sequence pasted.")
+        print(fmttxt(["No sequence entered — returning to menu."], ['bold'], ['red']))
+        return None
 
     lines = [first]
     while True:
@@ -338,7 +337,8 @@ def load_from_paste(datadir=''):
 
     txt = sub('[^a-zA-Z]+', '', "".join(lines)).lower()
     if not txt:
-        raise ValueError("No sequence characters found in pasted text.")
+        print(fmttxt(["No sequence characters found in pasted text."], ['bold'], ['red']))
+        return None
 
     is_rna = contains_only_rna(txt)
     if is_rna:
@@ -358,7 +358,8 @@ def load_from_paste(datadir=''):
     print(fmttxt(["Choose the directory to SAVE this session's data:"], ['bold'], ['yellow']))
     path = openDir(initial_dir=_save_init)
     if not path:
-        raise ValueError("No save directory selected.")
+        print(fmttxt(["No save directory selected — returning to menu."], ['bold'], ['red']))
+        return None
 
     return {
         'file_path': name,
@@ -2598,7 +2599,8 @@ def menus():
                             strs = {'corelist': data["corelist"], 'xmotifs': data["xmotifs"]}
                         else:
                             strs = parsedata(txt, defvals)
-                    workdir = data['dir']
+                    workdir = (data.get('dir') or
+                               os.path.dirname(globals().get('fn', '')) or '')
                     if workdir and os.path.isdir(workdir):
                         chdir(workdir)
                         defvals['datadir'] = workdir
@@ -2789,6 +2791,10 @@ blockquote{{border-left:4px solid #ccc;margin:1em 0;padding:0.5em 1em;color:#555
         
         except EOFSignal:
             # Ctrl+D pressed: reset to main menu
+            menu_level = 0
+        except Exception as _exc:
+            print(fmttxt([f"Unexpected error: {_exc}"], ['bold'], ['red']))
+            print(fmttxt(["Returning to main menu..."], [''], ['yellow']))
             menu_level = 0
 
 

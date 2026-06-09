@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.1.7] - 2026-06-09
+
+### Fixed
+
+- **Crash on loading sessions saved by older versions** — `workdir = data['dir']`
+  now uses `.get('dir')` with a fallback to the directory of the session file,
+  so sessions that pre-date the `dir` key load without error.
+
+- **Crash when pasting an empty or non-alphabetic sequence** — `load_from_paste`
+  previously raised `ValueError` (uncaught) when the user submitted an empty paste,
+  pasted text with no sequence characters, or cancelled the save-directory dialog.
+  All three cases now print a message and return `None` (menu continues normally).
+
+- **Any other unexpected exception in a menu handler no longer crashes the program** —
+  a broad `except Exception` fallback in the main menu loop prints the error and
+  returns to the main menu instead of propagating to the OS.
+
 ## [0.1.6] - 2026-06-09
 
 ### Fixed
