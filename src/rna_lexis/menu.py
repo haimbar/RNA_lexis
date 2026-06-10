@@ -4,6 +4,7 @@ import re
 import sys
 import glob
 import webbrowser
+import multiprocessing
 from os import getpid, chdir
 from os.path import dirname
 from re import sub
@@ -47,6 +48,12 @@ from rna_lexis.statistical import (
 class EOFSignal(Exception):
     """Exception raised when Ctrl+D (EOF) is detected to signal return to main menu."""
     pass
+
+
+def _spawn_plot(fn, *args, **kwargs):
+    """Run a matplotlib plot function in a subprocess so the TUI prompt returns immediately."""
+    p = multiprocessing.Process(target=fn, args=args, kwargs=kwargs, daemon=False)
+    p.start()
 
 
 def _prompt_save(plotly=False, session_dir=''):
@@ -713,17 +720,17 @@ def kmers_input(fn, txt, defvals):
             zmin = 1.96
         fn_out, scale = _prompt_save(session_dir=os.path.dirname(os.path.abspath(fn)))
         if val == 1:
-            plotzscore(kmers, float(zmin), robust=False, file=fn_out, scale=scale)
+            _spawn_plot(plotzscore, kmers, float(zmin), robust=False, file=fn_out, scale=scale)
         else:
-            plotzscore(kmers, float(zmin), robust=True, file=fn_out, scale=scale)
+            _spawn_plot(plotzscore, kmers, float(zmin), robust=True, file=fn_out, scale=scale)
         return None
     if val == 3:
         fn_out, scale = _prompt_save(session_dir=os.path.dirname(os.path.abspath(fn)))
-        plotkmerhist(kmers, k, file=fn_out, scale=scale)
+        _spawn_plot(plotkmerhist, kmers, k, file=fn_out, scale=scale)
         return None
     if val == 4:
         fn_out, scale = _prompt_save(session_dir=os.path.dirname(os.path.abspath(fn)))
-        plot_frequency_rank(kmers, k, file=fn_out, scale=scale)
+        _spawn_plot(plot_frequency_rank, kmers, k, file=fn_out, scale=scale)
 
 
 def logo_input(txt, strs, file_path=''):
@@ -823,7 +830,7 @@ def coverage_input(txt, strs, file_path=''):
     for i in range(len(wds)):
         cvrs[wds[i]] = cover(wds[i], txt, pwr=pwr)
     fn_out, scale = _prompt_save(session_dir=os.path.dirname(os.path.abspath(file_path)) if file_path else '')
-    plot_coverage(txt, cvrs, pwr, file=fn_out, scale=scale)
+    _spawn_plot(plot_coverage, txt, cvrs, pwr, file=fn_out, scale=scale)
 
 
 def find_match_input(txt, strs, minlen=4):
