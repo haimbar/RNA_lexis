@@ -19,18 +19,26 @@ from rna_lexis.io import open_file_with_default_software, open_pdf
 
 
 def plot_seq_nbrs(s0, s, txt, sortby='CP', wd=20, title='', file='',
-                  xrange=[], scale=1, hairpins=[]):
+                  xrange=[], scale=1, hairpins=[], min_occ=2):
     """Plot the genomic positions of a core sequence together with its
     neighbouring cores and single-nucleotide mutants.
 
     Produces an interactive Plotly figure with three horizontal bands:
-    * **Row 0** – occurrences of the query s0 (blue rectangles).
-    * **Rows 1..n** – related cores from s that co-occur near s0 (orchid/green
-      rectangles; green when s0 and the neighbour overlap).
-    * **Rows -1..-m** – single-nucleotide mutants of s0 (red rectangles).
-    A salmon-coloured window of width wd flanking each s0 occurrence is
+
+    * **Row 0** – occurrences of the query s0 (light-blue rectangles; label
+      in dark blue).
+    * **Rows 1..n** – related cores from s that co-occur near s0.  Labels and
+      rectangle borders are dark purple for non-overlapping neighbours and
+      forest green for cores that overlap or contain s0.  Neighbours with
+      fewer than ``min_occ`` co-occurrences (globally, across the full
+      sequence) are omitted.
+    * **Rows -1..-m** – single-nucleotide mutants of s0 (crimson labels;
+      always shown regardless of ``min_occ``).
+
+    A salmon-coloured window of width ``wd`` flanking each s0 occurrence is
     highlighted.  If hairpin regions are supplied, orange bands are drawn
-    below row 0.
+    below row 0.  The horizontal legend uses a 13 pt font and 260 px entry
+    width to prevent column overlap.
 
     Args:
         s0:       Query core sequence.
@@ -50,6 +58,10 @@ def plot_seq_nbrs(s0, s, txt, sortby='CP', wd=20, title='', file='',
                   high-resolution PNG).
         hairpins: List of hairpin dicts (keys: start, end, stem_seq,
                   loop_seq) to draw as orange bands beneath row 0.
+        min_occ:  Minimum number of co-occurrences (within wd of any s0 hit,
+                  counted over the full sequence) required to include a
+                  neighbour.  Mutations are always kept regardless of this
+                  threshold (default 2).
     """
     L = len(txt)
     lc = len(s0)
@@ -62,8 +74,20 @@ def plot_seq_nbrs(s0, s, txt, sortby='CP', wd=20, title='', file='',
         s1 = core_nbrs(s0, s, txt, wnd=wd, rev=True)
     if s0 in s1:
         del s1[s0]
-    n = len(s1)
     related = list(s1.keys())
+
+    if min_occ > 1:
+        pos0_all = find_all_matches(s0, txtl, ret='pos')
+        def _cooccur_count(seq):
+            cnt = 0
+            for p0 in pos0_all:
+                lo, hi = max(0, p0 - wd), p0 + lc + wd
+                for p in find_all_matches(seq, txtl, ret='pos'):
+                    if lo <= p + len(seq) / 2 <= hi:
+                        cnt += 1
+            return cnt
+        related = [seq for seq in related if _cooccur_count(seq) >= min_occ]
+    n = len(related)
 
     # discover mutations, then cache their positions once for both sorting and rendering
     mutset = {s0}
@@ -138,13 +162,13 @@ def plot_seq_nbrs(s0, s, txt, sortby='CP', wd=20, title='', file='',
 
     annotations.append(dict(x=plotxrange[1] * 1.001, y=0.35, text=s0,
                              showarrow=False, xanchor='left',
-                             font=dict(family='courier', size=14, color='blue')))
+                             font=dict(family='courier', size=16, color='darkblue')))
 
     # related cores
     for i, seq in enumerate(related):
         is_cont = (seq in s0) or (s0 in seq)
-        col  = 'rgb(0,255,0)'      if is_cont else 'rgb(218,112,214)'
-        colt = 'rgba(0,255,0,0.3)' if is_cont else 'rgba(218,112,214,0.3)'
+        col  = 'rgb(0,140,50)'      if is_cont else 'rgb(140,45,140)'
+        colt = 'rgba(0,255,0,0.3)'  if is_cont else 'rgba(218,112,214,0.3)'
         arr = nbr_positions[seq]
         for p in arr:
             mrk, sz, colm = 'square', 6, 'blue'
@@ -176,7 +200,7 @@ def plot_seq_nbrs(s0, s, txt, sortby='CP', wd=20, title='', file='',
             maxlenstr = len(seq)
         annotations.append(dict(x=plotxrange[1] * 1.001, y=i + 1.35, text=seq,
                                  showarrow=False, xanchor='left',
-                                 font=dict(family='courier', size=14, color=col)))
+                                 font=dict(family='courier', size=16, color=col)))
 
     # mutations — one shape+trace per occurrence, display string computed once per mutation
     for j, mut in enumerate(arrmut):
@@ -205,7 +229,7 @@ def plot_seq_nbrs(s0, s, txt, sortby='CP', wd=20, title='', file='',
             maxlenstr = len(mut)
         annotations.append(dict(x=plotxrange[1] * 1.001, y=-0.55 - j, text=display,
                                  showarrow=False, xanchor='left',
-                                 font=dict(family='courier', size=14, color='red')))
+                                 font=dict(family='courier', size=16, color='crimson')))
 
     def _leg(name, color, symbol, size=8):
         return go.Scatter(x=[None], y=[None], mode='markers', name=name,
@@ -243,7 +267,8 @@ def plot_seq_nbrs(s0, s, txt, sortby='CP', wd=20, title='', file='',
         annotations=annotations,
         width=fig_width,
         margin=dict(l=left_margin_px, r=estimated_text_width_px, t=40, b=80),
-        legend=dict(orientation='h', yanchor='top', y=-0.05, xanchor='left', x=0),
+        legend=dict(orientation='h', yanchor='top', y=-0.05, xanchor='left', x=0,
+                    font=dict(size=13), entrywidth=260),
         yaxis=dict(tickvals=tick_vals, ticktext=tick_text,
                    zeroline=True, zerolinewidth=2, zerolinecolor='lightgray'),
     )
@@ -482,11 +507,11 @@ def plot_nbrs_condensed(s0, s, txt, sortby='CP', wd=20, title='', file='',
 
     traces += [
         _leg(s0,                                    'darkblue',         'x',      8),
-        _leg('Neighbors (non-overlapping with s0)', 'rgb(218,112,214)', 'square', 8),
-        _leg('Neighbors (overlapping with s0)',     'rgb(0,200,0)',     'square', 8),
+        _leg('Neighbors (non-overlapping with s0)', 'rgb(140,45,140)',  'square', 8),
+        _leg('Neighbors (overlapping with s0)',     'rgb(0,140,50)',    'square', 8),
     ]
     if arrmut:
-        traces.append(_leg('Mutation', 'red', 'square', 8))
+        traces.append(_leg('Mutation', 'crimson', 'square', 8))
     if hairpins:
         traces.append(go.Scatter(x=[None], y=[None], mode='lines',
                                   name='Hairpin region', showlegend=True,
@@ -496,7 +521,8 @@ def plot_nbrs_condensed(s0, s, txt, sortby='CP', wd=20, title='', file='',
         shapes=shapes,
         width=800,
         margin=dict(l=60, r=40, t=30, b=45),
-        legend=dict(orientation='h', yanchor='top', y=-0.05, xanchor='left', x=0),
+        legend=dict(orientation='h', yanchor='top', y=-0.05, xanchor='left', x=0,
+                    font=dict(size=13), entrywidth=260),
         yaxis=dict(tickvals=tick_vals, ticktext=tick_text,
                    zeroline=True, zerolinewidth=2, zerolinecolor='lightgray'),
     )
