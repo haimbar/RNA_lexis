@@ -7,6 +7,7 @@ import math
 import shutil
 import subprocess
 import numpy as np
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 import matplotlib.pyplot as plt
 import plotly.graph_objs as go
 from collections import Counter
@@ -276,20 +277,7 @@ def plot_seq_nbrs(s0, s, txt, sortby='CP', wd=20, title='', file='',
     fig.show()
 
     if file != '':
-        out_file = file
-        try:
-            low = out_file.lower()
-            if low.endswith('.html') or low.endswith('.htm'):
-                fig.write_html(out_file, auto_open=False)
-            else:
-                root, ext = os.path.splitext(out_file)
-                if ext == '':
-                    out_file = f'{out_file}.png'
-                fig.write_image(out_file, scale=scale)
-            open_file_with_default_software(out_file)
-        except Exception as e:
-            print(f'Could not save/open output plot: {out_file}')
-            print(str(e))
+        _save_fig(fig, file, scale)
 
 
 def _squish_lanes(intervals, gap=1):
@@ -320,17 +308,44 @@ def _squish_lanes(intervals, gap=1):
     return result
 
 
+_EXPORT_TIMEOUT = 45  # seconds before assuming Kaleido is hung
+
+
 def _save_fig(fig, file, scale):
-    """Write a Plotly figure to *file* (html or raster) and open it."""
+    """Write a Plotly figure to *file* (html or raster) and open it.
+
+    PNG/SVG export runs with a timeout so a hung Kaleido process never freezes
+    the terminal.  On failure an interactive HTML fallback is saved instead and
+    a plain-text error report is written next to it.
+    """
     try:
         low = file.lower()
         if low.endswith('.html') or low.endswith('.htm'):
             fig.write_html(file, auto_open=False)
-        else:
-            root, ext = os.path.splitext(file)
-            if ext == '':
-                file = f'{file}.png'
-            fig.write_image(file, scale=scale)
+            open_file_with_default_software(file)
+            return
+        root, ext = os.path.splitext(file)
+        if not ext:
+            file = f'{file}.png'
+            root = file[:-4]
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            fut = pool.submit(fig.write_image, file, scale=scale)
+            try:
+                fut.result(timeout=_EXPORT_TIMEOUT)
+            except FuturesTimeoutError:
+                msg = (
+                    f'Plotly static image export timed out after {_EXPORT_TIMEOUT} s.\n'
+                    f'This usually means Kaleido is not working correctly.\n'
+                    f'Fix: pip install --upgrade plotly "kaleido>=1"'
+                )
+                print(msg)
+                html_file = f'{root}_fallback.html'
+                fig.write_html(html_file, auto_open=False)
+                print(f'Saved interactive HTML fallback to: {html_file}')
+                with open(f'{root}_export_message.txt', 'w') as fh:
+                    fh.write(msg + f'\nHTML fallback saved to: {html_file}\n')
+                open_file_with_default_software(html_file)
+                return
         open_file_with_default_software(file)
     except Exception as e:
         print(f'Could not save/open plot: {file}\n{e}')
@@ -1131,18 +1146,7 @@ def plot_sequence_hits(seq_data, txt_len, title='', file='', scale=1,
 
     fig.show()
     if file:
-        try:
-            low = file.lower()
-            if low.endswith('.html') or low.endswith('.htm'):
-                fig.write_html(file, auto_open=False)
-            else:
-                root, ext = os.path.splitext(file)
-                if not ext:
-                    file = f'{file}.png'
-                fig.write_image(file, scale=scale)
-            open_file_with_default_software(file)
-        except Exception as e:
-            print(f'Could not save plot: {file}\n{e}')
+        _save_fig(fig, file, scale)
 
 
 def plot_sequence_hits_detailed(seq_data, txt, start, end, title='', file=''):

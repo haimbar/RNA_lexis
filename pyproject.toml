@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "RNA_lexis"
-version = "0.1.8"
+version = "0.1.9"
 authors = [
   { name="Haim Bar", email="haim.bar@uconn.edu" },
 ]
@@ -19,9 +19,9 @@ license = "MIT"
 license-files = ["LICEN[CS]E*"]
 
 dependencies = ["matplotlib>=3.5.0", "numpy",
-	"datetime",	"networkx",	"matplotlib", "plotly>=5,<6", "pandas",
+	"datetime",	"networkx",	"matplotlib", "plotly>=5", "pandas",
 	"weblogo", "scipy", "Levenshtein",
-	"kaleido<1", "markdown", "platformdirs"]
+	"kaleido>=1", "markdown", "platformdirs"]
 
 [project.scripts]
 rna_lexis = "rna_lexis.menu:main"
