@@ -1,5 +1,53 @@
 # Changelog
 
+## [0.1.10] - 2026-06-22
+
+### Fixed
+
+- **`min_occ` filter in `plot_seq_nbrs` produced wrong results** — the previous
+  implementation counted (s0_position, seq_position) pairs, so a sequence appearing
+  once near three `s0` hits scored 3 (false positive) while a sequence appearing
+  three times but near only one `s0` hit scored 1 (false negative).  Replaced with
+  a simple global occurrence count: `len(find_all_matches(seq, txt))`.
+
+### Added
+
+- **`min_occ` parameter added to `plot_nbrs_condensed`** — the condensed neighbour
+  plot now supports the same minimum-occurrence filter as the detailed plot (default 2).
+
+- **`min_occ` exposed in the menu** — both "Core neighbors (detailed)" and "Core
+  neighbors (condensed)" now prompt for a minimum-occurrence threshold (default 2,
+  enter blank to keep default).
+
+## [0.1.9] - 2026-06-16
+
+### Fixed
+
+- **Static image export now works with Plotly 6.x / Kaleido 1.x** — `_save_fig`
+  detects the Kaleido version at runtime and uses `kaleido.write_fig_sync` when
+  Kaleido ≥ 1.0 is present, falling back to `fig.write_image` for Kaleido 0.x /
+  Plotly 5.x.
+
+- **Export timeout prevents hung Kaleido processes** — image export now runs in a
+  `ThreadPoolExecutor` with a 45-second timeout.  On timeout, an interactive HTML
+  fallback is saved automatically and a plain-text error report is written next to it.
+
+## [0.1.8] - 2026-06-16
+
+### Added
+
+- **`min_occ` parameter for `plot_seq_nbrs`** — neighbours with fewer than
+  `min_occ` global occurrences in the source sequence are omitted from the detailed
+  neighbours plot.  Mutations are always shown regardless of this threshold.
+  Default is 2 (unchanged behaviour).
+
+### Changed
+
+- **Neighbour plot legibility improvements** — annotation colours darkened to
+  forest green (overlapping neighbours), dark purple (non-overlapping), dark blue
+  (s0), and crimson (mutations); label font increased from 14 to 16 px; legend font
+  increased to 13 pt with `entrywidth=260 px` to prevent column overlap.
+
 ## [0.1.7] - 2026-06-09
 
 ### Fixed

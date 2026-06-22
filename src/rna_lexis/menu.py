@@ -527,7 +527,7 @@ def _collect_neighbors_params(fn, txt, strs):
     """Collect user inputs shared by both Core neighbours plot handlers.
 
     Returns a dict with keys seq, wds, ttl, fn, scale, xrange, hairpins, wd,
-    or None if the sequence was not found.
+    min_occ, or None if the sequence was not found.
     """
     file_path = fn
     seq = safe_input(fmttxt(["Enter the sequence to analyze: "], ['bold'], ['yellow']))
@@ -567,6 +567,10 @@ def _collect_neighbors_params(fn, txt, strs):
         except ValueError:
             xrange = []
 
+    min_occ_raw = safe_input(fmttxt(['Minimum occurrences to include a neighbour:', '[default: 2]'],
+                                    ['bold', ''], ['yellow', 'cyan']) + ' ')
+    min_occ = 2 if min_occ_raw.strip() == '' else max(1, int(min_occ_raw.strip()))
+
     hairpins = []
     hairpins_csv = os.path.splitext(file_path)[0] + '_hairpins.csv'
     if os.path.isfile(hairpins_csv):
@@ -585,7 +589,7 @@ def _collect_neighbors_params(fn, txt, strs):
                     })
 
     return dict(seq=seq, wds=wds, ttl=ttl, fn=fn_out, scale=scale,
-                xrange=xrange, hairpins=hairpins, wd=wd)
+                xrange=xrange, hairpins=hairpins, wd=wd, min_occ=min_occ)
 
 
 def neighbors_input(fn, txt, strs):
@@ -604,7 +608,8 @@ def neighbors_input(fn, txt, strs):
         return
     plot_seq_nbrs(p['seq'], p['wds'], txt, sortby='CP', wd=p['wd'],
                   title=p['ttl'], file=p['fn'],
-                  xrange=p['xrange'], scale=p['scale'], hairpins=p['hairpins'])
+                  xrange=p['xrange'], scale=p['scale'], hairpins=p['hairpins'],
+                  min_occ=p['min_occ'])
 
 
 def neighbors_condensed_input(fn, txt, strs):
@@ -623,7 +628,8 @@ def neighbors_condensed_input(fn, txt, strs):
         return
     plot_nbrs_condensed(p['seq'], p['wds'], txt, sortby='CP', wd=p['wd'],
                         title=p['ttl'], file=p['fn'],
-                        xrange=p['xrange'], scale=p['scale'], hairpins=p['hairpins'])
+                        xrange=p['xrange'], scale=p['scale'], hairpins=p['hairpins'],
+                        min_occ=p['min_occ'])
 
 
 def neighbors_condensed_export_input(fn, txt, strs):

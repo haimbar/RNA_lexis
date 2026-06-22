@@ -59,10 +59,9 @@ def plot_seq_nbrs(s0, s, txt, sortby='CP', wd=20, title='', file='',
                   high-resolution PNG).
         hairpins: List of hairpin dicts (keys: start, end, stem_seq,
                   loop_seq) to draw as orange bands beneath row 0.
-        min_occ:  Minimum number of co-occurrences (within wd of any s0 hit,
-                  counted over the full sequence) required to include a
-                  neighbour.  Mutations are always kept regardless of this
-                  threshold (default 2).
+        min_occ:  Minimum number of global occurrences in the full sequence
+                  required to include a neighbour.  Mutations are always kept
+                  regardless of this threshold (default 2).
     """
     L = len(txt)
     lc = len(s0)
@@ -78,16 +77,8 @@ def plot_seq_nbrs(s0, s, txt, sortby='CP', wd=20, title='', file='',
     related = list(s1.keys())
 
     if min_occ > 1:
-        pos0_all = find_all_matches(s0, txtl, ret='pos')
-        def _cooccur_count(seq):
-            cnt = 0
-            for p0 in pos0_all:
-                lo, hi = max(0, p0 - wd), p0 + lc + wd
-                for p in find_all_matches(seq, txtl, ret='pos'):
-                    if lo <= p + len(seq) / 2 <= hi:
-                        cnt += 1
-            return cnt
-        related = [seq for seq in related if _cooccur_count(seq) >= min_occ]
+        related = [seq for seq in related
+                   if len(find_all_matches(seq, txtl, ret='pos')) >= min_occ]
     n = len(related)
 
     # discover mutations, then cache their positions once for both sorting and rendering
@@ -352,7 +343,7 @@ def _save_fig(fig, file, scale):
 
 
 def plot_nbrs_condensed(s0, s, txt, sortby='CP', wd=20, title='', file='',
-                        xrange=[], scale=1, hairpins=[]):
+                        xrange=[], scale=1, hairpins=[], min_occ=2):
     """Condensed neighbour plot: three bands — s0, all-neighbour density strip, mutations.
 
     Shows the query s0 at row 0, all neighbouring sequences collapsed into a
@@ -372,6 +363,8 @@ def plot_nbrs_condensed(s0, s, txt, sortby='CP', wd=20, title='', file='',
         xrange:   Optional [start, end] x-axis limits.
         scale:    Pixel scale for raster export.
         hairpins: List of hairpin dicts (keys: start, end, stem_seq, loop_seq).
+        min_occ:  Minimum number of global occurrences in the full sequence
+                  required to include a neighbour (default 2).
     """
     L = len(txt)
     lc = len(s0)
@@ -387,6 +380,9 @@ def plot_nbrs_condensed(s0, s, txt, sortby='CP', wd=20, title='', file='',
     if s0 in s1:
         del s1[s0]
     related = list(s1.keys())
+    if min_occ > 1:
+        related = [seq for seq in related
+                   if len(find_all_matches(seq, txtl, ret='pos')) >= min_occ]
     n_related = len(related)
     density_row = 1
 
