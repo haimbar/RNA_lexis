@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.1.11] - 2026-06-22
+
+### Fixed
+
+- **Kaleido dependency reverted to 0.2.x to eliminate Chrome requirement** —
+  version 0.1.9 widened the pin to `kaleido>=1`, which requires a separate
+  Chrome installation (`kaleido_get_chrome`) and also requires Plotly ≥ 6 for
+  `fig.write_image` to work.  Users with Plotly 5.x got version-mismatch
+  warnings and broken static image export.  Reverted to `kaleido>=0.2,<1`,
+  which bundles its own Chromium headless and works on Windows, macOS, and
+  Linux without any extra browser install.  The 45-second export timeout added
+  in 0.1.9 (which was the actual fix for the Windows hang) is retained.
+
+- **Removed spurious `datetime` pip dependency** — `datetime` is a Python
+  standard-library module and should not be listed as a pip dependency.
+  Removed from `pyproject.toml`.
+
+- **Removed duplicate `matplotlib` entry** — `matplotlib` was listed twice in
+  `pyproject.toml`; the duplicate has been removed.
+
 ## [0.1.10] - 2026-06-22
 
 ### Fixed
@@ -23,14 +43,11 @@
 
 ### Fixed
 
-- **Static image export now works with Plotly 6.x / Kaleido 1.x** — `_save_fig`
-  detects the Kaleido version at runtime and uses `kaleido.write_fig_sync` when
-  Kaleido ≥ 1.0 is present, falling back to `fig.write_image` for Kaleido 0.x /
-  Plotly 5.x.
-
-- **Export timeout prevents hung Kaleido processes** — image export now runs in a
-  `ThreadPoolExecutor` with a 45-second timeout.  On timeout, an interactive HTML
-  fallback is saved automatically and a plain-text error report is written next to it.
+- **Export timeout prevents hung Kaleido processes on Windows** — image export now
+  runs in a `ThreadPoolExecutor` with a 45-second timeout.  On timeout, an
+  interactive HTML fallback is saved automatically and a plain-text error report is
+  written next to it.  Widened pins to `plotly>=5, kaleido>=1` (later corrected in
+  0.1.11 — the Chrome requirement was an unintended side-effect).
 
 ## [0.1.8] - 2026-06-16
 

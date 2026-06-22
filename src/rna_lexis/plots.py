@@ -327,7 +327,7 @@ def _save_fig(fig, file, scale):
                 msg = (
                     f'Plotly static image export timed out after {_EXPORT_TIMEOUT} s.\n'
                     f'This usually means Kaleido is not working correctly.\n'
-                    f'Fix: pip install --upgrade plotly "kaleido>=1"'
+                    f'Fix: pip install --upgrade "kaleido>=0.2,<1"'
                 )
                 print(msg)
                 html_file = f'{root}_fallback.html'
