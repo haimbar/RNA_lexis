@@ -28,6 +28,7 @@ from rna_lexis.plots import (
     plot_logo, plotzscore, plotkmerhist, plot_frequency_rank,
     plot_seq_nbrs, plot_nbrs_condensed, export_nbrs_condensed,
     plot_coverage, plot_sequence_hits, plot_sequence_hits_detailed,
+    plot_self_similarity_arcs,
 )
 from rna_lexis.io import (
     read_text, save_session, load_session, init_summary, is_valid_session,
@@ -1347,6 +1348,48 @@ def motif_extensions_input(txt, file_path=''):
     safe_input(fmttxt(['Press Enter to continue'], [''], ['white']))
 
 
+def self_similarity_arcs_input(txt, file_path=''):
+    """Prompt for a seed sequence, then plot pairwise Hamming-bounded
+    extensions among all its exact occurrences as a semicircular arc
+    diagram (self-similarity within one sequence — e.g. a tandem-repeat
+    region)."""
+    seq = safe_input(fmttxt(['Enter seed sequence', '[blank to cancel]: '],
+                             ['bold', ''], ['yellow', 'cyan']) + ' ').strip().lower()
+    if not seq:
+        return
+
+    positions_all = find_all_matches(seq, txt, ret='pos')
+    if len(positions_all) < 3:
+        print(fmttxt([f'Seed "{seq}" found {len(positions_all)} time(s) — need ≥ 3.',
+                      'Fewer than 3 occurrences give at most one gap, which the '
+                      'spacing-significance test below cannot evaluate.'],
+                     ['bold', ''], ['red', 'yellow']))
+        safe_input(fmttxt(['Press Enter to continue'], [''], ['white']))
+        return
+
+    mutr_str = safe_input(fmttxt(['Mutation rate: 1 per N letters', '[default: 6]: '],
+                                  ['bold', ''], ['yellow', 'cyan']) + ' ').strip()
+    val = float(mutr_str) if mutr_str else 6
+    mutr = 1 / val if val > 0 else 1 / 6
+
+    print(fmttxt([f'Computing extensions for {len(positions_all)} occurrence(s)...'],
+                 [''], ['cyan']))
+    results = find_longest_extensions(seq, txt, mutr=mutr)
+    positions = sorted(set(r['pos1'] for r in results) | set(r['pos2'] for r in results))
+    print(fmttxt([f'{len(results)} pair(s) among {len(positions)} occurrence(s).'],
+                 [''], ['white']))
+
+    # Same test as "Motif spacing / periodicity test" (Sequence operations).
+    # The arc diagram itself doesn't require regular spacing to draw or
+    # interpret -- shown here as reference context, not a gate on the plot.
+    spacing_stats = spacing_periodicity_test(positions_all, len(txt))
+
+    fn_out, scale = _prompt_save(plotly=False,
+                                  session_dir=os.path.dirname(os.path.abspath(file_path)) if file_path else '')
+    _spawn_plot(plot_self_similarity_arcs, seq, results, positions,
+                spacing_stats=spacing_stats, file=fn_out, scale=scale)
+
+
 def hairpins_input(txt, file_path, minSL=8, minLL=3, maxLL=40):
     """Prompt for hairpin parameters, run gen_hairpins, and export results to CSV."""
     import csv
@@ -2289,7 +2332,8 @@ def menus():
     menu_ttl = ["Main Menu", "Plots", "Sequence operations"]
     submenu = [["Plots", "Sequence operations", "Open Core file", "Summary statistics",
                "Show settings", "Change setting", "Open User Guide", "Clear workspace", "Load new input", "Quit"],
-               ["Core neighbors (detailed)", "Core neighbors (condensed)", "K-mers", "Logo", "Coverage", "Motif Match/Mutation", "Back"],
+               ["Core neighbors (detailed)", "Core neighbors (condensed)", "K-mers", "Logo", "Coverage", "Motif Match/Mutation",
+                "Self-similarity arc plot", "Back"],
                ["Find all matches", "Search with mutations", "Motif extensions", "Print core",
                 "Motif spacing / periodicity test", "Gapped motif search",
                 "Covered area", "Core neighbors (text export)",
@@ -2395,7 +2439,7 @@ def menus():
                     _seq_labels = ["single-sequence analysis", "statistical analysis", "other"]
                     val = show_menu(file_path, menu_ttl[menu_level], submenu[menu_level],
                                     clr=defvals['clr'],
-                                    split={0: 4, 1: 6}.get(menu_level),
+                                    split={0: 4, 1: 7}.get(menu_level),
                                     splits=_seq_splits if menu_level == 2 else None,
                                     labels=_seq_labels if menu_level == 2 else None)
                     # Top level menu:
@@ -2480,6 +2524,8 @@ def menus():
                             case 6:
                                 sequence_hits_input(file_path, txt)
                             case 7:
+                                self_similarity_arcs_input(txt, file_path)
+                            case 8:
                                 menu_level = 0 # Go to the main menu
 
                     # Sequences:

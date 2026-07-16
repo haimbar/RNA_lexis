@@ -33,7 +33,7 @@ pip install .
 from rna_lexis.algorithms import (
     find_boundary, cores, find_all_matches, find_with_mutations,
     find_longest_extensions, extend_match_pair, cover, core_nbrs,
-    cond_prob_core, count_kgrams, zscore,
+    cond_prob_core, count_kgrams, zscore, hop_distance,
     markov_kmer_pvalues, gen_hairpins, allow_mutation, is_bounded,
     expand_to_boundary, extendRNA, Hairpin, contains_only_rna,
 )
@@ -293,6 +293,19 @@ left_ext, right_ext, ext1, ext2, total_ham = extend_match_pair(s, txt, pos1, pos
 Compute the longest extension for every pair of exact occurrences of `s`. Returns
 dicts with keys: `pos1`, `pos2`, `left_ext`, `right_ext`, `total_len`, `ext1`,
 `ext2`, `hamming`. Returns `[]` when `s` occurs fewer than twice.
+
+### `hop_distance(spacing: int, unit: float) -> int`
+
+Number of tandem-repeat units separating two occurrences, given their physical
+spacing and an estimated repeat-unit length (`unit` — not a fixed constant;
+callers typically estimate it as the median gap between consecutive sorted
+occurrence positions for whatever motif/region they're analysing). Always
+`>= 1`. Used to bucket arc color in `plots.plot_self_similarity_arcs`.
+
+```python
+hop_distance(580, 290)  # -> 2
+hop_distance(290, 290)  # -> 1
+```
 
 ### `cover(s, txt, pwr=1.1) -> float`
 

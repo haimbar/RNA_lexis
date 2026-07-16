@@ -110,7 +110,8 @@ Press <strong>Ctrl+C</strong> to exit the program immediately.</p>
 4. Logo
 5. Coverage
 6. Motif Match/Mutation
-7. Back
+7. Self-similarity arc plot
+8. Back
 </code></pre>
 <h4>1.1 Core neighbors (detailed)</h4>
 <p>Visualises how a chosen core sequence co-occurs with its neighbours across the full text, with one horizontal lane per neighbour.</p>
@@ -430,6 +431,50 @@ For Z-score plots you will also be asked for a <strong>threshold</strong> (defau
 </tbody>
 </table>
 <p>The detail view is a plain HTML page showing every nucleotide in the selected range as monospace text (60 characters per line, prefixed with the genomic position). Hit regions have colored backgrounds matching the main plot. Where two or more sequences overlap, the background is a blended mix of their colors so both are visible simultaneously. Mutation positions are shown in <strong>red uppercase</strong>. A legend lists each sequence with its exact and approximate match counts.</p>
+<h4>1.7 Self-similarity arc plot</h4>
+<p>Visualises pairwise Hamming-bounded extensions among every exact occurrence of a seed sequence within the loaded transcript, as a semicircular arc diagram — useful for exploring tandem-repeat regions (e.g. the same kind of Pumilio-response-element repeats studied in <em>NORAD</em>, or <em>XIST</em>'s Hotspot 2 tandem repeats).</p>
+<p><strong>Prompts:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Prompt</th>
+<th align="center">Default</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Seed sequence</td>
+<td align="center"></td>
+<td>Must occur at least <strong>3</strong> times in the text; blank to cancel</td>
+</tr>
+<tr>
+<td>Mutation rate: 1 per N letters</td>
+<td align="center">6</td>
+<td>Controls how divergent the flanking context may be during extension (same meaning as in <em>Motif extensions</em>)</td>
+</tr>
+<tr>
+<td>Output file</td>
+<td align="center"><em>(screen only)</em></td>
+<td>Leave blank to display interactively</td>
+</tr>
+<tr>
+<td>Output format</td>
+<td align="center">1 (PNG standard)</td>
+<td>1 = PNG, 2 = PNG high-res (3×), 3 = SVG</td>
+</tr>
+</tbody>
+</table>
+<p>The minimum of 3 occurrences (not 2) is because this plot also runs the same spacing-significance test as <em>Motif spacing / periodicity test</em> (Sequence operations) and shows its result on the plot — 2 occurrences give only a single gap, which that test cannot evaluate. The arc diagram itself doesn't require regular spacing to draw or interpret; the significance line is reference context, not a gate on which pairs are shown.</p>
+<p><strong>Reading the plot:</strong></p>
+<ul>
+<li>Each occurrence of the seed is a <strong>node</strong> (filled circle) on the x-axis at its position, sized by the longest extension reachable from that position.</li>
+<li>Each pair of occurrences is a <strong>semicircular arc</strong>: thickness encodes the extension length for that pair, height encodes the spacing between the two positions (taller = farther apart).</li>
+<li><strong>Arc color encodes hop distance</strong> — the number of tandem-repeat units separating the two positions, estimated automatically from the median spacing between consecutive occurrences (not a fixed value, since repeat-unit length differs by region): 1 hop (dark blue), 2 hops (light blue), 3 hops (orange), 4 hops (red), 5+ hops (gray).</li>
+<li>Each arc is labeled with the spacing (nt), the raw Hamming distance (<code>h=</code>), and the normalized identity (%).</li>
+<li>The subtitle's second line reports the spacing test: candidate period <code>T</code> (nt), the gap-cluster test p-value, and the Rayleigh test p-value — the same numbers <em>Motif spacing / periodicity test</em> reports for this seed, values below 0.05 indicate statistically significant periodic spacing.</li>
+<li>The legend (outside the plot, top right) shows the hop-distance color key and a node-size key using real circle markers at the same scale as the plotted nodes.</li>
+</ul>
 <hr />
 <h3>2 - Sequence operations</h3>
 <pre><code>--- Sequence operations ---

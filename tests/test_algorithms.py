@@ -17,6 +17,7 @@ from rna_lexis.algorithms import (
     find_longest_extensions,
     find_with_mutations,
     gen_hairpins,
+    hop_distance,
     is_bounded,
     markov_kmer_pvalues,
     zscore,
@@ -165,6 +166,31 @@ class MarkovKmerPvaluesTests(unittest.TestCase):
         by_kmer = {r["kmer"]: r for r in rows}
         self.assertLess(by_kmer["gattaca"]["pvalue_over"], 0.01)
         self.assertEqual(by_kmer["gattaca"]["direction"], "over")
+
+
+class HopDistanceTests(unittest.TestCase):
+    def test_exact_multiples_of_unit(self):
+        self.assertEqual(hop_distance(290, 290), 1)
+        self.assertEqual(hop_distance(580, 290), 2)
+        self.assertEqual(hop_distance(870, 290), 3)
+
+    def test_rounds_to_nearest_unit(self):
+        # 592 / 290 = 2.04 -> rounds to 2, not 3
+        self.assertEqual(hop_distance(592, 290), 2)
+        # 875 / 290 = 3.02 -> rounds to 3
+        self.assertEqual(hop_distance(875, 290), 3)
+
+    def test_never_returns_zero(self):
+        # A spacing much smaller than the unit still counts as >= 1 hop --
+        # two distinct positions are never "0 units apart".
+        self.assertEqual(hop_distance(10, 290), 1)
+        self.assertEqual(hop_distance(0, 290), 1)
+
+    def test_unit_is_not_hardcoded(self):
+        # Same physical spacing, different repeat-unit length -> different
+        # hop bucket. Guards against ever reintroducing a fixed default.
+        self.assertEqual(hop_distance(600, 300), 2)
+        self.assertEqual(hop_distance(600, 600), 1)
 
 
 if __name__ == "__main__":

@@ -10,11 +10,11 @@ import numpy as np
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 import matplotlib.pyplot as plt
 import plotly.graph_objs as go
-from collections import Counter
+from collections import Counter, defaultdict
 
 from rna_lexis.algorithms import (
     cond_prob_core, core_nbrs, allow_mutation, find_all_matches,
-    zscore, contains_only_rna,
+    zscore, contains_only_rna, hop_distance,
 )
 from rna_lexis.io import open_file_with_default_software, open_pdf
 
@@ -1269,5 +1269,157 @@ def plot_sequence_hits_detailed(seq_data, txt, start, end, title='', file=''):
         open_file_with_default_software(file)
     except Exception as e:
         print(f'Could not save detail view: {file}\n{e}')
+
+
+def _semicircle(x0, x1, n=80):
+    """Return (x, y) arrays tracing a semicircle spanning x0 to x1."""
+    cx, r = (x0 + x1) / 2, (x1 - x0) / 2
+    t = np.linspace(0, np.pi, n)
+    return cx + r * np.cos(t), r * np.sin(t)
+
+
+_HOP_ARC_COLORS = {1: "#2166ac", 2: "#74add1", 3: "#fdae61", 4: "#d73027"}
+_HOP_ARC_DEFAULT_COLOR = "#888888"  # hop >= 5 (beyond the 4-bucket legend)
+
+
+def plot_self_similarity_arcs(seed, results, positions, unit=None,
+                               spacing_stats=None, file='', scale=1):
+    """Semicircular arc diagram of pairwise Hamming-bounded extensions.
+
+    Visualises the output of find_longest_extensions() for a single seed
+    motif within one sequence: one semicircular arc per pair of exact seed
+    occurrences, thickness proportional to extension length, color encoding
+    hop distance (physical spacing bucketed by the estimated tandem-repeat
+    unit length), and node size proportional to the longest extension
+    reachable from that position. Intended for self-similarity analysis of
+    tandem-repeat regions.
+
+    Args:
+        seed:      Seed motif string, shown in the title.
+        results:   Output of find_longest_extensions(seed, txt, ...) — list
+                   of dicts with keys pos1, pos2, total_len, hamming.
+        positions: Sorted list of unique occurrence positions (the arc
+                   diagram's x-axis nodes) — typically the pos1/pos2 values
+                   appearing in results.
+        unit:      Estimated repeat-unit length in nt, used to bucket hop
+                   distance (see algorithms.hop_distance()). If None
+                   (default), estimated as the median gap between
+                   consecutive sorted positions — no fixed value is assumed,
+                   since repeat-unit length is specific to whichever
+                   motif/region is being analysed.
+        spacing_stats: Optional result dict from
+                   statistical.spacing_periodicity_test(positions, len(txt))
+                   — the same test used by "Motif spacing / periodicity
+                   test". Requires >= 3 occurrences to be meaningful (2
+                   occurrences give a single gap, not a distribution to
+                   test); when given, its period and p-values are shown on
+                   the plot as an additional reference line. When None, that
+                   line is omitted — the arc diagram itself doesn't require
+                   regular spacing to be drawn or interpreted.
+        file:      Output path for saving the figure (PNG/SVG/PDF). When
+                   empty the figure is only displayed.
+        scale:     DPI multiplier for raster export (default 1).
+    """
+    if not results or len(positions) < 2:
+        print('Need at least 2 occurrences with computed extensions to plot.')
+        return
+
+    if unit is None:
+        gaps = [b - a for a, b in zip(positions[:-1], positions[1:])]
+        unit = float(np.median(gaps)) if gaps else 1.0
+
+    tlen_vals = [r['total_len'] for r in results]
+    tlen_min, tlen_max = min(tlen_vals), max(tlen_vals)
+    lw_scale = lambda t: 0.6 + 3.5 * (t - tlen_min) / max(tlen_max - tlen_min, 1)
+
+    def hop_color(spacing):
+        return _HOP_ARC_COLORS.get(hop_distance(spacing, unit), _HOP_ARC_DEFAULT_COLOR)
+
+    max_len_map = defaultdict(int)
+    for r in results:
+        max_len_map[r['pos1']] = max(max_len_map[r['pos1']], r['total_len'])
+        max_len_map[r['pos2']] = max(max_len_map[r['pos2']], r['total_len'])
+
+    node_sizes = np.array([max_len_map[n] for n in positions], dtype=float)
+    # np.ptp(arr), not arr.ptp() -- the ndarray method was removed in NumPy 2.0.
+    node_r = 8 + 28 * (node_sizes - node_sizes.min()) / max(np.ptp(node_sizes), 1)
+
+    fig, ax = plt.subplots(figsize=(11, 5.2))
+
+    for r in sorted(results, key=lambda r: r['total_len'], reverse=True):
+        p0, p1 = r['pos1'], r['pos2']
+        spacing = p1 - p0
+        identity = 100 * (r['total_len'] - r['hamming']) / r['total_len']
+        xs, ys = _semicircle(p0, p1)
+        ax.plot(xs, ys, color=hop_color(spacing), lw=lw_scale(r['total_len']),
+                 alpha=0.80, zorder=2)
+        mid_y = ys.max()
+        fontsize = 7.5 if spacing <= unit * 1.1 else 6.5
+        ax.text((p0 + p1) / 2, mid_y + 2,
+                f"{spacing} nt  h={r['hamming']}  ({identity:.1f}%)",
+                ha="center", va="bottom", fontsize=fontsize, color="#444")
+
+    for n, nr in zip(positions, node_r):
+        ax.scatter(n, 0, s=nr ** 2 * 0.3, color="#2a6099",
+                   zorder=5, edgecolors="white", linewidths=1.2)
+        ax.text(n, -18, str(n), ha="center", va="top", fontsize=8, color="#333")
+
+    max_hop = max(hop_distance(r['pos2'] - r['pos1'], unit) for r in results)
+    for hops in range(1, min(max_hop, 4) + 1):
+        ax.plot([], [], color=_HOP_ARC_COLORS[hops], lw=2.5,
+                label=f"{hops} hop{'s' if hops > 1 else ''} (~{round(hops * unit)} nt)")
+    if max_hop > 4:
+        ax.plot([], [], color=_HOP_ARC_DEFAULT_COLOR, lw=2.5, label="≥ 5 hops")
+    # Node-size key: real circle markers at the same radii as the plotted
+    # nodes (not line-thickness swatches — those track arc thickness, a
+    # different quantity, and would misrepresent circle size here).
+    node_min, node_max = node_sizes.min(), node_sizes.max()
+    node_mid = (node_min + node_max) / 2
+    for t in sorted({node_min, node_mid, node_max}):
+        r_t = 8 + 28 * (t - node_min) / max(node_max - node_min, 1)
+        ax.scatter([], [], s=r_t ** 2 * 0.3, color="#2a6099",
+                   edgecolors="white", linewidths=0.8, label=f"extension len={int(t)}")
+    # handleheight/labelspacing are sized for the largest possible node-size
+    # marker (node_r maxes out at 36 regardless of the data — see the node_r
+    # formula above), so rows never overlap however the data happens to look.
+    # Placed outside the axes (right side) rather than in a corner: arcs can
+    # reach high on either side depending on the data, so no inside corner
+    # is reliably free of overlap for arbitrary input.
+    ax.legend(title="Arc color = hop distance\nNode size = max extension length",
+              fontsize=8, title_fontsize=8, framealpha=0.9,
+              handleheight=3.0, labelspacing=1.2,
+              loc="upper left", bbox_to_anchor=(1.01, 1.02), borderaxespad=0)
+
+    ax.axhline(0, color="#cccccc", lw=0.8, zorder=1)
+    ax.set_xlim(min(positions) - 150, max(positions) + 150)
+    ax.set_ylim(-55, max((r['pos2'] - r['pos1']) / 2 for r in results) * 1.25)
+    ax.set_xlabel("Position (nt)", fontsize=11)
+    ax.set_ylabel("Arc height = spacing / 2 (nt)", fontsize=10)
+    title_lines = [f"Pairwise Hamming extensions — seed: '{seed}'"]
+    if spacing_stats is not None:
+        def _p(v):
+            return f"{v:.4f}" if v >= 0.0001 else "<0.0001"
+        title_lines.append(
+            f"Spacing test (n={spacing_stats['m']}): T={spacing_stats['period']} nt  ·  "
+            f"cluster p={_p(spacing_stats['p_cluster'])}  ·  "
+            f"Rayleigh p={_p(spacing_stats['p_rayleigh'])}"
+        )
+    # Split across two lines -- the combined string is long enough to
+    # overflow the figure on both sides (truncated on the left, covered by
+    # the legend on the right) if kept on one.
+    title_lines.append("Node size = max extension length  ·  Arc thickness = extension length")
+    title_lines.append("Arc color = hop distance  ·  Labels: spacing | h=Hamming | identity%")
+    ax.set_title("\n".join(title_lines), fontsize=10)
+    ax.spines[["top", "right", "left"]].set_visible(False)
+    ax.tick_params(labelsize=9)
+
+    plt.tight_layout()
+    if file:
+        try:
+            plt.savefig(file, bbox_inches='tight', dpi=150 * scale)
+            open_file_with_default_software(file)
+        except Exception as e:
+            print(f'Could not save plot: {file}\n{e}')
+    plt.show()
 
 

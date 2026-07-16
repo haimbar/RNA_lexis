@@ -137,7 +137,8 @@ Opens the Plots submenu:
 4. Logo
 5. Coverage
 6. Motif Match/Mutation
-7. Back
+7. Self-similarity arc plot
+8. Back
 ```
 
 #### 1.1 Core neighbors (detailed)
@@ -292,6 +293,30 @@ After the main plot is shown, you will be asked whether to create a detailed HTM
 | Output HTML file | `<name>_detail.html` | Always saved as HTML; `.html` is appended if omitted |
 
 The detail view is a plain HTML page showing every nucleotide in the selected range as monospace text (60 characters per line, prefixed with the genomic position). Hit regions have colored backgrounds matching the main plot. Where two or more sequences overlap, the background is a blended mix of their colors so both are visible simultaneously. Mutation positions are shown in **red uppercase**. A legend lists each sequence with its exact and approximate match counts.
+
+#### 1.7 Self-similarity arc plot
+
+Visualises pairwise Hamming-bounded extensions among every exact occurrence of a seed sequence within the loaded transcript, as a semicircular arc diagram — useful for exploring tandem-repeat regions (e.g. the same kind of Pumilio-response-element repeats studied in *NORAD*, or *XIST*'s Hotspot 2 tandem repeats).
+
+**Prompts:**
+
+| Prompt | Default | Notes |
+|---|:---:|---|
+| Seed sequence | | Must occur at least **3** times in the text; blank to cancel |
+| Mutation rate: 1 per N letters | 6 | Controls how divergent the flanking context may be during extension (same meaning as in *Motif extensions*) |
+| Output file | *(screen only)* | Leave blank to display interactively |
+| Output format | 1 (PNG standard) | 1 = PNG, 2 = PNG high-res (3×), 3 = SVG |
+
+The minimum of 3 occurrences (not 2) is because this plot also runs the same spacing-significance test as *Motif spacing / periodicity test* (Sequence operations) and shows its result on the plot — 2 occurrences give only a single gap, which that test cannot evaluate. The arc diagram itself doesn't require regular spacing to draw or interpret; the significance line is reference context, not a gate on which pairs are shown.
+
+**Reading the plot:**
+
+- Each occurrence of the seed is a **node** (filled circle) on the x-axis at its position, sized by the longest extension reachable from that position.
+- Each pair of occurrences is a **semicircular arc**: thickness encodes the extension length for that pair, height encodes the spacing between the two positions (taller = farther apart).
+- **Arc color encodes hop distance** — the number of tandem-repeat units separating the two positions, estimated automatically from the median spacing between consecutive occurrences (not a fixed value, since repeat-unit length differs by region): 1 hop (dark blue), 2 hops (light blue), 3 hops (orange), 4 hops (red), 5+ hops (gray).
+- Each arc is labeled with the spacing (nt), the raw Hamming distance (`h=`), and the normalized identity (%).
+- The subtitle's second line reports the spacing test: candidate period `T` (nt), the gap-cluster test p-value, and the Rayleigh test p-value — the same numbers *Motif spacing / periodicity test* reports for this seed, values below 0.05 indicate statistically significant periodic spacing.
+- The legend (outside the plot, top right) shows the hop-distance color key and a node-size key using real circle markers at the same scale as the plotted nodes.
 
 ---
 
