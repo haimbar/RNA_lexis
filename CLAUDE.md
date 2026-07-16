@@ -9,11 +9,14 @@ API reference) — this file is about *working on* the repo, not using it.
 
 - Tests: `python3 -m pytest -q` (plain `python` may resolve to a Python
   without pytest installed in some environments — use `python3` explicitly).
-  Test suite is small and narrow: `tests/test_statistical.py` only, covering
-  `rna_lexis.statistical`. `menu.py`, `plots.py`, `io.py`, and `dialogs.py`
-  have **no automated tests** — changes there need manual/smoke verification
-  (e.g. `python3 -c "from rna_lexis.X import Y; ..."`, or rendering a menu
-  with `gen_menu(..., clr=False)` to inspect ANSI output directly).
+  59 tests across `test_statistical.py`, `test_algorithms.py`, `test_io.py`,
+  `test_alignment.py`, and `test_batch_cli.py` (the `rna_lexis_stat_cli`
+  subcommands) — all synthetic-data unit/end-to-end tests, no real
+  biological data or network calls. `menu.py` and `plots.py` still have
+  **no automated tests** (interactive/visual) — changes there need
+  manual/smoke verification (e.g. `python3 -c "from rna_lexis.X import Y;
+  ..."`, or rendering a menu with `gen_menu(..., clr=False)` to inspect
+  ANSI output directly).
 - No linter/formatter/type-checker is configured (no flake8/mypy/ruff/
   pre-commit config, no `[tool.*]` sections in `pyproject.toml`). Match
   existing style by hand.
