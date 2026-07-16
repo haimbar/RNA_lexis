@@ -20,6 +20,19 @@ called **xmotifs** and extracts their shorter conserved cores. From there you ca
 - **Test whether motif occurrences are spaced periodically (gap-cluster and Rayleigh tests)**
 - Clear workspace (remove all generated files while preserving the input sequence)
 
+## Documentation
+
+This README covers installation, features, and troubleshooting. Two other
+docs go deeper:
+
+- **[docs/user_guide.md](docs/user_guide.md)** — full menu-by-menu walkthrough
+  of the interactive tool, with every prompt, default, and output format
+  documented (also available as `docs/user_guide.html`/`.pdf`, or via the
+  app's own *Open User Guide* menu item).
+- **[llms.txt](llms.txt)** — API reference for using RNA_lexis as a Python
+  library (functions, data structures, worked examples), written for both
+  developers and AI coding agents.
+
 ## Initialisation summary (`_test_init.csv`)
 
 When a sequence is loaded for the first time, an initialisation CSV is written that
@@ -109,30 +122,11 @@ conditions on dinucleotide frequencies and is recommended for transcripts of a
 few kilobases.  BH correction is applied separately for each direction across all
 *m* k-mers.  Rows are sorted by `min(pvalue_over, pvalue_under)`.
 
-## Hierarchical motif decomposition
-
-The *Decompose motif* menu option answers the question: **is a motif's enrichment
-genuine, or is it fully explained by shorter sub-sequences?**
-
-For every contiguous sub-k-mer of the input motif at each length from `len(motif)`
-down to a configurable minimum (default 4), the expected count is derived analytically
-from a (k−1)-th order Markov model using the Prum/Schbath formula:
-
-| k | Expected count formula |
-|---|---|
-| 2 | `count(a) × count(b) / n` |
-| ≥ 3 | `count(w[:-1]) × count(w[1:]) / count(w[1:-1])` |
-
-A Poisson exact p-value then tests whether the observed count is surprising given the
-shorter context.  BH-FDR correction is applied across all sub-k-mers tested.  The
-output CSV includes `pvalue_over`, `pvalue_under`, `pvalue_bh`, `direction`, and
-`significant`; the shortest level reaching significance is printed to the terminal.
-
 ## Statistical motif analysis
 
 ### Rank core motifs (Markov/FDR)
 
-The *Rank core motifs (Markov/FDR)* option (Sequence operations → 10) enumerates
+The *Rank core motifs (Markov/FDR)* option (Sequence operations → 9) enumerates
 all shared substrings of the current xmotifs within a configurable length range,
 scores each candidate against the transcript-specific Markov background, and saves
 a ranked CSV. Candidates are ranked first by statistical support (`q_markov` below
@@ -140,7 +134,7 @@ threshold, enrichment above threshold), then by coverage.
 
 ### Mutation-family scoring
 
-The *Mutation-family scoring* option (Sequence operations → 11) tests one or more
+The *Mutation-family scoring* option (Sequence operations → 10) tests one or more
 motifs at every Hamming radius allowed by the mutation cap. For each motif and
 radius, the full neighbourhood of sequences within that distance is counted and
 scored against the Markov background. The result shows whether the approximate
@@ -190,6 +184,27 @@ rna_lexis_stat_cli gapped-motif      --fasta FILE --left LEFT --right RIGHT
 - Python 3.10 or newer
 - Windows 10/11, macOS, or Linux
 
+### System (non-pip) requirements
+
+A few features depend on tools that live outside the Python packaging
+ecosystem, so `pip install` can't provide them:
+
+- **`tkinter`** — required for the native file/folder picker dialogs. Bundled
+  with the standard Python installer on Windows and macOS, but many minimal
+  Linux installs (e.g. server/Docker base images) ship Python without it.
+  Install separately if dialogs silently return "no selection":
+  `sudo apt install python3-tk` (Debian/Ubuntu) or
+  `sudo dnf install python3-tkinter` (Fedora).
+- **`pdf2svg`** (optional) — only needed for SVG-format sequence logo output;
+  without it, logo plots fall back to PDF automatically. Install via
+  `apt install pdf2svg` / `brew install pdf2svg`, or download a Windows build
+  manually.
+- **`xdg-utils`** (Linux only, optional) — provides `xdg-open`, used to
+  auto-open saved plots/CSVs in their default application. Present on
+  virtually all Linux desktops by default; may be missing on minimal/headless
+  servers or containers, in which case files are still saved normally, just
+  not auto-opened.
+
 ## Installation
 
 ```
@@ -215,6 +230,58 @@ Or, without installing:
 ```
 python -m rna_lexis
 ```
+
+## Troubleshooting
+
+- **Plots fail to export as PNG/SVG, or you see a kaleido/plotly version-mismatch
+  warning.** RNA_lexis pins `kaleido<1` deliberately (see `CHANGELOG.md` 0.1.11) —
+  `kaleido>=1` requires a separate Chrome install and only works with Plotly ≥ 6.
+  If your environment ends up with an incompatible kaleido anyway (e.g. another
+  project in the same environment upgraded it), reinstall with
+  `pip install "kaleido>=0.2,<1"`. Do **not** follow kaleido's own suggested fix
+  of `pip install -U kaleido` — that installs the incompatible version.
+- **A saved plot or CSV doesn't open automatically, or you see "Could not open
+  file automatically."** This is expected on headless/SSH/Docker Linux systems
+  without `xdg-open`, or if no default application is registered for the file
+  type. The file is still saved correctly in both cases — only the auto-open
+  convenience step failed.
+- **The file/folder picker dialog does nothing — no window appears, the prompt
+  just returns immediately.** Usually means `tkinter` isn't installed (common on
+  minimal Linux images — see *System requirements* above), or you're in an SSH
+  session without X11 forwarding / a display. Paste a file path directly, or
+  add `-X` to your SSH command.
+- **Logo plots say `Can't find the 'weblogo' executable`.** `pip install` puts
+  the `weblogo` script in a directory that may not be on `PATH` — e.g.
+  `~/.local/bin` on Linux (user installs) or `Scripts\` inside a Windows venv.
+  Activate your venv, or add that directory to `PATH`.
+- **SVG logo output comes out as PDF instead.** SVG requires the external
+  `pdf2svg` binary (see *System requirements* above); without it, RNA_lexis
+  silently falls back to PDF and prints a note explaining why.
+- **A `UserWarning: Unable to import Axes3D... multiple versions of Matplotlib`
+  appears on every plot.** Harmless — it means both a system package (e.g.
+  `apt`'s `python3-matplotlib`) and a pip-installed `matplotlib` are present.
+  Plotting still works; to silence it, remove one of the two installations.
+- **Menu colors show up as garbled text like `[1;36m`, and the screen doesn't
+  clear between menus.** Your terminal isn't interpreting ANSI/VT100 escape
+  codes — typical of legacy Windows `cmd.exe`. Use Windows Terminal or
+  PowerShell 7+ instead.
+- **Can't overwrite the summary CSV on Windows — `PermissionError`.** The file
+  is usually open in Excel. RNA_lexis will try to close it automatically via
+  `pywin32` (installed automatically on Windows); if that fails, close the
+  workbook manually and retry.
+
+## Updating the documentation
+
+After editing `docs/user_guide.md`, regenerate the checked-in HTML/PDF
+snapshots before committing:
+
+```
+python docs/build_docs.py
+```
+
+(The HTML also regenerates itself automatically any time a user opens it
+from the app's *Open User Guide* menu item — this script exists mainly to
+keep the PDF, which has no built-in refresh path, from going stale.)
 
 ## Authors
 

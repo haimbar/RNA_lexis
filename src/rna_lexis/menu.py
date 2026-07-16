@@ -20,7 +20,7 @@ from rna_lexis.algorithms import (
     count_kgrams, contains_only_rna, cover, find_boundary, cores,
     find_all_matches, print_core, find_with_mutations, extend_match_pair,
     find_longest_extensions, gen_hairpins,
-    scramble_kmer_pvalues, markov_kmer_pvalues, decompose_motif,
+    markov_kmer_pvalues,
     compute_default_wd,
 )
 from rna_lexis.alignment import gotoh_global, gotoh_local, print_alignment
@@ -578,7 +578,7 @@ def _collect_neighbors_params(fn, txt, strs):
                                 ['bold', ''], ['yellow', 'cyan']) + ' ')
         if ans.strip().lower() == 'y':
             import csv
-            with open(hairpins_csv, newline='') as _f:
+            with open(hairpins_csv, newline='', encoding='utf-8') as _f:
                 for row in csv.DictReader(_f):
                     hairpins.append({
                         'start':    int(row['start']),
@@ -1073,160 +1073,6 @@ def search_input(txt, mutr=1/6, M=4):
     safe_input(fmttxt(['Press Enter to continue'], [''], ['white']))
 
 
-def extend_match_input(txt, file_path='', default_mutr=1/6):
-    """Prompt for a seed sequence and mutation rate, then find and display the
-    longest Hamming-bounded extension for every pair of exact seed occurrences."""
-    RED   = '\033[31m'
-    BOLD  = '\033[1m'
-    RESET = '\033[0m'
-    DIM   = '\033[2m'
-    CYAN  = '\033[36m'
-
-    # ── seed ────────────────────────────────────────────────────────────────
-    seq = safe_input(fmttxt(['Enter seed sequence', '[blank to cancel]: '],
-                             ['bold', ''], ['yellow', 'cyan']) + ' ').strip().lower()
-    if not seq:
-        return
-    positions = find_all_matches(seq, txt, ret='pos')
-    if len(positions) < 2:
-        print(fmttxt([f'Seed "{seq}" found {len(positions)} time(s) — need ≥ 2.'],
-                     ['bold'], ['red']))
-        safe_input(fmttxt(['Press Enter to continue'], [''], ['white']))
-        return
-
-    # ── mutation rate ────────────────────────────────────────────────────────
-    mutr_str = safe_input(fmttxt(['Mutation rate: 1 per N letters',
-                                   f'[default: {round(1/default_mutr)}]: '],
-                                  ['bold', ''], ['yellow', 'cyan']) + ' ').strip()
-    val = float(mutr_str) if mutr_str else round(1 / default_mutr)
-    mutr = 1 / val if val > 0 else default_mutr
-
-    # ── compute extensions ───────────────────────────────────────────────────
-    print(fmttxt([f'Computing extensions for {len(positions)} occurrences...'],
-                 [''], ['cyan']))
-    results = find_longest_extensions(seq, txt, mutr=mutr)
-
-    L = len(seq)
-    max_N = 10       # show at most this many pairs
-    print(fmttxt([f'\nFound {len(results)} pair(s). '
-                  f'Showing top {min(max_N, len(results))}, '
-                  f'sorted by total extension length.\n'],
-                 ['bold'], ['white']))
-
-    for idx, res in enumerate(results[:max_N]):
-        p1      = res['pos1']
-        p2      = res['pos2']
-        left_e  = res['left_ext']
-        right_e = res['right_ext']
-        tlen    = res['total_len']
-        h       = res['hamming']
-        e1      = res['ext1']
-        e2      = res['ext2']
-        rate    = f"{h}/{tlen} ({100*h/tlen:.1f}%)" if tlen else '0/0'
-
-        print(f"{BOLD}  Pair {idx+1}{RESET}  "
-              f"pos1={CYAN}{p1}{RESET}  pos2={CYAN}{p2}{RESET}  "
-              f"total_len={CYAN}{tlen}{RESET}  "
-              f"(left={left_e}, seed={L}, right={right_e})  "
-              f"hamming={CYAN}{rate}{RESET}")
-
-        # Build display strings: lower-case extension, upper-case seed,
-        # red upper-case for mismatches in extension parts.
-        def _fmt_ext(ref, qry, left, right, sl):
-            """Colour-code the extension around the seed (positions 0..left-1
-            are the left flank, left..left+sl-1 are the seed, rest is right)."""
-            out = []
-            for i, (rc, qc) in enumerate(zip(ref, qry)):
-                in_seed = (left <= i < left + sl)
-                mismatch = (rc != qc)
-                ch = qc.upper() if (in_seed or mismatch) else qc
-                if mismatch:
-                    ch = f"{RED}{ch}{RESET}"
-                elif in_seed:
-                    ch = f"{BOLD}{ch}{RESET}"
-                out.append(ch)
-            return ''.join(out)
-
-        # Truncate very long sequences for display
-        MAX_SHOW = 80
-        if tlen <= MAX_SHOW:
-            d1 = _fmt_ext(e1, e1, left_e, right_e, L)
-            d2 = _fmt_ext(e1, e2, left_e, right_e, L)
-            print(f"    [{DIM}{p1}{RESET}] {d1}")
-            print(f"    [{DIM}{p2}{RESET}] {d2}")
-        else:
-            half = MAX_SHOW // 2
-            head1 = _fmt_ext(e1[:half], e1[:half], left_e, right_e, L)
-            head2 = _fmt_ext(e1[:half], e2[:half], left_e, right_e, L)
-            print(f"    [{DIM}{p1}{RESET}] {head1}… ({tlen} nt total)")
-            print(f"    [{DIM}{p2}{RESET}] {head2}…")
-        print()
-
-    # ── print one pair in full ────────────────────────────────────────────────
-    shown = min(max_N, len(results))
-    if shown > 0:
-        pick_str = safe_input(
-            fmttxt(['Print a pair in full', f'[1–{shown}, blank to skip]: '],
-                   ['bold', ''], ['yellow', 'cyan']) + ' '
-        ).strip()
-        if pick_str.isdigit():
-            pick = int(pick_str) - 1
-            if 0 <= pick < shown:
-                res    = results[pick]
-                p1     = res['pos1']
-                p2     = res['pos2']
-                left_e = res['left_ext']
-                e1     = res['ext1']
-                e2     = res['ext2']
-                tlen   = res['total_len']
-                h      = res['hamming']
-                print(f"\n{BOLD}  Pair {pick+1} — full sequences{RESET}  "
-                      f"(total_len={CYAN}{tlen}{RESET}  hamming={CYAN}{h}{RESET})\n")
-                print(f"  {DIM}pos1={p1}{RESET}")
-                print(f"  {e1}\n")
-                print(f"  {DIM}pos2={p2}{RESET}")
-                print(f"  {e2}\n")
-                d1 = _fmt_ext(e1, e1, left_e, right_e, L)
-                d2 = _fmt_ext(e1, e2, left_e, right_e, L)
-                print(f"  {DIM}(colour-coded, pos1 as reference){RESET}")
-                print(f"  {d1}")
-                print(f"  {d2}\n")
-
-    # ── save all results to CSV ───────────────────────────────────────────────
-    if results:
-        import csv, re as _re
-        slug = _re.sub(r'[^a-zA-Z0-9_-]', '_', seq)[:40]
-        session_dir = os.path.dirname(os.path.abspath(file_path)) if file_path else os.getcwd()
-        _default_csv = f'extensions_{slug}.csv'
-        default_fn = os.path.join(session_dir, _default_csv)
-        fn_str = safe_input(
-            fmttxt(['Save all pairs to CSV', f'[Enter for {_default_csv}, Ctrl+D to skip]: '],
-                   ['bold', ''], ['yellow', 'cyan']) + ' '
-        )
-        if fn_str is not None:
-            fn_str = fn_str.strip()
-            if not fn_str:
-                fn_csv = default_fn
-            elif not os.path.isabs(fn_str):
-                fn_csv = os.path.join(session_dir, fn_str)
-            else:
-                fn_csv = fn_str
-            with open(fn_csv, 'w', newline='') as _f:
-                w = csv.writer(_f)
-                w.writerow(['rank', 'pos1', 'pos2', 'left_ext', 'right_ext',
-                            'total_len', 'hamming', 'ext1', 'ext2'])
-                for rank, res in enumerate(results, 1):
-                    w.writerow([rank, res['pos1'], res['pos2'],
-                                res['left_ext'], res['right_ext'],
-                                res['total_len'], res['hamming'],
-                                res['ext1'], res['ext2']])
-            print(fmttxt([f'Saved {len(results)} pair(s) to:', fn_csv],
-                         ['bold', ''], ['green', 'cyan']))
-            open_file_with_default_software(fn_csv)
-
-    safe_input(fmttxt(['Press Enter to continue'], [''], ['white']))
-
-
 def motif_extensions_input(txt, file_path=''):
     """Prompt for a motif, find matches (exact or with mutations), then extend
     each pair of exact occurrences and display lengths, Hamming distances, and
@@ -1428,7 +1274,7 @@ def motif_extensions_input(txt, file_path=''):
                 fn_csv = os.path.join(session_dir, fn_str)
             else:
                 fn_csv = fn_str
-            with open(fn_csv, 'w', newline='') as _f:
+            with open(fn_csv, 'w', newline='', encoding='utf-8') as _f:
                 w = csv.writer(_f)
                 w.writerow(['rank', 'pos1', 'pos2', 'left_ext', 'right_ext',
                             'total_len', 'hamming', 'ext1', 'ext2'])
@@ -1495,7 +1341,7 @@ def hairpins_input(txt, file_path, minSL=8, minLL=3, maxLL=40):
         return
 
     try:
-        with open(fn, 'w', newline='') as f:
+        with open(fn, 'w', newline='', encoding='utf-8') as f:
             writer = csv.writer(f)
             writer.writerow(['start', 'end', 'stem_len', 'loop_len', 'stem_seq', 'loop_seq', 'sequence'])
             for hp in hairpins:
@@ -1504,211 +1350,6 @@ def hairpins_input(txt, file_path, minSL=8, minLL=3, maxLL=40):
         print(fmttxt([f'Exported {len(hairpins)} hairpin(s) to:', fn],
                      ['bold', ''], ['green', 'cyan']))
         open_file_with_default_software(fn)
-    except Exception as e:
-        print(fmttxt([f'Error writing file: {e}'], ['bold'], ['red']))
-
-    safe_input(fmttxt(['Press Enter to continue'], [''], ['white']))
-
-
-def markov_input(txt, file_path=''):
-    """Prompt for k-mer length, then write a CSV of all observed k-mers with
-    analytical Markov-model p-values — no shuffling required.
-
-    For each k-mer the expected count under a (k-1)-th order Markov model is
-    computed via the Prum/Schbath formula; a Poisson exact p-value tests
-    whether the observed count is surprising given the (k-1)-mer frequencies.
-    """
-    k_str = safe_input(fmttxt(['k-mer length', '[default: 6]: '],
-                               ['bold', ''], ['yellow', 'cyan']) + ' ').strip()
-    k = int(k_str) if k_str.isdigit() and int(k_str) > 1 else 6
-
-    base = os.path.splitext(os.path.abspath(file_path))[0] if file_path else os.path.join(os.getcwd(), 'sequence')
-    default_csv = f'{base}_kmer{k}_markov.csv'
-    fn_str = safe_input(fmttxt(['Output CSV file',
-                                 f'[default: {os.path.basename(default_csv)}]: '],
-                                ['bold', ''], ['yellow', 'cyan']) + ' ').strip()
-    if not fn_str:
-        out_csv = default_csv
-    elif not os.path.isabs(fn_str):
-        out_csv = os.path.join(os.path.dirname(os.path.abspath(file_path)), fn_str)
-    else:
-        out_csv = fn_str
-
-    print(fmttxt([f'Computing Markov p-values for k={k} …'], [''], ['cyan']))
-    results = markov_kmer_pvalues(txt, k=k)
-
-    import csv as _csv
-    try:
-        with open(out_csv, 'w', newline='') as fh:
-            w = _csv.writer(fh)
-            w.writerow([
-                'kmer', 'real_count', 'expected_count',
-                'pvalue_over', 'evalue_over', 'pvalue_over_bh',
-                'pvalue_under', 'evalue_under', 'pvalue_under_bh',
-                'direction',
-            ])
-            for row in results:
-                w.writerow([
-                    row['kmer'], row['real_count'],
-                    f"{row['expected_count']:.3f}",
-                    f"{row['pvalue_over']:.8f}",  f"{row['evalue_over']:.4f}",  f"{row['pvalue_over_bh']:.8f}",
-                    f"{row['pvalue_under']:.8f}", f"{row['evalue_under']:.4f}", f"{row['pvalue_under_bh']:.8f}",
-                    row['direction'],
-                ])
-        print(fmttxt([f'Saved {len(results)} k-mers to:', out_csv],
-                     ['bold', ''], ['green', 'cyan']))
-        open_file_with_default_software(out_csv)
-    except Exception as e:
-        print(fmttxt([f'Error writing file: {e}'], ['bold'], ['red']))
-
-    safe_input(fmttxt(['Press Enter to continue'], [''], ['white']))
-
-
-def decompose_motif_input(txt, file_path=''):
-    """Prompt for a motif, then write a CSV of hierarchical Markov decomposition.
-
-    Every contiguous sub-k-mer of the motif is tested at each length k from
-    len(motif) down to 2, revealing the shortest unit whose count is
-    surprising beyond what the (k-1)-mer context already explains.
-    """
-    prompt = fmttxt(['Motif to decompose', '(e.g. ugcaug): '],
-                    ['bold', ''], ['yellow', 'cyan'])
-    motif = safe_input(prompt + ' ').strip().lower()
-    if not motif:
-        print(fmttxt(['No motif entered.'], ['bold'], ['red']))
-        safe_input(fmttxt(['Press Enter to continue'], [''], ['white']))
-        return
-
-    mink_str = safe_input(fmttxt(['Minimum k-mer length', '[default: 4]: '],
-                                  ['bold', ''], ['yellow', 'cyan']) + ' ').strip()
-    min_k = int(mink_str) if mink_str.isdigit() and int(mink_str) >= 2 else 4
-
-    alpha_str = safe_input(fmttxt(['Significance threshold alpha', '[default: 0.05]: '],
-                                   ['bold', ''], ['yellow', 'cyan']) + ' ').strip()
-    try:
-        alpha = float(alpha_str) if alpha_str else 0.05
-    except ValueError:
-        alpha = 0.05
-
-    base = os.path.splitext(os.path.abspath(file_path))[0] if file_path else os.path.join(os.getcwd(), 'sequence')
-    default_csv = f'{base}_decompose_{motif}.csv'
-    fn_str = safe_input(fmttxt(['Output CSV file',
-                                 f'[default: {os.path.basename(default_csv)}]: '],
-                                ['bold', ''], ['yellow', 'cyan']) + ' ').strip()
-    if not fn_str:
-        out_csv = default_csv
-    elif not os.path.isabs(fn_str):
-        out_csv = os.path.join(os.path.dirname(os.path.abspath(file_path)), fn_str)
-    else:
-        out_csv = fn_str
-
-    print(fmttxt([f'Decomposing {motif!r} …'], [''], ['cyan']))
-    results = decompose_motif(txt, motif, alpha=alpha, min_k=min_k)
-
-    if not results:
-        print(fmttxt(['Motif too short to decompose (need length >= 2).'], ['bold'], ['yellow']))
-        safe_input(fmttxt(['Press Enter to continue'], [''], ['white']))
-        return
-
-    import csv as _csv
-    try:
-        with open(out_csv, 'w', newline='') as fh:
-            w = _csv.writer(fh)
-            w.writerow([
-                'level', 'kmer', 'real_count', 'expected_count',
-                'pvalue_over', 'pvalue_under', 'pvalue_bh', 'direction', 'significant',
-            ])
-            for row in results:
-                w.writerow([
-                    row['level'], row['kmer'], row['real_count'],
-                    f"{row['expected_count']:.3f}",
-                    f"{row['pvalue_over']:.8f}",
-                    f"{row['pvalue_under']:.8f}",
-                    f"{row['pvalue_bh']:.8f}",
-                    row['direction'], row['significant'],
-                ])
-        sig = [r for r in results if r['significant']]
-        if sig:
-            min_level = min(r['level'] for r in sig)
-            min_kmers = [r['kmer'] for r in sig if r['level'] == min_level]
-            print(fmttxt([f'Shortest significant unit: length {min_level}:',
-                          ', '.join(min_kmers)],
-                         ['bold', ''], ['green', 'cyan']))
-        else:
-            print(fmttxt(['No sub-unit reached significance at alpha =',
-                          f'{alpha}'], ['bold', ''], ['yellow', 'cyan']))
-        print(fmttxt([f'Saved {len(results)} entries to:', out_csv],
-                     ['bold', ''], ['green', 'cyan']))
-        open_file_with_default_software(out_csv)
-    except Exception as e:
-        print(fmttxt([f'Error writing file: {e}'], ['bold'], ['red']))
-
-    safe_input(fmttxt(['Press Enter to continue'], [''], ['white']))
-
-
-def scramble_input(txt, file_path=''):
-    """Prompt for k-mer length and shuffle parameters, then write a CSV of
-    all observed k-mers with two-sided empirical p-values sorted ascending.
-
-    Each shuffle preserves the nucleotide composition of the sequence.
-    Two one-sided p-values are reported for each k-mer:
-      pvalue_over  — fraction of shuffles with count >= real count
-                     (small = over-represented)
-      pvalue_under — fraction of shuffles with count <= real count
-                     (small = under-represented)
-    K-mers with no enrichment or depletion will have both p-values near 0.5.
-    BH-adjusted p-values (FDR) and E-values (p * m, where m is the number of
-    distinct k-mers tested) are provided separately for each direction.
-    Rows are sorted by min(pvalue_over, pvalue_under).
-    """
-    k_str = safe_input(fmttxt(['k-mer length', '[default: 6]: '],
-                               ['bold', ''], ['yellow', 'cyan']) + ' ').strip()
-    k = int(k_str) if k_str.isdigit() and int(k_str) > 0 else 6
-
-    n_str = safe_input(fmttxt(['Number of shuffles', '[default: 5000]: '],
-                               ['bold', ''], ['yellow', 'cyan']) + ' ').strip()
-    N = int(n_str) if n_str.isdigit() and int(n_str) > 0 else 5000
-
-    seed_str = safe_input(fmttxt(['Random seed', '[default: 0]: '],
-                                  ['bold', ''], ['yellow', 'cyan']) + ' ').strip()
-    seed = int(seed_str) if seed_str.lstrip('-').isdigit() else 0
-
-    base = os.path.splitext(os.path.abspath(file_path))[0] if file_path else os.path.join(os.getcwd(), 'sequence')
-    default_csv = f'{base}_kmer{k}_pvalues.csv'
-    fn_str = safe_input(fmttxt(['Output CSV file',
-                                 f'[default: {os.path.basename(default_csv)}]: '],
-                                ['bold', ''], ['yellow', 'cyan']) + ' ').strip()
-    if not fn_str:
-        out_csv = default_csv
-    elif not os.path.isabs(fn_str):
-        out_csv = os.path.join(os.path.dirname(os.path.abspath(file_path)), fn_str)
-    else:
-        out_csv = fn_str
-
-    print(fmttxt([f'Running {N} shuffles with k={k} …'], [''], ['cyan']))
-    results = scramble_kmer_pvalues(txt, k=k, N=N, seed=seed)
-
-    import csv as _csv
-    try:
-        with open(out_csv, 'w', newline='') as fh:
-            w = _csv.writer(fh)
-            w.writerow([
-                'kmer', 'real_count', 'exceed_count', 'below_count',
-                'pvalue_over', 'evalue_over', 'pvalue_over_bh',
-                'pvalue_under', 'evalue_under', 'pvalue_under_bh',
-                'direction',
-            ])
-            for row in results:
-                w.writerow([
-                    row['kmer'], row['real_count'],
-                    row['exceed_count'], row['below_count'],
-                    f"{row['pvalue_over']:.8f}",  f"{row['evalue_over']:.4f}",  f"{row['pvalue_over_bh']:.8f}",
-                    f"{row['pvalue_under']:.8f}", f"{row['evalue_under']:.4f}", f"{row['pvalue_under_bh']:.8f}",
-                    row['direction'],
-                ])
-        print(fmttxt([f'Saved {len(results)} k-mers to:', out_csv],
-                     ['bold', ''], ['green', 'cyan']))
-        open_file_with_default_software(out_csv)
     except Exception as e:
         print(fmttxt([f'Error writing file: {e}'], ['bold'], ['red']))
 
@@ -1753,7 +1394,7 @@ def markov_kmer_input(txt, file_path=''):
 
     import csv as _csv
     try:
-        with open(out_csv, 'w', newline='') as fh:
+        with open(out_csv, 'w', newline='', encoding='utf-8') as fh:
             w = _csv.writer(fh)
             w.writerow([
                 'kmer', 'real_count', 'expected_count',
@@ -1989,7 +1630,7 @@ def sequence_hits_input(fn, txt):
                                 ['bold', ''], ['yellow', 'cyan']) + ' ')
         if ans.strip().lower() == 'y':
             import csv
-            with open(hairpins_csv, newline='') as _f:
+            with open(hairpins_csv, newline='', encoding='utf-8') as _f:
                 for row in csv.DictReader(_f):
                     hairpins.append({
                         'start':    int(row['start']),
@@ -2523,6 +2164,51 @@ def _clear_workspace(workdir, file_path):
     return True
 
 
+def render_user_guide_html(guide_md=None, guide_html=None):
+    """Render docs/user_guide.md to a standalone HTML file.
+
+    Shared by the interactive "Open User Guide" menu item and
+    docs/build_docs.py, so both always use the exact same template — no
+    separate copy of the HTML wrapper to keep in sync.
+
+    Args:
+        guide_md:   Path to the markdown source. Defaults to the package's
+                    own docs/user_guide.md.
+        guide_html: Output path. Defaults to guide_md with a .html extension.
+
+    Returns:
+        The path written, or None if guide_md doesn't exist.
+    """
+    if guide_md is None:
+        guide_md = os.path.abspath(os.path.join(
+            os.path.dirname(__file__), '..', '..', 'docs', 'user_guide.md'))
+    if not os.path.isfile(guide_md):
+        return None
+    import markdown as _md
+    with open(guide_md, 'r', encoding='utf-8') as _f:
+        body = _md.markdown(_f.read(), extensions=['tables', 'fenced_code'])
+    if guide_html is None:
+        guide_html = os.path.splitext(guide_md)[0] + '.html'
+    with open(guide_html, 'w', encoding='utf-8') as _f:
+        _f.write(f'''<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>RNA_lexis User Guide</title>
+<style>
+body{{font-family:sans-serif;max-width:960px;margin:2em auto;padding:0 1.5em;line-height:1.6;color:#222;}}
+h1,h2,h3,h4{{color:#1a4a7a;}}
+h2{{border-bottom:1px solid #ccc;padding-bottom:0.2em;}}
+table{{border-collapse:collapse;margin:1em 0;width:100%;}}
+th,td{{border:1px solid #bbb;padding:6px 12px;text-align:left;}}
+th{{background:#f0f4f8;}}
+code{{background:#f4f4f4;padding:2px 5px;border-radius:3px;font-size:0.92em;}}
+pre{{background:#f4f4f4;padding:1em;border-radius:5px;overflow-x:auto;}}
+pre code{{background:none;padding:0;}}
+hr{{border:none;border-top:1px solid #ddd;margin:2em 0;}}
+p img{{display:block;margin:0 auto;}}
+blockquote{{border-left:4px solid #ccc;margin:1em 0;padding:0.5em 1em;color:#555;}}
+</style></head><body>{body}</body></html>''')
+    return guide_html
+
+
 def menus():
     """Run the interactive RNA_explore menu loop.
 
@@ -2549,7 +2235,7 @@ def menus():
                ["Core neighbors (detailed)", "Core neighbors (condensed)", "K-mers", "Logo", "Coverage", "Motif Match/Mutation", "Back"],
                ["Find all matches", "Search with mutations", "Motif extensions", "Print core",
                 "Motif spacing / periodicity test", "Gapped motif search",
-                "Extend match pair", "Covered area", "Core neighbors (text export)",
+                "Covered area", "Core neighbors (text export)",
                 "Rank core motifs (Markov/FDR)", "Mutation-family scoring",
                 "Alignment score for two sequences", "K-mer Markov analysis",
                 "Batch spacing test (all cores & motifs)",
@@ -2648,7 +2334,7 @@ def menus():
                     init_summary(file_path, strs['xmotifs'], strs['corelist'], txt)
                 else:
                     # Sequence ops menu uses 3 color blocks; other menus use a single split.
-                    _seq_splits = [(9, 'yellow'), (14, 'white')]
+                    _seq_splits = [(8, 'yellow'), (13, 'white')]
                     _seq_labels = ["single-sequence analysis", "statistical analysis", "other"]
                     val = show_menu(file_path, menu_ttl[menu_level], submenu[menu_level],
                                     clr=defvals['clr'],
@@ -2703,33 +2389,11 @@ def menus():
                             continue
                         # Open the user guide in the default browser:
                         if val == 7:
-                            _guide_md = os.path.abspath(os.path.join(
-                                os.path.dirname(__file__), '..', '..', 'docs', 'user_guide.md'))
-                            if os.path.isfile(_guide_md):
-                                import markdown as _md
-                                with open(_guide_md, 'r') as _f:
-                                    _body = _md.markdown(_f.read(), extensions=['tables', 'fenced_code'])
-                                _guide_html = os.path.splitext(_guide_md)[0] + '.html'
-                                with open(_guide_html, 'w') as _f:
-                                    _f.write(f'''<!DOCTYPE html>
-<html><head><meta charset="utf-8"><title>RNA_lexis User Guide</title>
-<style>
-body{{font-family:sans-serif;max-width:960px;margin:2em auto;padding:0 1.5em;line-height:1.6;color:#222;}}
-h1,h2,h3,h4{{color:#1a4a7a;}}
-h2{{border-bottom:1px solid #ccc;padding-bottom:0.2em;}}
-table{{border-collapse:collapse;margin:1em 0;width:100%;}}
-th,td{{border:1px solid #bbb;padding:6px 12px;text-align:left;}}
-th{{background:#f0f4f8;}}
-code{{background:#f4f4f4;padding:2px 5px;border-radius:3px;font-size:0.92em;}}
-pre{{background:#f4f4f4;padding:1em;border-radius:5px;overflow-x:auto;}}
-pre code{{background:none;padding:0;}}
-hr{{border:none;border-top:1px solid #ddd;margin:2em 0;}}
-p img{{display:block;margin:0 auto;}}
-blockquote{{border-left:4px solid #ccc;margin:1em 0;padding:0.5em 1em;color:#555;}}
-</style></head><body>{_body}</body></html>''')
+                            _guide_html = render_user_guide_html()
+                            if _guide_html:
                                 webbrowser.open(f'file://{_guide_html}')
                             else:
-                                print(fmttxt(["User guide not found:", _guide_md], ['bold', ''], ['red', 'white']))
+                                print(fmttxt(["User guide not found."], ['bold'], ['red']))
                         # Clear workspace (delete all non-FASTA files), then reload:
                         if val == 8:
                             if _clear_workspace(workdir, file_path):
@@ -2780,26 +2444,24 @@ blockquote{{border-left:4px solid #ccc;margin:1em 0;padding:0.5em 1em;color:#555
                             case 6:
                                 gapped_motif_input(file_path, txt)
                             case 7:
-                                extend_match_input(txt, file_path)
-                            case 8:
                                 txt_coverage_input(txt, strs)
-                            case 9:
+                            case 8:
                                 neighbors_condensed_export_input(file_path, txt, strs)
                             # Block 2 — statistical analysis
-                            case 10:
+                            case 9:
                                 statistical_core_input(file_path, txt, strs)
-                            case 11:
+                            case 10:
                                 mutation_family_input(file_path, txt, strs)
-                            case 12:
+                            case 11:
                                 print_alignment_score(txt)
-                            case 13:
+                            case 12:
                                 markov_kmer_input(txt, file_path)
-                            case 14:
+                            case 13:
                                 batch_spacing_test_input(file_path, txt, strs)
                             # Block 3 — other
-                            case 15:
+                            case 14:
                                 hairpins_input(txt, file_path)
-                            case 16:
+                            case 15:
                                 menu_level = 0 # Go to the main menu
         
         except EOFSignal:

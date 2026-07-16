@@ -53,11 +53,14 @@ def load_prefs() -> dict:
     ``'last_used_dir'``, both defaulting to ``''`` when absent.
     """
     defaults = {'default_data_dir': '', 'last_used_dir': ''}
-    path = _prefs_path()
+    try:
+        path = _prefs_path()
+    except Exception:
+        return defaults
     if not os.path.isfile(path):
         return defaults
     try:
-        with open(path, 'r') as f:
+        with open(path, 'r', encoding='utf-8') as f:
             return {**defaults, **json.load(f)}
     except Exception:
         return defaults
@@ -71,7 +74,7 @@ def save_prefs(prefs: dict) -> None:
                and ``'last_used_dir'``.  Unknown keys are preserved.
     """
     try:
-        with open(_prefs_path(), 'w') as f:
+        with open(_prefs_path(), 'w', encoding='utf-8') as f:
             json.dump(prefs, f, indent=4)
     except Exception as e:
         print(f"Warning: could not save preferences: {e}")
@@ -121,7 +124,7 @@ def save_session(filename, data, debug=False):
     """
     if isinstance(data, SessionData):
         data = asdict(data)
-    with open(f"{filename}.json", "w") as json_file:
+    with open(f"{filename}.json", "w", encoding='utf-8') as json_file:
         json.dump(data, json_file, indent=4)
 
 
@@ -136,7 +139,7 @@ def load_session(filename):
         or cannot be decoded as valid JSON.
     """
     try:
-        with open(filename, 'r') as file:
+        with open(filename, 'r', encoding='utf-8') as file:
             return(json.load(file))
     except FileNotFoundError:
         print(f"Error: The file '{filename}.json' was not found.")
@@ -147,7 +150,7 @@ def load_session(filename):
 def is_valid_session(filepath: str) -> Optional[SessionData]:
     """Return a SessionData if filepath is a valid RNA_explore session JSON, else None."""
     try:
-        with open(filepath, 'r') as f:
+        with open(filepath, 'r', encoding='utf-8') as f:
             d = json.load(f)
         if not isinstance(d, dict) or not _SESSION_REQUIRED_KEYS.issubset(d):
             return None
@@ -191,7 +194,7 @@ def _summary_inputs_hash(xm, cores, txt, mutr, M):
 def _read_summary_hash(csv_path):
     """Return the stored input hash for *csv_path*, or None if absent/unreadable."""
     try:
-        with open(csv_path + '.chk', 'r') as fh:
+        with open(csv_path + '.chk', 'r', encoding='utf-8') as fh:
             return fh.read().strip() or None
     except Exception:
         return None
@@ -200,24 +203,34 @@ def _read_summary_hash(csv_path):
 def _write_summary_hash(csv_path, h):
     """Persist *h* alongside *csv_path* for future change-detection."""
     try:
-        with open(csv_path + '.chk', 'w') as fh:
+        with open(csv_path + '.chk', 'w', encoding='utf-8') as fh:
             fh.write(h)
     except Exception:
         pass
 
 
 def open_file_with_default_software(filename):
-    """Opens a file using the default application for the current OS."""
-    if platform.system() == 'Windows':
-        os.startfile(filename) # For Windows
-    elif platform.system() == 'Darwin':
-        subprocess.run(['open', filename], check=True) # For macOS
-    else:
-        # On Linux, skip xdg-open if LibreOffice already has the file open.
-        if _is_file_open_in_libreoffice(filename):
-            _try_raise_libreoffice_window(filename)
+    """Opens a file using the default application for the current OS.
+
+    Best-effort: on failure (no default app registered, missing
+    xdg-open/open binary, headless environment, etc.) this prints a
+    message instead of raising, so a save-and-open action never crashes
+    the caller when only the "open" half fails.
+    """
+    try:
+        if platform.system() == 'Windows':
+            os.startfile(filename) # For Windows
+        elif platform.system() == 'Darwin':
+            subprocess.run(['open', filename], check=True) # For macOS
         else:
-            subprocess.run(['xdg-open', filename], check=True)
+            # On Linux, skip xdg-open if LibreOffice already has the file open.
+            if _is_file_open_in_libreoffice(filename):
+                _try_raise_libreoffice_window(filename)
+            else:
+                subprocess.run(['xdg-open', filename], check=True)
+    except Exception as e:
+        print(f"Could not open file automatically: {filename}")
+        print(str(e))
 
 
 def _close_in_excel(filepath):

@@ -333,7 +333,7 @@ def _save_fig(fig, file, scale):
                 html_file = f'{root}_fallback.html'
                 fig.write_html(html_file, auto_open=False)
                 print(f'Saved interactive HTML fallback to: {html_file}')
-                with open(f'{root}_export_message.txt', 'w') as fh:
+                with open(f'{root}_export_message.txt', 'w', encoding='utf-8') as fh:
                     fh.write(msg + f'\nHTML fallback saved to: {html_file}\n')
                 open_file_with_default_software(html_file)
                 return
@@ -625,7 +625,7 @@ def export_nbrs_condensed(s0, s, txt, sortby='CP', wd=20, xrange=[], file=''):
 
     root, ext = os.path.splitext(file)
     out = file if ext.lower() == '.csv' else f'{root}.csv'
-    with open(out, 'w', newline='') as f:
+    with open(out, 'w', newline='', encoding='utf-8') as f:
         writer = csv.writer(f)
         writer.writerow(header)
         writer.writerows(rows)
