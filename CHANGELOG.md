@@ -1,5 +1,56 @@
 # Changelog
 
+## [0.2.0] - 2026-07-17
+
+First release of Part B's new paper-figure plots (see
+`PLAN_paper_figures.md`'s Part B) — self-similarity arc plot (target #3).
+Bumped to a minor version rather than another patch: a new user-facing plot
+type is a larger change than the patch-level fixes/additions `0.1.x` covered.
+
+### Added
+
+- **"Self-similarity arc plot"** — new item in the Plots menu (item 7;
+  "Back" moved to item 8). Visualises pairwise Hamming-bounded extensions
+  among every exact occurrence of a seed motif as a semicircular arc
+  diagram: node size = longest extension reachable from that position, arc
+  thickness = extension length for that pair, arc color = hop distance
+  (tandem-repeat units separating the two positions), arc labels = spacing/
+  Hamming/identity. Also runs and displays the same spacing-significance
+  test as "Motif spacing / periodicity test" (candidate period, gap-cluster
+  p-value, Rayleigh p-value) — requires >= 3 seed occurrences, since that
+  test needs >= 3 to be computable; the arc diagram itself doesn't require
+  regular spacing to draw or interpret.
+- **`rna_lexis.algorithms.hop_distance(spacing, unit)`** — buckets physical
+  spacing into tandem-repeat-unit counts. `unit` (repeat-unit length) is a
+  required parameter, not a hardcoded constant — callers estimate it from
+  the actual occurrence positions (e.g. median consecutive gap), since
+  repeat-unit length is specific to whatever motif/region is being analysed.
+- **`rna_lexis.plots.plot_self_similarity_arcs()`** — the rendering
+  function behind the new menu item; also directly usable as a library
+  function. Ported from a verified real source (see below), not built from
+  a caption description.
+
+### Fixed
+
+- Reproduced the exact figure submitted in the paper revision
+  (`XIST_extension_graph_2.png`) by locating its actual source in GeneDB's
+  git history — `plot_extension_graph.py` *before* commit `80786af`, which
+  later reworked it into an unrelated "ribbon" design. Verified numerically
+  identical (all 15 pairwise values) and visually pixel-for-pixel identical
+  before porting.
+- Two rendering bugs present in that original script, fixed during the
+  port: the node-size legend used the *arc*-thickness scale rather than
+  the actual node-size scale (so legend circles didn't match plotted circle
+  sizes), and the legend was placed inside a plot corner where it could
+  overlap arcs for other datasets — moved outside the axes.
+- `arr.ptp()` — removed as an `ndarray` method in NumPy 2.0 (this project's
+  `numpy` dependency has no version pin, so code must support both 1.x and
+  2.x). Caught via user testing against a real NumPy 2.2.6 environment;
+  fixed to use `np.ptp(arr)`, verified against both NumPy 1.26 and 2.2.6.
+- Title/subtitle overflow — the single-line subtitle was long enough to be
+  truncated on one side and covered by the (now-external) legend on the
+  other. Split across multiple lines.
+
 ## [0.1.14] - 2026-07-16
 
 ### Added
