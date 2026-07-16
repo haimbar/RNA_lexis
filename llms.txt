@@ -6,7 +6,8 @@
 
 This document is written for AI agents (and developers) using RNA_lexis as a Python
 library. It covers the public API, data structures, and worked workflows. For the
-interactive terminal interface, see [docs/user_guide.md](docs/user_guide.md).
+interactive terminal interface, see [docs/user_guide.md](docs/user_guide.md); for
+installation, features, and troubleshooting, see [README.md](README.md).
 
 ---
 
@@ -32,7 +33,7 @@ pip install .
 from rna_lexis.algorithms import (
     find_boundary, cores, find_all_matches, find_with_mutations,
     find_longest_extensions, extend_match_pair, cover, core_nbrs,
-    cond_prob_core, count_kgrams, zscore, scramble_kmer_pvalues,
+    cond_prob_core, count_kgrams, zscore,
     markov_kmer_pvalues, gen_hairpins, allow_mutation, is_bounded,
     expand_to_boundary, extendRNA, Hairpin, contains_only_rna,
 )
@@ -124,13 +125,15 @@ class Hairpin(NamedTuple):
 
 ### `MarkovBackground` (statistical)
 
-Frozen dataclass holding per-base and per-dinucleotide probabilities. Constructed
-internally by `score_exact_motifs` and related functions; you rarely need to build
-one directly, but it is available for custom scoring:
+Frozen dataclass (`sequence`, `order=1`, `pseudocount=1.0`, `alphabet='acgt'`)
+holding order-*k* transition counts for a sequence. Constructed internally by
+`score_exact_motifs` and related functions; you rarely need to build one
+directly, but it is available for custom scoring:
 
 ```python
-bg = MarkovBackground.from_sequence(txt, order=1, pseudocount=0.5)
-p  = bg.dinuc_prob["ac"]   # P(c | a)
+bg = MarkovBackground(txt, order=1, pseudocount=0.5)
+p  = bg.probability("ac")        # Markov probability of the word "ac"
+n  = bg.expected_count("acgtac") # expected overlapping occurrences in txt
 ```
 
 ---
@@ -247,7 +250,7 @@ validate input before analysis.
 Find all bounded recurring substrings (xmotifs) in `txt`. Primary motif-discovery
 step. May return duplicates; use `list(set(...))` to deduplicate.
 
-### `cores(txt, xmotifs, minclen=5) -> list[str]`
+### `cores(txt, xmotifs, minclen=6) -> list[str]`
 
 Extract core sequences from xmotifs by iteratively selecting the highest-coverage
 motif and splitting remaining motifs around it. Returns cores ordered
@@ -333,11 +336,6 @@ results = markov_kmer_pvalues(txt, k=6, order=1)
 #            pvalue_under, evalue_under, pvalue_under_bh, direction
 ```
 
-### `scramble_kmer_pvalues(txt, k, N, seed=0) -> list[dict]`
-
-Shuffle-based permutation null for k-mer enrichment (legacy; prefer
-`markov_kmer_pvalues` for speed and reproducibility).
-
 ### `gen_hairpins(rna, minSL=8, minLL=3, maxLL=40) -> list[Hairpin]`
 
 Find all non-overlapping hairpin stem-loop structures. Returns `[]` when none found.
@@ -401,9 +399,10 @@ Strip non-nucleotide characters and lower-case. Converts `u→t`.
 normalize_sequence("AAUUxxCCgg")  # → "aattccgg"
 ```
 
-### `score_exact_motifs(txt, motifs, xmotifs=None, markov_order=1, enrichment_threshold=10.0, min_xmotif_type_support=1) -> list[dict]`
+### `score_exact_motifs(txt, motifs, *, xmotifs=None, markov_order=1, pseudocount=1.0, alpha=0.05, enrichment_threshold=10.0, min_count=2, min_xmotif_type_support=0, area_power=1.2) -> list[dict]`
 
 Score a list of exact motifs against a transcript-specific Markov background.
+All keyword args are keyword-only (note the `*`).
 
 ```python
 rows = score_exact_motifs(txt, corelist, xmotifs=xmotifs)
@@ -414,13 +413,15 @@ rows = score_exact_motifs(txt, corelist, xmotifs=xmotifs)
 #            rank_statistical, rank_coverage
 ```
 
-### `rank_core_candidates(txt, xmotifs, candidate_min_len=5, candidate_max_len=18, min_xmotif_type_support=2, enrichment_threshold=10.0, alpha=0.05) -> list[dict]`
+### `rank_core_candidates(txt, xmotifs, *, candidate_min_len=5, candidate_max_len=18, min_xmotif_type_support=2, **score_kwargs) -> list[dict]`
 
 Enumerate all shared substrings of `xmotifs` within the length range, score each
 against the Markov background, and return a ranked list. Same columns as
 `score_exact_motifs`, plus `rank_statistical` and `rank_coverage`.
+`**score_kwargs` (e.g. `enrichment_threshold`, `alpha`) are forwarded to
+`score_exact_motifs`.
 
-### `mutation_family_tests(txt, motifs, mutr=1/6, enrichment_threshold=5.0, expected_max=5.0, alpha=0.05) -> list[dict]`
+### `mutation_family_tests(txt, motifs, *, mutr=1/6, M=4, markov_order=1, pseudocount=1.0, alpha=0.05, enrichment_threshold=5.0, expected_max=5.0, min_family_count=2, max_variants=500_000) -> list[dict]`
 
 Test each motif at every Hamming radius allowed by `mutr`. Returns one row per
 (motif, radius) pair.
@@ -437,22 +438,23 @@ rows = mutation_family_tests(txt, ["TGTATATA"])
 Select the row with the strongest accepted decision for each motif from the output
 of `mutation_family_tests`. Returns one dict per motif.
 
-### `find_gapped_motif_hits(txt, left, right, min_gap=0, max_gap=30) -> list[dict]`
+### `find_gapped_motif_hits(txt, left_anchor, right_anchor, *, min_gap=0, max_gap=30) -> list[dict]`
 
 Find all occurrences of `LEFT[gap:min_gap–max_gap]RIGHT` in `txt`.
 
 ```python
 hits = find_gapped_motif_hits(txt, "TGT", "TATA", min_gap=0, max_gap=6)
-# Each dict: start, gap_length, matched_sequence
+# Each dict: start, end, left_anchor, right_anchor, gap_length, gap_sequence, matched_sequence
 ```
 
-### `score_gapped_motif(txt, left, right, min_gap=0, max_gap=30) -> dict`
+### `score_gapped_motif(txt, left_anchor, right_anchor, *, min_gap=0, max_gap=30, markov_order=1, pseudocount=1.0) -> dict`
 
 Score a gapped pattern as a single family under the Markov background.
 
 ```python
 score = score_gapped_motif(txt, "TGT", "TATA", min_gap=0, max_gap=6)
-# Keys: pattern, observed_count, expected_markov, enrichment_markov, p_markov
+# Keys: pattern, left_anchor, right_anchor, min_gap, max_gap, observed_count,
+#       coverage_bp, expected_markov, enrichment_markov, p_markov, q_markov, markov_order
 ```
 
 ### `spacing_periodicity_test(positions, seq_len) -> dict`
@@ -688,5 +690,4 @@ if len(positions) >= 3:
 | Minimum occurrences for `cover()` | Returns 0 when `s` appears fewer than twice |
 | `find_longest_extensions` | Returns `[]` when seed occurs fewer than twice; O(n²) in occurrences |
 | `markov_kmer_pvalues` | Runs in O(len(txt) × k) — effectively instant for any k |
-| `scramble_kmer_pvalues` | O(N × len(txt)); use N ≥ 1000 for stable p-values |
 | `fetch_enst_cdna` | Requires active internet; 45-second timeout per request |

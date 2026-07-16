@@ -145,10 +145,12 @@ Visualises how a chosen core sequence co-occurs with its neighbours across the f
 | Output file name | *(screen only)* | Leave blank to display interactively |
 | Output format | 1 (PNG standard) | 1 = PNG, 2 = PNG high-res (3×), 3 = SVG, 4 = HTML |
 | X-axis range | *(full range)* | `min, max` e.g. `100, 500` |
+| Minimum occurrences to include a neighbour | 2 | Neighbours occurring fewer times than this are excluded |
+| Show hairpin regions? | N | Only asked when a companion `*_hairpins.csv` file exists in the session directory |
 
 The adaptive default W(N) = clamp(⌊N·ln2 / (2·ñ)⌋, 20, 80), where N is the transcript length and ñ is the median occurrence count of the detected cores. This keeps the null co-occurrence probability near 0.5 regardless of transcript length. The computed value is shown at the prompt; press Enter to accept it or type a different integer.
 
-The interactive HTML plot is always shown on screen. If an output file name is given, the plot is also saved to disk in the chosen format.
+The interactive HTML plot is always shown on screen. If an output file name is given, the plot is also saved to disk in the chosen format. PNG/SVG export runs with a 45-second timeout; if Kaleido hangs past that, an interactive HTML fallback (`<name>_fallback.html`) and a plain-text error report (`<name>_export_message.txt`) are saved next to it instead.
 
 **Reading the plot:**
 
@@ -173,6 +175,10 @@ A compact three-band overview of the same neighbourhood data, designed for long 
 | Output file name | *(screen only)* | Leave blank to display interactively |
 | Output format | 1 (PNG standard) | 1 = PNG, 2 = PNG high-res (3×), 3 = SVG, 4 = HTML |
 | X-axis range | *(full range)* | `min, max` e.g. `100, 500` |
+| Minimum occurrences to include a neighbour | 2 | Neighbours occurring fewer times than this are excluded |
+| Show hairpin regions? | N | Only asked when a companion `*_hairpins.csv` file exists in the session directory |
+
+PNG/SVG export runs with a 45-second timeout; if Kaleido hangs past that, an interactive HTML fallback (`<name>_fallback.html`) and a plain-text error report (`<name>_export_message.txt`) are saved next to it instead.
 
 **Reading the plot:**
 
@@ -256,6 +262,8 @@ Plots the positions of up to three user-supplied sequences along the full text a
 | Condense x-axis? | N | If `y`, large empty regions on the x-axis are compressed |
 | Minimum gap size to compress | 1000 | Only gaps wider than this many positions are compressed (shown only when condensing) |
 
+PNG/SVG export runs with a 45-second timeout; if Kaleido hangs past that, an interactive HTML fallback (`<name>_fallback.html`) and a plain-text error report (`<name>_export_message.txt`) are saved next to it instead.
+
 **Reading the plot:**
 
 - Each sequence occupies its own lane, drawn in a distinct color: **blue** (seq 1, bottom), **orange** (seq 2, middle), **green** (seq 3, top).
@@ -287,19 +295,18 @@ The detail view is a plain HTML page showing every nucleotide in the selected ra
  4. Print core
  5. Motif spacing / periodicity test
  6. Gapped motif search
- 7. Extend match pair
- 8. Covered area
- 9. Core neighbors (text export)
+ 7. Covered area
+ 8. Core neighbors (text export)
 
-10. Rank core motifs (Markov/FDR)         ← statistical analysis
-11. Mutation-family scoring
-12. Alignment score for two sequences
-13. K-mer Markov analysis
-14. Batch spacing test (all cores & motifs)
+ 9. Rank core motifs (Markov/FDR)         ← statistical analysis
+10. Mutation-family scoring
+11. Alignment score for two sequences
+12. K-mer Markov analysis
+13. Batch spacing test (all cores & motifs)
 
-15. Export hairpins to CSV                ← other
+14. Export hairpins to CSV                ← other
 
-16. Back
+15. Back
 ```
 
 #### 2.1 Find all matches
@@ -453,53 +460,11 @@ The family-level statistics (`pattern`, `observed_count`, `expected_markov`,
 (`start`, `gap_length`, `matched_sequence`) vary by row.  Up to 20 hits are
 printed to the terminal.
 
-#### 2.7 Extend match pair
-
-Finds all exact occurrences of a seed sequence and, for every pair of occurrences, greedily extends both copies left and right as far as possible while keeping the Hamming distance between the two extended copies within a user-defined rate.  The result reveals how much context around two repeats remains mutually similar.
-
-**How the extension works:**
-
-1. The right flank is extended first, one nucleotide at a time.  A position is kept whenever the cumulative Hamming distance does not exceed `floor(total_length × mutr)`.  The loop stops as soon as the budget for the full remaining text is exhausted.
-2. The left flank is then extended using the budget that remains after the right extension.
-
-**Prompts:**
-
-| Prompt | Default | Notes |
-|---|:---:|---|
-| Seed sequence | | Must occur at least twice in the text; blank to cancel |
-| Mutation rate: 1 per N letters | 6 | 1 mismatch allowed per N nucleotides |
-
-**Output:**
-
-Up to 10 pairs are shown, sorted by total extension length (longest first).  For each pair:
-
-- Positions of the two seed copies, total extended length, and left/right extension sizes.
-- Both extended sequences printed side-by-side: the seed region is shown in **BOLD UPPERCASE**; mismatched characters in the flanks are shown in **RED UPPERCASE**.
-- Hamming distance as a count and percentage.
-
-**Printing a pair in full:**
-
-After the summary, you are offered the option to print one pair without truncation:
-
-```
-Print a pair in full [1–10, blank to skip]:
-```
-
-Entering a number prints the raw plain-text sequences for each copy (safe to copy), followed by a colour-coded alignment for visual reference.
-
-**Saving results to CSV:**
-
-```
-Save all pairs to CSV [Enter for extensions_<seed>.csv, Ctrl+D to skip]:
-```
-
-Press **Enter** to save to the default filename, type a custom name, or press **Ctrl+D** to skip. The CSV contains one row per pair with columns: `rank`, `pos1`, `pos2`, `left_ext`, `right_ext`, `total_len`, `hamming`, `ext1`, `ext2`.
-
-#### 2.8 Covered area
+#### 2.7 Covered area
 
 Computes and prints the coverage score for a single sequence: `length^a times occurrences`, where *a* is a configurable exponent (default 1.2, matching the session setting).
 
-#### 2.9 Core neighbors (text export)
+#### 2.8 Core neighbors (text export)
 
 Exports the sequence regions associated with a query core and its neighbourhood as a CSV file, so that individual region sequences can be copied directly into other tools (e.g. **Alignment score for two sequences**, **Search with mutations**).
 
@@ -527,7 +492,7 @@ Every occurrence of s0, its single-nucleotide mutations, and all its neighbours 
 
 Results are also printed to the terminal. The CSV is opened automatically in your default application when writing completes.
 
-#### 2.10 Rank core motifs (Markov/FDR)
+#### 2.9 Rank core motifs (Markov/FDR)
 
 Enumerates all shared substrings of the current xmotifs within a configurable
 length range, scores each candidate against a transcript-specific Markov
@@ -564,7 +529,7 @@ enrichment ratio exceeds the minimum enrichment.
 
 Up to 15 supported candidates are printed to the terminal after the CSV is saved.
 
-#### 2.11 Mutation-family scoring
+#### 2.10 Mutation-family scoring
 
 Tests one or more motifs at every Hamming radius allowed by the mutation cap.
 For each motif and radius, the complete neighbourhood — all sequences within that
@@ -596,7 +561,7 @@ Two files are written:
 | `exact_or_specific_only` | Only the exact sequence (radius 0) is enriched |
 | `below_threshold` | No radius passes the enrichment + FDR criteria |
 
-#### 2.12 Alignment score for two sequences
+#### 2.11 Alignment score for two sequences
 
 Aligns two substrings extracted from the loaded text by position.
 
@@ -616,7 +581,7 @@ The alignment is printed with gap symbols and the following scores:
 - **Bit score** — length-independent score computed with the Karlin–Altschul formula (λ = 1.28, K = 0.46); comparable across alignments of different lengths.
 - **E-value** — expected number of alignments with a score this high or better by chance, using the full transcript as the reference database. Values below 10⁻³ are considered significant.
 
-#### 2.13 K-mer Markov analysis
+#### 2.12 K-mer Markov analysis
 
 Computes analytical p-values for every observed k-mer using a Markov-model null — no shuffling or random seeds required.  For each k-mer the expected count is derived from the Prum/Schbath formula conditioned on shorter k-mer frequencies; the observed count is then tested against a Poisson(expected) null.  Two one-sided p-values are reported per k-mer, testing for over- and under-representation separately.  All results are saved to a CSV file sorted by the more extreme of the two p-values.
 
@@ -655,7 +620,7 @@ Computes analytical p-values for every observed k-mer using a Markov-model null 
 
 Rows are sorted by `min(pvalue_over, pvalue_under)` so the most extreme k-mers appear first.  BH correction is applied separately within each family of *m* tests.
 
-#### 2.14 Batch spacing test (all cores & motifs)
+#### 2.13 Batch spacing test (all cores & motifs)
 
 Runs the spacing / periodicity test (gap cluster + Rayleigh) on every core and
 xmotif in the current session simultaneously and saves a ranked CSV.  Sequences
@@ -689,7 +654,7 @@ The top 10 are printed to the terminal; all results are saved to the CSV.
 | `p_rayleigh` | Rayleigh p-value |
 | `significant` | `True` if either p < 0.05 |
 
-#### 2.15 Export hairpins to CSV
+#### 2.14 Export hairpins to CSV
 
 Exports all detected hairpin regions for the loaded sequence to a CSV file. Each row contains the start position, end position, stem sequence, loop sequence, and full hairpin sequence.
 
@@ -791,9 +756,58 @@ Exits the program.
 
 ---
 
+## Troubleshooting
+
+Issues specific to using the interactive menu. For installation and dependency
+problems (missing `tkinter`, broken image export, etc.), see the
+**Troubleshooting** section in `README.md` instead.
+
+- **"Sequence not found" for a sequence you can see in your data.** For RNA
+  sessions the loaded text is stored internally with `u` converted to `t`
+  (see *RNA vs DNA* above) — but that conversion is **not** applied to what
+  you type at a search prompt. Typing `ugcaug` against an RNA session will
+  find nothing; type `tgcaug` instead. This affects every "enter a
+  sequence/motif" prompt (Find all matches, Core neighbors, Motif extensions,
+  etc.).
+- **A Core neighbors plot looks sparser than expected, or a neighbour you
+  know is there doesn't show up.** Check the **minimum occurrences** prompt
+  (default 2 — a neighbour occurring only once is excluded) and the
+  **X-axis range** prompt (default full range, but a previously-entered
+  narrow range persists until changed). Mutations are always shown regardless
+  of the minimum-occurrences filter.
+- **`Unexpected error: ...` appears and you're dropped back to the main
+  menu.** This is a catch-all error handler — it means the specific action
+  you just tried failed, not that your session was lost. Your loaded
+  sequence, xmotifs, and cores are still in memory; you can retry the same
+  operation or try a different one. If it happens repeatedly for the same
+  action, note the exact error text before reporting it.
+- **The tool keeps asking you to choose a data directory instead of loading
+  your session automatically.** This happens when the remembered last-used
+  directory (see *Show settings*) no longer contains a valid session file —
+  e.g. the folder was moved, renamed, or the session `.json`/`_test_init.csv`
+  pair was deleted. Browse to the correct folder once; it will be
+  remembered for next time. If a folder contains **more than one** valid
+  session, you'll be asked to pick which one every time — this is expected,
+  not a bug.
+- **A statistical test or extension refuses to run ("need ≥ 2 occurrences",
+  "need ≥ 3 occurrences").** These are hard minimums, not defaults: Motif
+  extensions and Extend-style pairing need at least 2 exact/approximate
+  occurrences; the spacing/periodicity test needs at least 3. Try a shorter
+  or less specific motif, or allow mutations (search method 2) to pick up
+  more occurrences.
+- **Changing a setting (min/max xmotif length, min core length, min
+  occurrences) seems to hang or re-run several times.** If the longest
+  xmotif found equals the current maximum length, RNA_lexis automatically
+  raises the maximum by 20 and re-analyses — repeating until the longest
+  xmotif is strictly shorter than the maximum (see *Change setting* above).
+  On long, repeat-rich sequences this can take a few passes; let it finish
+  rather than interrupting.
+
+---
+
 ## Package Structure
 
-The `rna_lexis` package is organised into focused sub-modules. New code should import directly from the relevant module rather than from the top-level `rna_lexis` namespace.
+The `rna_lexis` package is organised into focused sub-modules. New code should import directly from the relevant module rather than from the top-level `rna_lexis` namespace. For a full API reference (function signatures, data structures, worked examples) rather than the interactive-menu walkthrough this guide covers, see [llms.txt](../llms.txt) in the repository root.
 
 | Module | Contents |
 |---|---|

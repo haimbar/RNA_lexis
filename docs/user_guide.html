@@ -110,51 +110,61 @@ Press <strong>Ctrl+C</strong> to exit the program immediately.</p>
 <table>
 <thead>
 <tr>
-<th style="text-align: left;">Prompt</th>
-<th style="text-align: center;">Default</th>
-<th style="text-align: left;">Notes</th>
+<th align="left">Prompt</th>
+<th align="center">Default</th>
+<th align="left">Notes</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td style="text-align: left;">Sequence to analyse</td>
-<td style="text-align: center;">no default</td>
-<td style="text-align: left;">Must be present in the text</td>
+<td align="left">Sequence to analyse</td>
+<td align="center">no default</td>
+<td align="left">Must be present in the text</td>
 </tr>
 <tr>
-<td style="text-align: left;">Neighbourhood width</td>
-<td style="text-align: center;">adaptive W(N)</td>
-<td style="text-align: left;">Number of positions on each side of the sequence</td>
+<td align="left">Neighbourhood width</td>
+<td align="center">adaptive W(N)</td>
+<td align="left">Number of positions on each side of the sequence</td>
 </tr>
 <tr>
-<td style="text-align: left;">Strings to include</td>
-<td style="text-align: center;">2 (xmotifs)</td>
-<td style="text-align: left;">1 = cores, 2 = xmotifs</td>
+<td align="left">Strings to include</td>
+<td align="center">2 (xmotifs)</td>
+<td align="left">1 = cores, 2 = xmotifs</td>
 </tr>
 <tr>
-<td style="text-align: left;">Plot title</td>
-<td style="text-align: center;"><code>&lt;file&gt; &lt;sequence&gt;</code></td>
-<td style="text-align: left;">Free text</td>
+<td align="left">Plot title</td>
+<td align="center"><code>&lt;file&gt; &lt;sequence&gt;</code></td>
+<td align="left">Free text</td>
 </tr>
 <tr>
-<td style="text-align: left;">Output file name</td>
-<td style="text-align: center;"><em>(screen only)</em></td>
-<td style="text-align: left;">Leave blank to display interactively</td>
+<td align="left">Output file name</td>
+<td align="center"><em>(screen only)</em></td>
+<td align="left">Leave blank to display interactively</td>
 </tr>
 <tr>
-<td style="text-align: left;">Output format</td>
-<td style="text-align: center;">1 (PNG standard)</td>
-<td style="text-align: left;">1 = PNG, 2 = PNG high-res (3×), 3 = SVG, 4 = HTML</td>
+<td align="left">Output format</td>
+<td align="center">1 (PNG standard)</td>
+<td align="left">1 = PNG, 2 = PNG high-res (3×), 3 = SVG, 4 = HTML</td>
 </tr>
 <tr>
-<td style="text-align: left;">X-axis range</td>
-<td style="text-align: center;"><em>(full range)</em></td>
-<td style="text-align: left;"><code>min, max</code> e.g. <code>100, 500</code></td>
+<td align="left">X-axis range</td>
+<td align="center"><em>(full range)</em></td>
+<td align="left"><code>min, max</code> e.g. <code>100, 500</code></td>
+</tr>
+<tr>
+<td align="left">Minimum occurrences to include a neighbour</td>
+<td align="center">2</td>
+<td align="left">Neighbours occurring fewer times than this are excluded</td>
+</tr>
+<tr>
+<td align="left">Show hairpin regions?</td>
+<td align="center">N</td>
+<td align="left">Only asked when a companion <code>*_hairpins.csv</code> file exists in the session directory</td>
 </tr>
 </tbody>
 </table>
 <p>The adaptive default W(N) = clamp(⌊N·ln2 / (2·ñ)⌋, 20, 80), where N is the transcript length and ñ is the median occurrence count of the detected cores. This keeps the null co-occurrence probability near 0.5 regardless of transcript length. The computed value is shown at the prompt; press Enter to accept it or type a different integer.</p>
-<p>The interactive HTML plot is always shown on screen. If an output file name is given, the plot is also saved to disk in the chosen format.</p>
+<p>The interactive HTML plot is always shown on screen. If an output file name is given, the plot is also saved to disk in the chosen format. PNG/SVG export runs with a 45-second timeout; if Kaleido hangs past that, an interactive HTML fallback (<code>&lt;name&gt;_fallback.html</code>) and a plain-text error report (<code>&lt;name&gt;_export_message.txt</code>) are saved next to it instead.</p>
 <p><strong>Reading the plot:</strong></p>
 <ul>
 <li>The reference sequence (s0) sits at <strong>y = 0</strong>.</li>
@@ -169,49 +179,60 @@ Press <strong>Ctrl+C</strong> to exit the program immediately.</p>
 <table>
 <thead>
 <tr>
-<th style="text-align: left;">Prompt</th>
-<th style="text-align: center;">Default</th>
-<th style="text-align: left;">Notes</th>
+<th align="left">Prompt</th>
+<th align="center">Default</th>
+<th align="left">Notes</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td style="text-align: left;">Sequence to analyse</td>
-<td style="text-align: center;">no default</td>
-<td style="text-align: left;">Must be present in the text</td>
+<td align="left">Sequence to analyse</td>
+<td align="center">no default</td>
+<td align="left">Must be present in the text</td>
 </tr>
 <tr>
-<td style="text-align: left;">Neighbourhood width</td>
-<td style="text-align: center;">adaptive W(N)</td>
-<td style="text-align: left;">Number of positions on each side of the sequence</td>
+<td align="left">Neighbourhood width</td>
+<td align="center">adaptive W(N)</td>
+<td align="left">Number of positions on each side of the sequence</td>
 </tr>
 <tr>
-<td style="text-align: left;">Strings to include</td>
-<td style="text-align: center;">2 (xmotifs)</td>
-<td style="text-align: left;">1 = cores, 2 = xmotifs</td>
+<td align="left">Strings to include</td>
+<td align="center">2 (xmotifs)</td>
+<td align="left">1 = cores, 2 = xmotifs</td>
 </tr>
 <tr>
-<td style="text-align: left;">Plot title</td>
-<td style="text-align: center;"><code>&lt;file&gt; &lt;sequence&gt;</code></td>
-<td style="text-align: left;">Free text</td>
+<td align="left">Plot title</td>
+<td align="center"><code>&lt;file&gt; &lt;sequence&gt;</code></td>
+<td align="left">Free text</td>
 </tr>
 <tr>
-<td style="text-align: left;">Output file name</td>
-<td style="text-align: center;"><em>(screen only)</em></td>
-<td style="text-align: left;">Leave blank to display interactively</td>
+<td align="left">Output file name</td>
+<td align="center"><em>(screen only)</em></td>
+<td align="left">Leave blank to display interactively</td>
 </tr>
 <tr>
-<td style="text-align: left;">Output format</td>
-<td style="text-align: center;">1 (PNG standard)</td>
-<td style="text-align: left;">1 = PNG, 2 = PNG high-res (3×), 3 = SVG, 4 = HTML</td>
+<td align="left">Output format</td>
+<td align="center">1 (PNG standard)</td>
+<td align="left">1 = PNG, 2 = PNG high-res (3×), 3 = SVG, 4 = HTML</td>
 </tr>
 <tr>
-<td style="text-align: left;">X-axis range</td>
-<td style="text-align: center;"><em>(full range)</em></td>
-<td style="text-align: left;"><code>min, max</code> e.g. <code>100, 500</code></td>
+<td align="left">X-axis range</td>
+<td align="center"><em>(full range)</em></td>
+<td align="left"><code>min, max</code> e.g. <code>100, 500</code></td>
+</tr>
+<tr>
+<td align="left">Minimum occurrences to include a neighbour</td>
+<td align="center">2</td>
+<td align="left">Neighbours occurring fewer times than this are excluded</td>
+</tr>
+<tr>
+<td align="left">Show hairpin regions?</td>
+<td align="center">N</td>
+<td align="left">Only asked when a companion <code>*_hairpins.csv</code> file exists in the session directory</td>
 </tr>
 </tbody>
 </table>
+<p>PNG/SVG export runs with a 45-second timeout; if Kaleido hangs past that, an interactive HTML fallback (<code>&lt;name&gt;_fallback.html</code>) and a plain-text error report (<code>&lt;name&gt;_export_message.txt</code>) are saved next to it instead.</p>
 <p><strong>Reading the plot:</strong></p>
 <ul>
 <li><strong>s0</strong> (light blue rectangles) sits at <strong>y = 0</strong>.</li>
@@ -258,34 +279,34 @@ For Z-score plots you will also be asked for a <strong>threshold</strong> (defau
 <thead>
 <tr>
 <th>Prompt</th>
-<th style="text-align: center;">Default</th>
+<th align="center">Default</th>
 <th>Notes</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <td>Sequence to analyse</td>
-<td style="text-align: center;">no default</td>
+<td align="center">no default</td>
 <td>Must be present in the text</td>
 </tr>
 <tr>
 <td>Bases on each side</td>
-<td style="text-align: center;">0</td>
+<td align="center">0</td>
 <td>Flanking context to include</td>
 </tr>
 <tr>
 <td>Max mutations</td>
-<td style="text-align: center;">0</td>
+<td align="center">0</td>
 <td>Fuzzy matching; capped at len/6</td>
 </tr>
 <tr>
 <td>Format</td>
-<td style="text-align: center;">pdf</td>
+<td align="center">pdf</td>
 <td><code>pdf</code> or <code>svg</code></td>
 </tr>
 <tr>
 <td>Output file name</td>
-<td style="text-align: center;"><code>&lt;seq&gt;_logo</code></td>
+<td align="center"><code>&lt;seq&gt;_logo</code></td>
 <td></td>
 </tr>
 </tbody>
@@ -331,43 +352,44 @@ For Z-score plots you will also be asked for a <strong>threshold</strong> (defau
 <thead>
 <tr>
 <th>Prompt</th>
-<th style="text-align: center;">Default</th>
+<th align="center">Default</th>
 <th>Notes</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <td>Sequence 1 / 2 / 3</td>
-<td style="text-align: center;"></td>
+<td align="center"></td>
 <td>Leave blank to stop after fewer than 3</td>
 </tr>
 <tr>
 <td>Mutation rate: 1 per N letters</td>
-<td style="text-align: center;">6</td>
+<td align="center">6</td>
 <td>Sets the maximum number of mismatches per sequence: <code>floor(L / N)</code></td>
 </tr>
 <tr>
 <td>Output file</td>
-<td style="text-align: center;"><em>(screen only)</em></td>
+<td align="center"><em>(screen only)</em></td>
 <td>Leave blank to display interactively</td>
 </tr>
 <tr>
 <td>Output format</td>
-<td style="text-align: center;">1 (PNG)</td>
+<td align="center">1 (PNG)</td>
 <td>1 = PNG, 2 = PNG high-res (3×), 3 = SVG, 4 = HTML</td>
 </tr>
 <tr>
 <td>Condense x-axis?</td>
-<td style="text-align: center;">N</td>
+<td align="center">N</td>
 <td>If <code>y</code>, large empty regions on the x-axis are compressed</td>
 </tr>
 <tr>
 <td>Minimum gap size to compress</td>
-<td style="text-align: center;">1000</td>
+<td align="center">1000</td>
 <td>Only gaps wider than this many positions are compressed (shown only when condensing)</td>
 </tr>
 </tbody>
 </table>
+<p>PNG/SVG export runs with a 45-second timeout; if Kaleido hangs past that, an interactive HTML fallback (<code>&lt;name&gt;_fallback.html</code>) and a plain-text error report (<code>&lt;name&gt;_export_message.txt</code>) are saved next to it instead.</p>
 <p><strong>Reading the plot:</strong></p>
 <ul>
 <li>Each sequence occupies its own lane, drawn in a distinct color: <strong>blue</strong> (seq 1, bottom), <strong>orange</strong> (seq 2, middle), <strong>green</strong> (seq 3, top).</li>
@@ -382,19 +404,19 @@ For Z-score plots you will also be asked for a <strong>threshold</strong> (defau
 <thead>
 <tr>
 <th>Prompt</th>
-<th style="text-align: center;">Default</th>
+<th align="center">Default</th>
 <th>Notes</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <td>Position range</td>
-<td style="text-align: center;">full sequence</td>
+<td align="center">full sequence</td>
 <td><code>start,end</code> e.g. <code>200,800</code>; ranges &gt; 500 nt render slowly</td>
 </tr>
 <tr>
 <td>Output HTML file</td>
-<td style="text-align: center;"><code>&lt;name&gt;_detail.html</code></td>
+<td align="center"><code>&lt;name&gt;_detail.html</code></td>
 <td>Always saved as HTML; <code>.html</code> is appended if omitted</td>
 </tr>
 </tbody>
@@ -409,19 +431,18 @@ For Z-score plots you will also be asked for a <strong>threshold</strong> (defau
  4. Print core
  5. Motif spacing / periodicity test
  6. Gapped motif search
- 7. Extend match pair
- 8. Covered area
- 9. Core neighbors (text export)
+ 7. Covered area
+ 8. Core neighbors (text export)
 
-10. Rank core motifs (Markov/FDR)         ← statistical analysis
-11. Mutation-family scoring
-12. Alignment score for two sequences
-13. K-mer Markov analysis
-14. Batch spacing test (all cores &amp; motifs)
+ 9. Rank core motifs (Markov/FDR)         ← statistical analysis
+10. Mutation-family scoring
+11. Alignment score for two sequences
+12. K-mer Markov analysis
+13. Batch spacing test (all cores &amp; motifs)
 
-15. Export hairpins to CSV                ← other
+14. Export hairpins to CSV                ← other
 
-16. Back
+15. Back
 </code></pre>
 <h4>2.1 Find all matches</h4>
 <p>Searches the full text for a query sequence (minimum 4 characters). Use <code>.</code> as a single-character wildcard. Reports the number of matches and prints each match with its position in the text.</p>
@@ -462,29 +483,29 @@ For Z-score plots you will also be asked for a <strong>threshold</strong> (defau
 <thead>
 <tr>
 <th>Prompt</th>
-<th style="text-align: center;">Default</th>
+<th align="center">Default</th>
 <th>Notes</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <td>Motif</td>
-<td style="text-align: center;"></td>
+<td align="center"></td>
 <td>Blank to cancel</td>
 </tr>
 <tr>
 <td>Search method</td>
-<td style="text-align: center;">1 (Exact)</td>
+<td align="center">1 (Exact)</td>
 <td><code>1</code> = exact (<code>find_all_matches</code>); <code>2</code> = with mutations (<code>find_with_mutations</code>)</td>
 </tr>
 <tr>
 <td>Search mutation rate: 1 per N letters</td>
-<td style="text-align: center;">6</td>
+<td align="center">6</td>
 <td>Only shown when search method = 2</td>
 </tr>
 <tr>
 <td>Extension mutation rate: 1 per N letters</td>
-<td style="text-align: center;">6</td>
+<td align="center">6</td>
 <td>Controls how divergent the flanking context may be during extension</td>
 </tr>
 </tbody>
@@ -526,19 +547,19 @@ m &lt; 6 (low power).</p>
 <thead>
 <tr>
 <th>Prompt</th>
-<th style="text-align: center;">Default</th>
+<th align="center">Default</th>
 <th>Notes</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <td>Sequence to test</td>
-<td style="text-align: center;"></td>
+<td align="center"></td>
 <td>Blank to cancel</td>
 </tr>
 <tr>
 <td>Mutations: 0 = exact only, or N for 1-per-N-nt</td>
-<td style="text-align: center;">0</td>
+<td align="center">0</td>
 <td>Enter 6 to allow 1 mutation per 6 nt; maximum N is 6 (rate 1/6)</td>
 </tr>
 </tbody>
@@ -574,34 +595,34 @@ and scores the whole family under the Markov background.</p>
 <thead>
 <tr>
 <th>Prompt</th>
-<th style="text-align: center;">Default</th>
+<th align="center">Default</th>
 <th>Notes</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <td>Left anchor sequence</td>
-<td style="text-align: center;"></td>
+<td align="center"></td>
 <td>Blank to cancel</td>
 </tr>
 <tr>
 <td>Right anchor sequence</td>
-<td style="text-align: center;"></td>
+<td align="center"></td>
 <td>Blank to cancel</td>
 </tr>
 <tr>
 <td>Minimum gap length</td>
-<td style="text-align: center;">0</td>
+<td align="center">0</td>
 <td></td>
 </tr>
 <tr>
 <td>Maximum gap length</td>
-<td style="text-align: center;">30</td>
+<td align="center">30</td>
 <td></td>
 </tr>
 <tr>
 <td>Output CSV file</td>
-<td style="text-align: center;"><code>&lt;session&gt;_gapped_motif.csv</code></td>
+<td align="center"><code>&lt;session&gt;_gapped_motif.csv</code></td>
 <td></td>
 </tr>
 </tbody>
@@ -653,54 +674,9 @@ and scores the whole family under the Markov background.</p>
 <code>enrichment_markov</code>, <code>p_markov</code>) are the same on every row; per-hit columns
 (<code>start</code>, <code>gap_length</code>, <code>matched_sequence</code>) vary by row.  Up to 20 hits are
 printed to the terminal.</p>
-<h4>2.7 Extend match pair</h4>
-<p>Finds all exact occurrences of a seed sequence and, for every pair of occurrences, greedily extends both copies left and right as far as possible while keeping the Hamming distance between the two extended copies within a user-defined rate.  The result reveals how much context around two repeats remains mutually similar.</p>
-<p><strong>How the extension works:</strong></p>
-<ol>
-<li>The right flank is extended first, one nucleotide at a time.  A position is kept whenever the cumulative Hamming distance does not exceed <code>floor(total_length × mutr)</code>.  The loop stops as soon as the budget for the full remaining text is exhausted.</li>
-<li>The left flank is then extended using the budget that remains after the right extension.</li>
-</ol>
-<p><strong>Prompts:</strong></p>
-<table>
-<thead>
-<tr>
-<th>Prompt</th>
-<th style="text-align: center;">Default</th>
-<th>Notes</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Seed sequence</td>
-<td style="text-align: center;"></td>
-<td>Must occur at least twice in the text; blank to cancel</td>
-</tr>
-<tr>
-<td>Mutation rate: 1 per N letters</td>
-<td style="text-align: center;">6</td>
-<td>1 mismatch allowed per N nucleotides</td>
-</tr>
-</tbody>
-</table>
-<p><strong>Output:</strong></p>
-<p>Up to 10 pairs are shown, sorted by total extension length (longest first).  For each pair:</p>
-<ul>
-<li>Positions of the two seed copies, total extended length, and left/right extension sizes.</li>
-<li>Both extended sequences printed side-by-side: the seed region is shown in <strong>BOLD UPPERCASE</strong>; mismatched characters in the flanks are shown in <strong>RED UPPERCASE</strong>.</li>
-<li>Hamming distance as a count and percentage.</li>
-</ul>
-<p><strong>Printing a pair in full:</strong></p>
-<p>After the summary, you are offered the option to print one pair without truncation:</p>
-<pre><code>Print a pair in full [1–10, blank to skip]:
-</code></pre>
-<p>Entering a number prints the raw plain-text sequences for each copy (safe to copy), followed by a colour-coded alignment for visual reference.</p>
-<p><strong>Saving results to CSV:</strong></p>
-<pre><code>Save all pairs to CSV [Enter for extensions_&lt;seed&gt;.csv, Ctrl+D to skip]:
-</code></pre>
-<p>Press <strong>Enter</strong> to save to the default filename, type a custom name, or press <strong>Ctrl+D</strong> to skip. The CSV contains one row per pair with columns: <code>rank</code>, <code>pos1</code>, <code>pos2</code>, <code>left_ext</code>, <code>right_ext</code>, <code>total_len</code>, <code>hamming</code>, <code>ext1</code>, <code>ext2</code>.</p>
-<h4>2.8 Covered area</h4>
+<h4>2.7 Covered area</h4>
 <p>Computes and prints the coverage score for a single sequence: <code>length^a times occurrences</code>, where <em>a</em> is a configurable exponent (default 1.2, matching the session setting).</p>
-<h4>2.9 Core neighbors (text export)</h4>
+<h4>2.8 Core neighbors (text export)</h4>
 <p>Exports the sequence regions associated with a query core and its neighbourhood as a CSV file, so that individual region sequences can be copied directly into other tools (e.g. <strong>Alignment score for two sequences</strong>, <strong>Search with mutations</strong>).</p>
 <p><strong>How regions are defined:</strong></p>
 <p>Every occurrence of s0, its single-nucleotide mutations, and all its neighbours (sequences with a positive conditional-probability score within the window) is expanded by ±wd nucleotides. Overlapping expanded intervals are merged into contiguous regions. The result is a set of non-overlapping windows that cover every area of the text where any of the tracked sequences cluster together — including regions where neighbours bridge the gap between two s0 occurrences, and regions that contain only neighbours with no s0 nearby.</p>
@@ -708,36 +684,36 @@ printed to the terminal.</p>
 <table>
 <thead>
 <tr>
-<th style="text-align: left;">Prompt</th>
-<th style="text-align: center;">Default</th>
-<th style="text-align: left;">Notes</th>
+<th align="left">Prompt</th>
+<th align="center">Default</th>
+<th align="left">Notes</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td style="text-align: left;">Sequence to analyse</td>
-<td style="text-align: center;">no default</td>
-<td style="text-align: left;">Must be present in the text</td>
+<td align="left">Sequence to analyse</td>
+<td align="center">no default</td>
+<td align="left">Must be present in the text</td>
 </tr>
 <tr>
-<td style="text-align: left;">Neighbourhood width</td>
-<td style="text-align: center;">adaptive W(N)</td>
-<td style="text-align: left;">Half-window used for interval expansion and gap merging</td>
+<td align="left">Neighbourhood width</td>
+<td align="center">adaptive W(N)</td>
+<td align="left">Half-window used for interval expansion and gap merging</td>
 </tr>
 <tr>
-<td style="text-align: left;">Strings to include</td>
-<td style="text-align: center;">2 (xmotifs)</td>
-<td style="text-align: left;">1 = cores, 2 = xmotifs</td>
+<td align="left">Strings to include</td>
+<td align="center">2 (xmotifs)</td>
+<td align="left">1 = cores, 2 = xmotifs</td>
 </tr>
 <tr>
-<td style="text-align: left;">X-axis range</td>
-<td style="text-align: center;"><em>(full range)</em></td>
-<td style="text-align: left;"><code>min, max</code> e.g. <code>100, 500</code> — limits which positions are considered</td>
+<td align="left">X-axis range</td>
+<td align="center"><em>(full range)</em></td>
+<td align="left"><code>min, max</code> e.g. <code>100, 500</code> — limits which positions are considered</td>
 </tr>
 <tr>
-<td style="text-align: left;">Output CSV file</td>
-<td style="text-align: center;"><code>&lt;session&gt;_&lt;seq&gt;_regions.csv</code></td>
-<td style="text-align: left;">In the session directory; leave blank to use the default</td>
+<td align="left">Output CSV file</td>
+<td align="center"><code>&lt;session&gt;_&lt;seq&gt;_regions.csv</code></td>
+<td align="left">In the session directory; leave blank to use the default</td>
 </tr>
 </tbody>
 </table>
@@ -765,7 +741,7 @@ printed to the terminal.</p>
 </tbody>
 </table>
 <p>Results are also printed to the terminal. The CSV is opened automatically in your default application when writing completes.</p>
-<h4>2.10 Rank core motifs (Markov/FDR)</h4>
+<h4>2.9 Rank core motifs (Markov/FDR)</h4>
 <p>Enumerates all shared substrings of the current xmotifs within a configurable
 length range, scores each candidate against a transcript-specific Markov
 background, and saves a ranked CSV.  Candidates are accepted as <em>statistically
@@ -776,39 +752,39 @@ enrichment ratio exceeds the minimum enrichment.</p>
 <thead>
 <tr>
 <th>Prompt</th>
-<th style="text-align: center;">Default</th>
+<th align="center">Default</th>
 <th>Notes</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <td>Candidate minimum core length</td>
-<td style="text-align: center;">5</td>
+<td align="center">5</td>
 <td>Shortest substring to test</td>
 </tr>
 <tr>
 <td>Candidate maximum core length</td>
-<td style="text-align: center;">18</td>
+<td align="center">18</td>
 <td>Longest substring to test</td>
 </tr>
 <tr>
 <td>Minimum xmotif-type support</td>
-<td style="text-align: center;">2</td>
+<td align="center">2</td>
 <td>Candidate must appear in at least this many xmotif families</td>
 </tr>
 <tr>
 <td>Minimum Markov enrichment</td>
-<td style="text-align: center;">10</td>
+<td align="center">10</td>
 <td><code>observed / expected</code> ratio threshold</td>
 </tr>
 <tr>
 <td>FDR q-value threshold</td>
-<td style="text-align: center;">0.05</td>
+<td align="center">0.05</td>
 <td>Benjamini–Hochberg threshold</td>
 </tr>
 <tr>
 <td>Output CSV file</td>
-<td style="text-align: center;"><code>&lt;session&gt;_ranked_cores_markov.csv</code></td>
+<td align="center"><code>&lt;session&gt;_ranked_cores_markov.csv</code></td>
 <td></td>
 </tr>
 </tbody>
@@ -869,7 +845,7 @@ enrichment ratio exceeds the minimum enrichment.</p>
 </tbody>
 </table>
 <p>Up to 15 supported candidates are printed to the terminal after the CSV is saved.</p>
-<h4>2.11 Mutation-family scoring</h4>
+<h4>2.10 Mutation-family scoring</h4>
 <p>Tests one or more motifs at every Hamming radius allowed by the mutation cap.
 For each motif and radius, the complete neighbourhood — all sequences within that
 Hamming distance — is counted and scored against the Markov background.  The
@@ -879,44 +855,44 @@ best-supported radius per motif is written to a separate <code>_best.csv</code> 
 <thead>
 <tr>
 <th>Prompt</th>
-<th style="text-align: center;">Default</th>
+<th align="center">Default</th>
 <th>Notes</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <td>Motif source</td>
-<td style="text-align: center;">1</td>
+<td align="center">1</td>
 <td>1 = enter a motif, 2 = current cores, 3 = current xmotifs</td>
 </tr>
 <tr>
 <td>Motif</td>
-<td style="text-align: center;"></td>
+<td align="center"></td>
 <td>Only shown when source = 1; blank to cancel</td>
 </tr>
 <tr>
 <td>Mutation search cap: 1 per N letters</td>
-<td style="text-align: center;">6</td>
+<td align="center">6</td>
 <td>Sets the maximum Hamming radius tested</td>
 </tr>
 <tr>
 <td>Minimum family enrichment</td>
-<td style="text-align: center;">5</td>
+<td align="center">5</td>
 <td>Enrichment threshold for the full Hamming neighbourhood</td>
 </tr>
 <tr>
 <td>Maximum expected family count</td>
-<td style="text-align: center;">5</td>
+<td align="center">5</td>
 <td>Families with a higher expected count are not scored</td>
 </tr>
 <tr>
 <td>FDR q-value threshold</td>
-<td style="text-align: center;">0.05</td>
+<td align="center">0.05</td>
 <td>BH threshold applied across all (motif, radius) pairs</td>
 </tr>
 <tr>
 <td>Output CSV file</td>
-<td style="text-align: center;"><code>&lt;session&gt;_mutation_family_tests.csv</code></td>
+<td align="center"><code>&lt;session&gt;_mutation_family_tests.csv</code></td>
 <td>Full results</td>
 </tr>
 </tbody>
@@ -948,7 +924,7 @@ best-supported radius per motif is written to a separate <code>_best.csv</code> 
 </tr>
 </tbody>
 </table>
-<h4>2.12 Alignment score for two sequences</h4>
+<h4>2.11 Alignment score for two sequences</h4>
 <p>Aligns two substrings extracted from the loaded text by position.</p>
 <p><strong>Prompts:</strong></p>
 <table>
@@ -984,30 +960,30 @@ best-supported radius per motif is written to a separate <code>_best.csv</code> 
 <li><strong>Bit score</strong> — length-independent score computed with the Karlin–Altschul formula (λ = 1.28, K = 0.46); comparable across alignments of different lengths.</li>
 <li><strong>E-value</strong> — expected number of alignments with a score this high or better by chance, using the full transcript as the reference database. Values below 10⁻³ are considered significant.</li>
 </ul>
-<h4>2.13 K-mer Markov analysis</h4>
+<h4>2.12 K-mer Markov analysis</h4>
 <p>Computes analytical p-values for every observed k-mer using a Markov-model null — no shuffling or random seeds required.  For each k-mer the expected count is derived from the Prum/Schbath formula conditioned on shorter k-mer frequencies; the observed count is then tested against a Poisson(expected) null.  Two one-sided p-values are reported per k-mer, testing for over- and under-representation separately.  All results are saved to a CSV file sorted by the more extreme of the two p-values.</p>
 <p><strong>Markov background order</strong> controls how much context the null model conditions on:</p>
 <table>
 <thead>
 <tr>
-<th style="text-align: center;">Order</th>
+<th align="center">Order</th>
 <th>Null conditions on</th>
 <th>Typical use</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td style="text-align: center;">0</td>
+<td align="center">0</td>
 <td>Single-nucleotide (A/C/G/U) frequencies</td>
 <td>Equivalent to the old shuffle null</td>
 </tr>
 <tr>
-<td style="text-align: center;">1 <em>(default)</em></td>
+<td align="center">1 <em>(default)</em></td>
 <td>Dinucleotide frequencies</td>
 <td>Recommended for sequences of a few kb</td>
 </tr>
 <tr>
-<td style="text-align: center;">2</td>
+<td align="center">2</td>
 <td>Trinucleotide frequencies</td>
 <td>Longer sequences or k-mers ≥ 10</td>
 </tr>
@@ -1021,24 +997,24 @@ best-supported radius per motif is written to a separate <code>_best.csv</code> 
 <thead>
 <tr>
 <th>Prompt</th>
-<th style="text-align: center;">Default</th>
+<th align="center">Default</th>
 <th>Notes</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <td>k-mer length</td>
-<td style="text-align: center;">6</td>
+<td align="center">6</td>
 <td>Length of the substrings to count (≥ 2)</td>
 </tr>
 <tr>
 <td>Markov background order</td>
-<td style="text-align: center;">1</td>
+<td align="center">1</td>
 <td>0 = nucleotide, 1 = dinucleotide, … (max k−2)</td>
 </tr>
 <tr>
 <td>Output CSV file</td>
-<td style="text-align: center;"><code>&lt;name&gt;_kmer&lt;k&gt;_order&lt;order&gt;_markov_pvalues.csv</code></td>
+<td align="center"><code>&lt;name&gt;_kmer&lt;k&gt;_order&lt;order&gt;_markov_pvalues.csv</code></td>
 <td>Path to the results file</td>
 </tr>
 </tbody>
@@ -1095,7 +1071,7 @@ best-supported radius per motif is written to a separate <code>_best.csv</code> 
 </tbody>
 </table>
 <p>Rows are sorted by <code>min(pvalue_over, pvalue_under)</code> so the most extreme k-mers appear first.  BH correction is applied separately within each family of <em>m</em> tests.</p>
-<h4>2.14 Batch spacing test (all cores &amp; motifs)</h4>
+<h4>2.13 Batch spacing test (all cores &amp; motifs)</h4>
 <p>Runs the spacing / periodicity test (gap cluster + Rayleigh) on every core and
 xmotif in the current session simultaneously and saves a ranked CSV.  Sequences
 with fewer than 3 occurrences are skipped automatically.</p>
@@ -1104,19 +1080,19 @@ with fewer than 3 occurrences are skipped automatically.</p>
 <thead>
 <tr>
 <th>Prompt</th>
-<th style="text-align: center;">Default</th>
+<th align="center">Default</th>
 <th>Notes</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <td>Mutations: 0 = exact only, or N for 1-per-N-nt</td>
-<td style="text-align: center;">0</td>
+<td align="center">0</td>
 <td>Same rate as the single-sequence spacing test; maximum N is 6</td>
 </tr>
 <tr>
 <td>Output CSV file</td>
-<td style="text-align: center;"><code>&lt;session&gt;_spacing_batch.csv</code></td>
+<td align="center"><code>&lt;session&gt;_spacing_batch.csv</code></td>
 <td></td>
 </tr>
 </tbody>
@@ -1180,7 +1156,7 @@ The top 10 are printed to the terminal; all results are saved to the CSV.</p>
 </tr>
 </tbody>
 </table>
-<h4>2.15 Export hairpins to CSV</h4>
+<h4>2.14 Export hairpins to CSV</h4>
 <p>Exports all detected hairpin regions for the loaded sequence to a CSV file. Each row contains the start position, end position, stem sequence, loop sequence, and full hairpin sequence.</p>
 <hr />
 <h3>3 - Open Core file</h3>
@@ -1311,8 +1287,55 @@ brought to the foreground rather than opening a second copy.</p>
 <li><strong>RNA vs DNA:</strong> if the sequence contains only <code>a</code>, <code>c</code>, <code>g</code>, <code>u</code> (RNA), uracil (<code>u</code>) is automatically converted to thymine (<code>t</code>) for internal processing.</li>
 </ul>
 <hr />
+<h2>Troubleshooting</h2>
+<p>Issues specific to using the interactive menu. For installation and dependency
+problems (missing <code>tkinter</code>, broken image export, etc.), see the
+<strong>Troubleshooting</strong> section in <code>README.md</code> instead.</p>
+<ul>
+<li><strong>"Sequence not found" for a sequence you can see in your data.</strong> For RNA
+  sessions the loaded text is stored internally with <code>u</code> converted to <code>t</code>
+  (see <em>RNA vs DNA</em> above) — but that conversion is <strong>not</strong> applied to what
+  you type at a search prompt. Typing <code>ugcaug</code> against an RNA session will
+  find nothing; type <code>tgcaug</code> instead. This affects every "enter a
+  sequence/motif" prompt (Find all matches, Core neighbors, Motif extensions,
+  etc.).</li>
+<li><strong>A Core neighbors plot looks sparser than expected, or a neighbour you
+  know is there doesn't show up.</strong> Check the <strong>minimum occurrences</strong> prompt
+  (default 2 — a neighbour occurring only once is excluded) and the
+  <strong>X-axis range</strong> prompt (default full range, but a previously-entered
+  narrow range persists until changed). Mutations are always shown regardless
+  of the minimum-occurrences filter.</li>
+<li><strong><code>Unexpected error: ...</code> appears and you're dropped back to the main
+  menu.</strong> This is a catch-all error handler — it means the specific action
+  you just tried failed, not that your session was lost. Your loaded
+  sequence, xmotifs, and cores are still in memory; you can retry the same
+  operation or try a different one. If it happens repeatedly for the same
+  action, note the exact error text before reporting it.</li>
+<li><strong>The tool keeps asking you to choose a data directory instead of loading
+  your session automatically.</strong> This happens when the remembered last-used
+  directory (see <em>Show settings</em>) no longer contains a valid session file —
+  e.g. the folder was moved, renamed, or the session <code>.json</code>/<code>_test_init.csv</code>
+  pair was deleted. Browse to the correct folder once; it will be
+  remembered for next time. If a folder contains <strong>more than one</strong> valid
+  session, you'll be asked to pick which one every time — this is expected,
+  not a bug.</li>
+<li><strong>A statistical test or extension refuses to run ("need ≥ 2 occurrences",
+  "need ≥ 3 occurrences").</strong> These are hard minimums, not defaults: Motif
+  extensions and Extend-style pairing need at least 2 exact/approximate
+  occurrences; the spacing/periodicity test needs at least 3. Try a shorter
+  or less specific motif, or allow mutations (search method 2) to pick up
+  more occurrences.</li>
+<li><strong>Changing a setting (min/max xmotif length, min core length, min
+  occurrences) seems to hang or re-run several times.</strong> If the longest
+  xmotif found equals the current maximum length, RNA_lexis automatically
+  raises the maximum by 20 and re-analyses — repeating until the longest
+  xmotif is strictly shorter than the maximum (see <em>Change setting</em> above).
+  On long, repeat-rich sequences this can take a few passes; let it finish
+  rather than interrupting.</li>
+</ul>
+<hr />
 <h2>Package Structure</h2>
-<p>The <code>rna_lexis</code> package is organised into focused sub-modules. New code should import directly from the relevant module rather than from the top-level <code>rna_lexis</code> namespace.</p>
+<p>The <code>rna_lexis</code> package is organised into focused sub-modules. New code should import directly from the relevant module rather than from the top-level <code>rna_lexis</code> namespace. For a full API reference (function signatures, data structures, worked examples) rather than the interactive-menu walkthrough this guide covers, see <a href="../llms.txt">llms.txt</a> in the repository root.</p>
 <table>
 <thead>
 <tr>

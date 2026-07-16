@@ -1,5 +1,107 @@
 # Changelog
 
+## [0.1.12] - 2026-07-16
+
+### Removed
+
+- **"Extend match pair" menu item** (Sequence operations) — superseded by
+  "Motif extensions", which runs the same engine and adds an optional
+  approximate/mutation-tolerant seed search that "Extend match pair" never
+  had. Running "Motif extensions" with search method 1 (exact) reproduces
+  "Extend match pair" exactly. `extend_match_input()` deleted; remaining
+  Sequence-ops items renumbered 8–16 → 7–15.
+- **Dead code**: `scramble_input()`, `markov_input()`, and the
+  `scramble_kmer_pvalues()` algorithm it wrapped — unreachable from any menu,
+  not called by the batch CLI or any test, and superseded by
+  `markov_kmer_input()` (configurable Markov order, no shuffling required).
+- **"Decompose motif"** (`decompose_motif_input()`, `decompose_motif()`) —
+  was fully implemented and documented in the README but never wired into
+  any menu, making it permanently unreachable. Removed rather than wired in;
+  the README section is preserved verbatim in local planning notes in case
+  this is revisited later.
+- **Unused pip dependencies** `networkx` and `Levenshtein` — confirmed via a
+  full-repo search to be imported nowhere in the codebase.
+
+### Fixed
+
+- **Documentation accuracy audit** (`README.md`, `docs/user_guide.md`,
+  `llms.txt`) — corrected stale menu-numbering cross-references left over
+  from the removals above; fixed several incorrect function
+  signatures/defaults in `llms.txt` (`cores()`'s `minclen` default,
+  `score_exact_motifs`'s `min_xmotif_type_support` default, missing
+  keyword-only params on `rank_core_candidates`/`mutation_family_tests`,
+  wrong parameter names on `find_gapped_motif_hits`/`score_gapped_motif`);
+  fixed a broken `MarkovBackground` usage example (`.from_sequence()` /
+  `.dinuc_prob` don't exist — it's a plain frozen dataclass constructed
+  directly, with a `.probability()` method); removed the now-deleted
+  `scramble_kmer_pvalues` from `llms.txt`'s import example and API list.
+  Added previously-undocumented prompts (`min_occ`, hairpin overlay) to the
+  Core neighbors prompt tables, and documented the Kaleido export-timeout /
+  HTML-fallback behaviour (added in 0.1.9) for the first time.
+- **Windows encoding crash risk** — ~17 `open()` calls across `io.py`,
+  `menu.py`, `algorithms.py`, and `plots.py` had no explicit `encoding=`,
+  so on Windows without UTF-8 mode opted in they'd use the locale codepage
+  instead of UTF-8. Concretely confirmed broken: the "Open User Guide" menu
+  item reads/writes `docs/user_guide.md`/`.html`, which contain 23 distinct
+  non-ASCII characters (arrows, Greek letters, math symbols) — this would
+  raise `UnicodeDecodeError`/`UnicodeEncodeError` on a typical Windows
+  machine. All affected calls now pass `encoding='utf-8'` explicitly.
+- **`open_file_with_default_software()` (io.py) could crash the caller** —
+  unlike its sibling `open_pdf()`, it had no try/except around the
+  macOS/Linux `subprocess.run(..., check=True)` calls, so a missing
+  `xdg-open`/`open` binary or a headless/SSH/Docker environment would raise
+  uncaught. Now self-guarded, matching `open_pdf()`'s pattern; failures
+  print a message instead of propagating. This also fixes
+  `init_summary()`'s CSV-write retry loop, which only caught
+  `PermissionError` and could leak an unhandled exception from the
+  now-fixed auto-open call.
+- **`load_prefs()` could crash at startup, before any error handling was in
+  place** — it ran before `menus()`'s try/except loop began, and called
+  `os.makedirs()` (via `_prefs_path()`) with no guard. A restrictive/
+  read-only config directory would crash the whole program rather than
+  falling back to default preferences. Now guarded; verified the fix cannot
+  cause stale preferences to be used, since `os.makedirs(..., exist_ok=True)`
+  only fails when the directory doesn't exist and can't be created — meaning
+  there was never a pre-existing readable `prefs.json` to lose in that path.
+- **`pywin32` added as a Windows-only dependency** (`pywin32; sys_platform
+  == 'win32'`) — the optional "auto-close a locked Excel workbook before
+  overwriting" convenience (`_close_in_excel()`) previously never activated
+  unless a user happened to have `pywin32` installed for an unrelated
+  reason. Verified the platform marker is correctly skipped on macOS/Linux
+  via a live `pip install --dry-run` dependency resolution.
+
+### Added
+
+- **`docs/build_docs.py`** — regenerates `docs/user_guide.html` and
+  `docs/user_guide.pdf` from `docs/user_guide.md`. The PDF previously had no
+  automated build path at all (one prior manual "updated the pdf" commit in
+  the entire git history) and had gone stale. Uses `weasyprint -p
+  --optimize-images`; the `-p`/`--presentational-hints` flag is required —
+  without it, legacy HTML attributes like `<img width="200">` are ignored
+  and images render at full native size.
+- **`rna_lexis.menu.render_user_guide_html()`** — the HTML-rendering logic
+  previously inlined in the "Open User Guide" menu handler is now a shared,
+  reusable function, used by both that menu item and `build_docs.py`, so
+  there is exactly one HTML template instead of two that could drift apart.
+- **Troubleshooting sections** in both `README.md` (install/environment
+  issues: kaleido/plotly version mismatches, missing `tkinter`/`pdf2svg`/
+  `xdg-utils`, the benign multi-matplotlib `Axes3D` warning, legacy Windows
+  terminal ANSI rendering) and `docs/user_guide.md` (usage issues: the RNA
+  `u`→`t` query-mismatch gotcha, sparse-looking neighbour plots, the generic
+  error-recovery message, sessions not auto-loading, minimum-occurrence
+  requirements, the xmotif-length auto-expansion loop).
+- **"System (non-pip) requirements" section in `README.md`** — documents
+  `tkinter`, `pdf2svg`, and `xdg-utils` as external, non-pip-installable
+  requirements for specific features, with install commands per platform.
+- **Cross-links between `README.md`, `docs/user_guide.md`, and `llms.txt`**
+  — each now points to the other two; previously none of them referenced
+  each other, so a reader landing on any one had no way to discover the
+  others.
+- **`CLAUDE.md`** — repo-specific operational notes for future agent
+  sessions (test command and coverage gaps, documentation-regeneration
+  workflow, module layout, dependency-pin rationale, established
+  conventions).
+
 ## [0.1.11] - 2026-06-22
 
 ### Fixed
