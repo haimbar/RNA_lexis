@@ -138,7 +138,8 @@ Opens the Plots submenu:
 5. Coverage
 6. Motif Match/Mutation
 7. Self-similarity arc plot
-8. Back
+8. Shared-motif diagram (vs. another sequence)
+9. Back
 ```
 
 #### 1.1 Core neighbors (detailed)
@@ -317,6 +318,37 @@ The minimum of 3 occurrences (not 2) is because this plot also runs the same spa
 - Each arc is labeled with the spacing (nt), the raw Hamming distance (`h=`), and the normalized identity (%).
 - The subtitle's second line reports the spacing test: candidate period `T` (nt), the gap-cluster test p-value, and the Rayleigh test p-value — the same numbers *Motif spacing / periodicity test* reports for this seed, values below 0.05 indicate statistically significant periodic spacing.
 - The legend (outside the plot, top right) shows the hop-distance color key and a node-size key using real circle markers at the same scale as the plotted nodes.
+
+#### 1.8 Shared-motif diagram (vs. another sequence)
+
+Compares the loaded sequence against a second, independently chosen sequence, and visualises every exact-match motif they share as a two-row arc diagram — e.g. a transcript against a candidate regulatory element such as an ENCODE cCRE, to see whether they share short recurring motifs and where those occurrences fall on each sequence.
+
+**Prompts:**
+
+| Prompt | Default | Notes |
+|---|:---:|---|
+| Comparison sequence source | | Paste, local file, Ensembl ENST, genomic coordinates (`chrom:start-end`, hg38), ENCODE cCRE accession, or an existing RNA_lexis session |
+| Forward strand or reverse complement | Forward | Compares the comparison sequence's reverse complement instead, when relevant (e.g. strand orientation matters for regulatory elements) |
+| Minimum motif length | 6 | Shortest shared motif to consider |
+| Max motifs to show | 6 | Each motif gets its own color; at most this many are drawn |
+| Output file | *(screen only)* | Leave blank to display interactively |
+| Output format | 1 (PNG standard) | 1 = PNG, 2 = PNG high-res (3×), 3 = SVG |
+
+**Choosing a comparison sequence:**
+
+- **Paste / local file / Ensembl ENST** — same loaders used for the primary sequence; each still prompts for a save directory, so the comparison sequence can be reused later as its own session.
+- **Genomic coordinates** — fetches raw DNA for a `chrom:start-end` range (e.g. `chr10:78974544-78974893`) from the UCSC REST API (hg38 by default).
+- **ENCODE cCRE accession** — looks up a candidate cis-regulatory element by its accession (e.g. `EH38E1482203`) in the UCSC `encodeCcreCombined` track and fetches its forward-strand sequence.
+- **Existing RNA_lexis session** — reuses an already-parsed `.json` session, skipping motif discovery on the comparison sequence entirely.
+
+**Reading the plot:**
+
+- Both sequences are drawn as horizontal gray bars, normalized to the same on-screen width regardless of their actual length difference; nucleotide position ticks on each bar show the true scale.
+- Each shared motif gets its own color; colored tick marks above/below the bars mark every exact occurrence, and curved arcs connect every occurrence in the top sequence to every occurrence in the bottom sequence for that motif.
+- Arc opacity is reduced automatically for motifs with many occurrences, so dense connections stay readable instead of saturating into a solid block.
+- The legend lists each motif with its occurrence count in each sequence.
+
+Network fetches (genomic coordinates, ENCODE cCRE) require an internet connection; failures (no connection, accession not found) are reported with a message and cancel the plot cleanly rather than crashing — re-open *Shared-motif diagram* to try again.
 
 ---
 

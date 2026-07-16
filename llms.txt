@@ -40,7 +40,8 @@ from rna_lexis.algorithms import (
 from rna_lexis.alignment import gotoh_global, gotoh_local, print_alignment, AlignmentResult
 from rna_lexis.io import (
     read_text, save_session, load_session, is_valid_session,
-    fetch_enst_cdna, init_summary, init_summary_path, TEST_SUMMARY_SUFFIX,
+    fetch_enst_cdna, fetch_genomic_range, fetch_encode_ccre,
+    init_summary, init_summary_path, TEST_SUMMARY_SUFFIX,
     SessionData,
 )
 from rna_lexis.statistical import (
@@ -52,6 +53,7 @@ from rna_lexis.statistical import (
     best_mutation_family_per_motif,
     find_gapped_motif_hits,
     score_gapped_motif,
+    shared_exact_motifs,
     spacing_periodicity_test,
     write_rows_csv,
 )
@@ -156,6 +158,25 @@ transcript_id, display_name, sequence = fetch_enst_cdna("ENST00000456328")
 
 Raises `ValueError` if the ID does not start with `ENST`; `RuntimeError` if the
 API call fails.
+
+### `fetch_genomic_range(chrom: str, start: int, end: int, genome: str = "hg38") -> str`
+
+Fetch raw genomic DNA for a `chrom:start-end` range via the UCSC REST API.
+Requires an internet connection. Returns a lower-case sequence string. Raises
+`ValueError` if the API returns no sequence for the range.
+
+### `fetch_encode_ccre(accession: str, genome: str = "hg38", hint_chrom: str = None) -> tuple[str, str]`
+
+Look up an ENCODE cCRE accession (e.g. `"EH38E1482203"`) in the UCSC
+`encodeCcreCombined` track and fetch its forward-strand sequence via
+`fetch_genomic_range()`. Requires an internet connection; searches every hg38
+chromosome in 10 Mb windows unless `hint_chrom` narrows the search. Returns
+`(annotation_string, sequence)`. Raises `ValueError` if the accession is not
+found or has no sequence.
+
+```python
+annotation, seq = fetch_encode_ccre("EH38E1482203", hint_chrom="chr10")
+```
 
 ### `save_session(filename, data, debug=False) -> None`
 
@@ -515,6 +536,20 @@ result = spacing_periodicity_test(positions, len(txt))
 #   p_rayleigh   — Rayleigh p-value
 sig = result['p_cluster'] < 0.05 or result['p_rayleigh'] < 0.05
 print(f"Periodic: {sig}, T={result['period']} nt, R={result['rayleigh_r']:.3f}")
+```
+
+### `shared_exact_motifs(txt_a, txt_b, cores_a=None, min_len=6, n_top=6, minxmlen=7, maxxmlen=60, mincorelen=6, mincount=2) -> list[str]`
+
+Select motifs with >= 1 exact occurrence in both `txt_a` and `txt_b`, ranked by
+weighted coverage in `txt_a` (`algorithms.cover()`) descending. Candidates come
+from cores discovered jointly on the concatenation `txt_a + '_' + txt_b`
+(joint discovery surfaces shared motifs neither sequence's own single-sequence
+cores necessarily find on their own), optionally supplemented by `cores_a`
+(e.g. an already-computed `corelist` for `txt_a`) for any additional A-cores
+with a hit in `txt_b`.
+
+```python
+shared = shared_exact_motifs(gene_txt, enhancer_txt, cores_a=gene_corelist, n_top=6)
 ```
 
 ### `write_rows_csv(path, rows) -> str`

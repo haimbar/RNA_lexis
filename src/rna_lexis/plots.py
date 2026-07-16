@@ -9,6 +9,9 @@ import subprocess
 import numpy as np
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+from matplotlib.path import Path
+from matplotlib.patches import PathPatch
 import plotly.graph_objs as go
 from collections import Counter, defaultdict
 
@@ -1414,6 +1417,147 @@ def plot_self_similarity_arcs(seed, results, positions, unit=None,
     ax.tick_params(labelsize=9)
 
     plt.tight_layout()
+    if file:
+        try:
+            plt.savefig(file, bbox_inches='tight', dpi=150 * scale)
+            open_file_with_default_software(file)
+        except Exception as e:
+            print(f'Could not save plot: {file}\n{e}')
+    plt.show()
+
+
+# ColorBrewer Set1 -- 6 perceptually distinct colors, one per shared motif.
+# A dedicated palette rather than _HIT_PALETTE (only 3 entries, designed for
+# exact/1mm/2mm hit categories, not enough to keep up to 6 simultaneous
+# motifs visually distinct here).
+_SHARED_MOTIF_COLORS = ["#e41a1c", "#377eb8", "#4daf4a", "#984ea3", "#ff7f00", "#a65628"]
+
+
+def _nice_tick_step(n):
+    """Return a readable axis-tick spacing for a sequence of length n."""
+    for step in (1000, 500, 200, 100, 50, 20, 10):
+        if n / step >= 3:
+            return step
+    return max(1, n // 4)
+
+
+def plot_shared_motif_diagram(txt_a, txt_b, label_a, label_b, shared_motifs,
+                               title='', file='', scale=1):
+    """Two-row arc diagram connecting shared exact-motif positions between
+    two sequences (e.g. a transcript and a candidate regulatory element).
+
+    Both sequences are drawn as horizontal bars normalised to unit width, so
+    hits are readable regardless of the length difference; nucleotide
+    position ticks below/above each bar give the true scale. For each motif
+    in `shared_motifs`, a colored tick mark is drawn at every exact
+    occurrence in each sequence, and a cubic Bezier arc connects every
+    (occurrence in A, occurrence in B) pair. Arc alpha is reduced
+    automatically when a motif has many occurrences, so dense connections
+    stay readable instead of saturating into a solid block.
+
+    Args:
+        txt_a:         Sequence A (drawn as the top bar).
+        txt_b:         Sequence B (drawn as the bottom bar).
+        label_a:       Label for sequence A.
+        label_b:       Label for sequence B.
+        shared_motifs: Motif strings to connect (e.g. from
+                       statistical.shared_exact_motifs()) -- up to the first
+                       6 are drawn, each in its own color; motifs without an
+                       exact hit in both sequences are skipped.
+        title:         Plot title; defaults to
+                       "Shared-motif connections: {label_a} <-> {label_b}".
+        file:          Output path for saving the figure (PNG/SVG/PDF). When
+                       empty the figure is only displayed.
+        scale:         DPI multiplier for raster export (default 1).
+    """
+    len_a, len_b = len(txt_a), len(txt_b)
+
+    selected = []
+    for m in shared_motifs:
+        pos_a = find_all_matches(m, txt_a, ret='pos')
+        pos_b = find_all_matches(m, txt_b, ret='pos')
+        if pos_a and pos_b:
+            selected.append((m, pos_a, pos_b))
+        if len(selected) == len(_SHARED_MOTIF_COLORS):
+            break
+
+    if not selected:
+        print('No motifs with exact hits in both sequences -- nothing to plot.')
+        return
+
+    Y_A, Y_B = 1.10, 0.00
+    BAR_H, TICK_H = 0.055, 0.055
+
+    fig, ax = plt.subplots(figsize=(14, 5))
+    ax.set_xlim(-0.04, 1.08)
+    ax.set_ylim(-0.50, 1.45)
+    ax.axis('off')
+
+    for y_ctr, label, seqlen in [(Y_A, label_a, len_a), (Y_B, label_b, len_b)]:
+        ax.add_patch(plt.Rectangle((0, y_ctr - BAR_H / 2), 1, BAR_H,
+                                    facecolor='#cccccc', edgecolor='#444444',
+                                    lw=0.8, zorder=2))
+        ax.text(-0.01, y_ctr, label, ha='right', va='center',
+                fontsize=9, fontweight='bold')
+        ax.text(1.01, y_ctr, f'{seqlen:,} nt', ha='left', va='center',
+                fontsize=8, color='#555555')
+
+    for y_ctr, seqlen, above in [(Y_A, len_a, True), (Y_B, len_b, False)]:
+        step = _nice_tick_step(seqlen)
+        for tick in range(0, seqlen + 1, step):
+            x = tick / seqlen
+            yb = y_ctr + BAR_H / 2 if above else y_ctr - BAR_H / 2
+            ya = yb + 0.01 if above else yb - 0.01
+            ylt = ya + 0.01 if above else ya - 0.01
+            ax.plot([x, x], [yb, ya], color='#999999', lw=0.5, zorder=3)
+            ax.text(x, ylt, str(tick), ha='center',
+                    va='bottom' if above else 'top', fontsize=6, color='#666666')
+
+    y_arc_top = Y_A - BAR_H / 2
+    y_arc_bot = Y_B + BAR_H / 2
+    mid_y = (y_arc_top + y_arc_bot) / 2
+
+    legend_handles = []
+    for i, (m, pos_a, pos_b) in enumerate(selected):
+        color = _SHARED_MOTIF_COLORS[i]
+        n_a, n_b = len(pos_a), len(pos_b)
+        arc_alpha = min(0.55, max(0.10, 0.85 / math.sqrt(n_a * n_b)))
+
+        for p in pos_a:
+            x = p / len_a
+            ax.plot([x, x], [Y_A + BAR_H / 2, Y_A + BAR_H / 2 + TICK_H],
+                    color=color, lw=1.5, alpha=0.90, solid_capstyle='round', zorder=5)
+        for p in pos_b:
+            x = p / len_b
+            ax.plot([x, x], [Y_B - BAR_H / 2 - TICK_H, Y_B - BAR_H / 2],
+                    color=color, lw=2.5, alpha=0.90, solid_capstyle='round', zorder=5)
+
+        for pa in pos_a:
+            x0 = pa / len_a
+            for pb in pos_b:
+                x1 = pb / len_b
+                verts = [(x0, y_arc_top), (x0, mid_y), (x1, mid_y), (x1, y_arc_bot)]
+                codes = [Path.MOVETO, Path.CURVE4, Path.CURVE4, Path.CURVE4]
+                ax.add_patch(PathPatch(Path(verts, codes), facecolor='none',
+                                        edgecolor=color, alpha=arc_alpha,
+                                        lw=0.9, zorder=1))
+
+        legend_handles.append(mpatches.Patch(
+            color=color, alpha=0.85,
+            label=f'{m}  ({n_a}× {label_a}, {n_b}× {label_b})'))
+
+    ax.legend(handles=legend_handles, loc='upper center',
+              bbox_to_anchor=(0.5, -0.10), ncol=min(3, len(legend_handles)),
+              frameon=True, fontsize=8, title='shared motif  (exact hits)',
+              title_fontsize=8)
+
+    ax.set_title(title or f'Shared-motif connections: {label_a}  ↔  {label_b}',
+                 fontsize=11, pad=6)
+    fig.text(0.5, 0.01,
+              'Both sequences are scaled to unit width; x-axis labels show actual nucleotide positions.',
+              ha='center', fontsize=7, color='#666666', style='italic')
+
+    plt.tight_layout(rect=[0, 0.09, 1, 1])
     if file:
         try:
             plt.savefig(file, bbox_inches='tight', dpi=150 * scale)

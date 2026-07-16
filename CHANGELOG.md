@@ -1,5 +1,74 @@
 # Changelog
 
+## [Unreleased]
+
+Part B target #2 (see `PLAN_paper_figures.md`'s Part B) — shared-motif
+diagram, LINC01001 vs. ZMIZ1 enhancer.
+
+### Added
+
+- **"Shared-motif diagram (vs. another sequence)"** — new item in the Plots
+  menu (item 8; "Back" moved to item 9). Compares the loaded sequence
+  against a second, independently chosen sequence and plots every
+  exact-match motif they share as a two-row arc diagram: colored tick marks
+  at each occurrence, cubic-Bezier arcs connecting occurrences between the
+  two sequences, legend with per-sequence hit counts.
+- **`rna_lexis.menu.choose_comparison_sequence()`** — prompts for a second
+  sequence from any of paste / local file / Ensembl ENST / genomic
+  coordinates (`chrom:start-end`, hg38) / ENCODE cCRE accession / an
+  existing RNA_lexis session.
+- **`rna_lexis.io.fetch_genomic_range(chrom, start, end, genome='hg38')`**
+  and **`rna_lexis.io.fetch_encode_ccre(accession, genome='hg38',
+  hint_chrom=None)`** — fetch DNA by coordinates or by ENCODE cCRE accession
+  via the UCSC REST API.
+- **`rna_lexis.statistical.shared_exact_motifs(txt_a, txt_b, cores_a=None,
+  ...)`** — selects motifs with exact hits in both sequences, ranked by
+  weighted coverage in sequence A. Candidates come from cores discovered
+  jointly on the concatenation `txt_a + '_' + txt_b` (this is what actually
+  surfaces most of the shared motifs — see Fixed, below), optionally
+  supplemented by a pre-computed `cores_a`.
+- **`rna_lexis.plots.plot_shared_motif_diagram()`** — the rendering
+  function behind the new menu item; also directly usable as a library
+  function. Ported from a verified real source (see below).
+
+### Fixed (during development, before merge)
+
+- **Wrong source script identified initially**: `norad_synteny.py` looked
+  like the obvious source (same figure style, most recently touched) but
+  its `main()` only drives the NORAD human-vs-mouse comparison (relevant to
+  target #1). The real source for this target is
+  `similarity.py::plot_synteny_diagram()` — confirmed by regenerating its
+  output for the LINC01001/EH38E1482203 pairing and matching it pixel- and
+  motif-for-motif against the paper's submitted figure.
+- **Under-scoped `shared_exact_motifs()` on the first pass**: an initial
+  version only filtered a sequence's *own* pre-computed cores by presence
+  in the other sequence, which reproduced only 2 of the paper figure's 6
+  reference motifs (`caggcc`, `caggtc`). The real script's `arc_candidates`
+  selection primarily comes from cores discovered *jointly* on the
+  concatenation of both sequences (`gene_txt + '_' + s_txt`) — joint
+  discovery surfaces shared motifs that single-sequence core discovery
+  doesn't necessarily find on its own. Adding that joint-discovery step
+  reproduced all 6 reference motifs (`aggccc`, `caggccc`, `caggcc`,
+  `cccagc`, `cagcct`, `cagctc`) with exact matching per-sequence hit counts.
+- Renamed away from "synteny" (GeneDB's naming) throughout, per explicit
+  user preference — "synteny" is a genomics term for conserved chromosomal
+  gene order between species, which isn't what this plot shows; it connects
+  arbitrary shared exact-match motifs between any two sequences. User chose
+  **"shared-motif diagram"** from three proposed alternatives.
+
+### Explicitly out of scope
+
+- GeneDB `similarity.py`'s IoU / fold-enrichment / Markov-null statistical
+  comparison machinery (used for the paper's Table S6 / main-text FE
+  numbers) — a separate, much bigger analysis, not needed for this plot.
+  Tracked as a possible future feature, not part of this change.
+
+Verified against the real LINC01001 (`ENST00000526704`) transcript and the
+ENCODE cCRE `EH38E1482203` forward-strand sequence (both used in the
+published paper) — all 6 shared motifs and their exact per-sequence hit
+counts match the submitted figure. Full test suite (89 tests, up from 75)
+passing against both NumPy 1.26 and 2.2.6.
+
 ## [0.2.0] - 2026-07-17
 
 First release of Part B's new paper-figure plots (see

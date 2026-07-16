@@ -401,6 +401,113 @@ def fetch_enst_cdna(enst: str):
     raise RuntimeError(f"Could not fetch transcript {enst}: {last_error}")
 
 
+# hg38 chromosome sizes, used to page through the UCSC track API for
+# fetch_encode_ccre() (its `encodeCcreCombined` track endpoint requires an
+# explicit chrom:start-end window rather than accepting a bare accession).
+_HG38_SIZES = {
+    "chr1": 248956422, "chr2": 242193529, "chr3": 198295559, "chr4": 190214555,
+    "chr5": 181538259, "chr6": 170805979, "chr7": 159345973, "chr8": 145138636,
+    "chr9": 138394717, "chr10": 133797422, "chr11": 135086622, "chr12": 133275309,
+    "chr13": 114364328, "chr14": 107043718, "chr15": 101991189, "chr16": 90338345,
+    "chr17": 83257441, "chr18": 80373285, "chr19": 58617616, "chr20": 64444167,
+    "chr21": 46709983, "chr22": 50818468, "chrX": 156040895, "chrY": 57227415,
+}
+
+
+def _fetch_ucsc_json(url: str):
+    """Fetch a JSON response from the UCSC genome-browser REST API.
+
+    Args:
+        url: Full UCSC API endpoint URL.
+
+    Returns:
+        Parsed JSON response as a Python dict.
+
+    Raises:
+        urllib.error.URLError: On network errors or non-200 HTTP responses.
+        json.JSONDecodeError: If the response body is not valid JSON.
+    """
+    req = urllib.request.Request(url, headers={"Accept": "application/json"})
+    with urllib.request.urlopen(req, timeout=30) as response:
+        return json.loads(response.read().decode("utf-8"))
+
+
+def fetch_genomic_range(chrom: str, start: int, end: int, genome: str = "hg38"):
+    """Fetch a raw genomic DNA sequence by coordinates via the UCSC REST API.
+
+    Args:
+        chrom:  Chromosome name (e.g. ``'chr10'``).
+        start:  0-based start position.
+        end:    0-based, exclusive end position.
+        genome: UCSC genome assembly name (default ``'hg38'``).
+
+    Returns:
+        Lower-case DNA sequence string for the requested range.
+
+    Raises:
+        ValueError: If the API returns no sequence for the given range.
+    """
+    seq_url = (f"https://api.genome.ucsc.edu/getData/sequence"
+               f"?genome={genome};chrom={chrom};start={start};end={end}")
+    seq = _fetch_ucsc_json(seq_url).get("dna", "")
+    if not seq:
+        raise ValueError(f"No sequence for {chrom}:{start}-{end} ({genome})")
+    return seq.lower()
+
+
+def fetch_encode_ccre(accession: str, genome: str = "hg38", hint_chrom: str = None):
+    """Look up an ENCODE cCRE accession and fetch its forward-strand sequence.
+
+    Searches the UCSC ``encodeCcreCombined`` track in 10 Mb windows across
+    every chromosome for an item whose ``name`` matches `accession`, then
+    fetches that region's DNA via `fetch_genomic_range()`.
+
+    Args:
+        accession:  ENCODE cCRE accession (e.g. ``'EH38E1482203'``).
+        genome:     UCSC genome assembly name (default ``'hg38'``).
+        hint_chrom: If given, this chromosome is searched first (speeds up
+                    lookup when the region is already known, e.g. from a
+                    nearby gene).
+
+    Returns:
+        Tuple (annotation_string, sequence) where sequence is a lower-case
+        DNA string.
+
+    Raises:
+        ValueError: If the accession is not found, or has no sequence.
+    """
+    chroms = list(_HG38_SIZES)
+    if hint_chrom and hint_chrom in _HG38_SIZES:
+        chroms = [hint_chrom] + [c for c in chroms if c != hint_chrom]
+    window = 10_000_000
+    item = None
+    for chrom in chroms:
+        for s0 in range(0, _HG38_SIZES[chrom], window):
+            url = (f"https://api.genome.ucsc.edu/getData/track"
+                   f"?genome={genome};track=encodeCcreCombined"
+                   f";chrom={chrom};start={s0};end={min(s0 + window, _HG38_SIZES[chrom])}")
+            try:
+                for it in _fetch_ucsc_json(url).get("encodeCcreCombined", []):
+                    if it.get("name") == accession:
+                        item = it
+                        break
+            except Exception:
+                pass
+            if item:
+                break
+        if item:
+            break
+    if not item:
+        raise ValueError(f"Accession {accession!r} not found in {genome}")
+
+    chrom, start, end = item["chrom"], item["chromStart"], item["chromEnd"]
+    ccre = item.get("ccre", "")
+    annotation = (f">{accession} {item.get('description', accession)} ({ccre}) "
+                  f"{chrom}:{start}-{end} strand=. genome={genome}")
+    seq = fetch_genomic_range(chrom, start, end, genome=genome)
+    return annotation, seq
+
+
 def init_summary(fn, xm, cores, txt, mutr=1/6, M = 4, force=False):
     '''Input: xmotifs, cores, and the gene sequence. Output: a
     report summarizing the properties of the sequences.'''
