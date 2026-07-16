@@ -13,6 +13,7 @@ called **xmotifs** and extracts their shorter conserved cores. From there you ca
 - Align pairs of subsequences (Gotoh global / Smith–Waterman local)
 - Search for exact and approximate (mutation-tolerant) matches
 - Extend matching pairs greedily to find the longest shared context
+- **Plot self-similarity as a semicircular arc diagram** — pairwise Hamming-bounded extensions among every occurrence of a seed motif, colored by tandem-repeat hop distance
 - Fetch sequences directly from the Ensembl REST API by transcript ID
 - **Score motifs against a transcript-specific Markov background with FDR correction**
 - **Test mutation-tolerant motif families for statistical enrichment**

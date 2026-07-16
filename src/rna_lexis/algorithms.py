@@ -1107,6 +1107,29 @@ def find_longest_extensions(s, txt, mutr=1/6, outfile=''):
     return results
 
 
+def hop_distance(spacing: int, unit: float) -> int:
+    """Number of tandem repeat units separating two occurrences.
+
+    Buckets physical spacing (not index position) by the repeat-unit
+    length: two occurrences one unit apart score 1, two units apart score
+    2, etc. Always at least 1 (distinct positions are never 0 units apart).
+
+    `unit` is not a fixed constant — repeat-unit length is specific to
+    whatever motif/region is being analysed. Callers should estimate it
+    from the actual occurrence positions, e.g. the median gap between
+    consecutive sorted occurrences (see plot_self_similarity_arcs()).
+
+    Args:
+        spacing: Distance in nt between two occurrence positions
+                  (e.g. pos2 - pos1).
+        unit:     Estimated repeat-unit length in nt for this sequence.
+
+    Returns:
+        Rounded number of repeat units (>= 1).
+    """
+    return max(1, round(spacing / unit))
+
+
 # ── k-mer scramble / null-distribution analysis ──────────────────────────────
 
 def _markov_expected_count_order(kmer_counts: dict, kmer: str, n: int,
