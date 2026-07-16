@@ -1,5 +1,42 @@
 # Changelog
 
+## [0.1.13] - 2026-07-16
+
+### Added
+
+- **Unit test coverage expanded from one module to four** — the suite
+  previously covered only `rna_lexis.statistical` (6 tests, partial). Added,
+  all using small synthetic sequences with known ground truth (no new
+  dependencies, no real biological data — see the separate NORAD dataset
+  task for that):
+  - `tests/test_algorithms.py` (25 tests) — the core motif-discovery engine
+    (`find_all_matches`, `find_boundary`/`cores`, `is_bounded`/
+    `expand_to_boundary`, `find_with_mutations`, `extend_match_pair`/
+    `find_longest_extensions`, `gen_hairpins`, `cover`,
+    `compute_default_wd`, `allow_mutation`, `markov_kmer_pvalues`, plus
+    smaller helpers), previously **completely untested** despite being the
+    most foundational module in the package.
+  - `tests/test_io.py` (14 tests) — session save/load round-trips
+    (including a non-ASCII regression test for the 0.1.12 encoding fix),
+    `is_valid_session`, `read_text`, `load_prefs`/`save_prefs` round-trips
+    (including the 0.1.12 config-directory-failure fallback path),
+    `_find_valid_sessions`, the summary-CSV hash cache, and a regression
+    test locking in 0.1.12's `open_file_with_default_software()` fix (must
+    not raise on a bogus path).
+  - `tests/test_alignment.py` (8 tests) — `gotoh_global`, `gotoh_local`,
+    `make_markers`.
+  - `tests/test_batch_cli.py` (6 tests) — end-to-end tests for all four
+    `rna_lexis_stat_cli` subcommands (`score-exact`, `rank-cores`,
+    `mutation-families`, `gapped-motif`), previously untested despite being
+    the most test-friendly entry point in the package (argparse-based,
+    file-in/file-out, no interactive prompts).
+
+  Total suite: 59 tests (was 6). `menu.py` and `plots.py` remain untested
+  (interactive/visual — out of scope for this pass; see
+  `PLAN_paper_figures.md`'s intermediate-task section for the full
+  rationale and a separately-scoped follow-on task to bundle a real NORAD
+  dataset for integration testing and distribution).
+
 ## [0.1.12] - 2026-07-16
 
 ### Removed
