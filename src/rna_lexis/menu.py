@@ -32,7 +32,7 @@ from rna_lexis.plots import (
 from rna_lexis.io import (
     read_text, save_session, load_session, init_summary, is_valid_session,
     open_file_with_default_software, _find_valid_sessions, fetch_enst_cdna,
-    load_prefs, save_prefs,
+    load_prefs, save_prefs, example_dataset_path, EXAMPLE_DATASETS,
 )
 from rna_lexis.statistical import (
     best_mutation_family_per_motif,
@@ -190,13 +190,51 @@ def print_hdr(fn, clr=True):
     else:
         print('\n')
 
+def _load_fasta_or_text(file_path):
+    """Read file_path as FASTA (header stripped) or plain sequence text.
+
+    Shared by choose_file() (interactive file picker) and
+    choose_example_dataset() (bundled NORAD data), so both handle FASTA
+    headers, multi-record files, and RNA/DNA detection identically.
+
+    Returns:
+        A session dict with keys ``file_path``, ``txt``, ``is_rna``,
+        ``txtb``, ``dir``, and (if a FASTA header was found) ``gene_name``.
+        Returns None if the file has no alphabetic content.
+    """
+    gene_name = None
+    with open(file_path, "r", encoding="utf-8", errors="ignore") as fh:
+        raw_lines = fh.readlines()
+    if raw_lines and raw_lines[0].startswith(">"):
+        gene_name = raw_lines[0][1:].split()[0]
+        raw_lines = [ln for ln in raw_lines if not ln.startswith(">")]
+    raw = "".join(raw_lines)
+
+    # Build txtb (spacing preserved) and txt (compact) from sequence only.
+    txtb = raw.replace("\n", " ").lower()
+    txtb = re.sub('[^a-z]+', ' ', txtb)
+    txtb = re.sub(' +', ' ', txtb).strip()
+    txt = sub(' +', '', txtb)
+
+    if not txt:
+        print(f"Error: '{file_path}' contains no alphabetic characters. "
+              "The file may use a non-Latin script or be empty.")
+        return None
+    is_rna = contains_only_rna(txt)
+    if is_rna:
+        txt = re.sub(r"[^A-Za-z]+", "", txt).lower().replace("u", "t")
+    result = {'file_path': file_path, 'txt': txt,
+              'is_rna': is_rna, 'txtb': txtb, 'dir': dirname(file_path)}
+    if gene_name:
+        result['gene_name'] = gene_name
+    return result
+
+
 def choose_file(datadir=''):
     """Open a file-picker dialog and load the chosen file as a session dict.
 
     If the user selects a .json file it is loaded directly via load_session().
-    Otherwise the file is read as plain text: non-alphabetic characters are
-    stripped, RNA/DNA detection is applied (U→T), and a minimal session dict
-    is returned.
+    Otherwise the file is parsed via _load_fasta_or_text().
 
     Args:
         datadir: Initial directory for the file-picker (default: system default).
@@ -210,33 +248,49 @@ def choose_file(datadir=''):
         return None
     if file_path.endswith(".json"):
         return(load_session(file_path))
-    else:
-        # Detect FASTA format and strip header lines before building txt/txtb.
-        gene_name = None
-        with open(file_path, "r", encoding="utf-8", errors="ignore") as fh:
-            raw_lines = fh.readlines()
-        if raw_lines and raw_lines[0].startswith(">"):
-            gene_name = raw_lines[0][1:].split()[0]
-            raw_lines = [ln for ln in raw_lines if not ln.startswith(">")]
-        raw = "".join(raw_lines)
+    return _load_fasta_or_text(file_path)
 
-        # Build txtb (spacing preserved) and txt (compact) from sequence only.
-        txtb = raw.replace("\n", " ").lower()
-        txtb = re.sub('[^a-z]+', ' ', txtb)
-        txtb = re.sub(' +', ' ', txtb).strip()
-        txt = sub(' +', '', txtb)
 
-        if not txt:
-            print(f"Error: '{file_path}' contains no alphabetic characters. "
-                  "The file may use a non-Latin script or be empty.")
-            return None
-        is_rna = contains_only_rna(txt)
-        if is_rna:
-            txt = re.sub(r"[^A-Za-z]+", "", txt).lower().replace("u", "t")
-    result = {'file_path': file_path, 'txt': txt,
-              'is_rna': is_rna, 'txtb': txtb, 'dir': dirname(file_path)}
-    if gene_name:
-        result['gene_name'] = gene_name
+_EXAMPLE_DATASET_LABELS = {
+    'NORAD_human': 'NORAD (human, ENST00000565493, LINC00657)',
+    'NORAD_mouse': 'NORAD (mouse, ENSMUST00000192863, Norad)',
+}
+
+
+def choose_example_dataset(datadir=''):
+    """Let the user pick a bundled example dataset (currently NORAD human/mouse).
+
+    Mirrors choose_enst()'s pattern: the sequence itself is loaded instantly
+    (no network needed, it ships with the package), then the user is
+    prompted for a directory to save the session to, since the bundled file
+    lives inside the installed package and should not be written to.
+
+    Args:
+        datadir: Initial directory for the save-location dialog.
+
+    Returns:
+        A session dict (see _load_fasta_or_text()), or None if cancelled.
+    """
+    labels = [_EXAMPLE_DATASET_LABELS[name] for name in EXAMPLE_DATASETS]
+    idx = show_menu("Example datasets", "Choose an example dataset",
+                     labels + ['Cancel'], clr=False)
+    if idx == 0 or idx == len(labels) + 1:
+        return None
+    name = EXAMPLE_DATASETS[idx - 1]
+    result = _load_fasta_or_text(example_dataset_path(name))
+    if result is None:
+        return None
+    print(fmttxt([f"Loaded example dataset: {_EXAMPLE_DATASET_LABELS[name]}",
+                  f"({len(result['txt'])} nt)"], ['bold', ''], ['green', 'cyan']))
+    print(fmttxt(["Choose the directory to SAVE this session's data:"],
+                 ['bold'], ['yellow']))
+    save_dir = openDir(initial_dir=datadir or None)
+    if not save_dir:
+        print(fmttxt(["No directory selected — session not saved. Try again or press Ctrl+D to cancel."],
+                     ['bold'], ['red']))
+        return None
+    result['dir'] = save_dir
+    result['file_path'] = os.path.join(save_dir, name)
     return result
 
 
@@ -394,7 +448,8 @@ def choose_input_source(datadir=''):
         'Python prompt'.
     """
     last_item = "Python prompt" if hasattr(sys, 'ps1') else "Quit"
-    source_menu = ["Load from local file", "Fetch by Ensembl transcript ID (ENST)", "Paste sequence", last_item]
+    source_menu = ["Load from local file", "Fetch by Ensembl transcript ID (ENST)",
+                   "Paste sequence", "Load example dataset (NORAD)", last_item]
     val = show_menu("Input Source", "Choose Input", source_menu, clr=False)
     if val == len(source_menu):
         return -1
@@ -404,6 +459,8 @@ def choose_input_source(datadir=''):
         return choose_enst(datadir)
     if val == 3:
         return load_from_paste(datadir)
+    if val == 4:
+        return choose_example_dataset(datadir)
     
 
 # fmttxt([menu_ttl[menu_level]], ['bold'], ['yellow'])

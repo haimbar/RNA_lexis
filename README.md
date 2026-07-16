@@ -19,6 +19,9 @@ called **xmotifs** and extracts their shorter conserved cores. From there you ca
 - **Search for anchor-gap-anchor gapped motif patterns**
 - **Test whether motif occurrences are spaced periodically (gap-cluster and Rayleigh tests)**
 - Clear workspace (remove all generated files while preserving the input sequence)
+- **Try it instantly on a real dataset** — human and mouse NORAD transcripts
+  ship with the package itself (`pip install` and go, no fetching or
+  pasting required); see *Load example dataset* below.
 
 ## Documentation
 
@@ -230,6 +233,36 @@ Or, without installing:
 ```
 python -m rna_lexis
 ```
+
+## Example dataset
+
+Two real datasets ship inside the package itself — no internet connection,
+account, or file to prepare — so you can try RNA_lexis immediately after
+installing:
+
+- **NORAD (human)** — Ensembl transcript `ENST00000565493`, 5401 nt.
+- **NORAD (mouse)** — Ensembl transcript `ENSMUST00000192863`, 4945 nt.
+
+From the interactive menu, choose **Load example dataset (NORAD)** at the
+input-source prompt. NORAD is a well-studied lncRNA with a tandem repeat of
+the Pumilio Response Element (core motif `tgtatata`), so the default
+discovery pipeline reliably surfaces a real, biologically meaningful
+repeat structure — a good way to confirm your installation works and see
+what the tool finds on real data. Programmatically — note that `read_text()` strips non-alphabetic
+characters but doesn't know about FASTA headers, so strip the header line
+first:
+
+```python
+from rna_lexis.io import example_dataset_path
+
+path = example_dataset_path("NORAD_human")
+with open(path, encoding="utf-8") as f:
+    txt = "".join(line for line in f if not line.startswith(">"))
+txt = "".join(c for c in txt.lower() if c.isalpha())
+```
+
+See `src/rna_lexis/data/README.md` in the package source for full
+provenance (exact transcript IDs, assembly versions, fetch date).
 
 ## Troubleshooting
 

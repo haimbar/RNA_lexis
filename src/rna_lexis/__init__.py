@@ -7,4 +7,4 @@ from . import menu
 from . import statistical
 from . import RNAlang  # backward-compatibility shim
 
-__version__ = "0.1.13"
+__version__ = "0.1.14"

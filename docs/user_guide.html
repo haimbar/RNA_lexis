@@ -42,12 +42,13 @@ rna_lexis_stat_cli gapped-motif      --fasta FILE --left LEFT --right RIGHT
 <p>It is recommended that each sequence analysed be stored in its own directory, since output files are stored in the same directory as the sequence, as well as the saved-session JSON file.</p>
 <hr />
 <h2>Choosing Input</h2>
-<p>Every session starts by loading a sequence. Four input methods are available:</p>
+<p>Every session starts by loading a sequence. Five input methods are available:</p>
 <pre><code>--- Choose Input ---
 1. Load from local file
 2. Fetch by Ensembl transcript ID (ENST)
 3. Paste sequence
-4. Python prompt
+4. Load example dataset (NORAD)
+5. Python prompt
 </code></pre>
 <h3>1 - Load from local file</h3>
 <p>A file-selector dialog opens. Select any plain-text file containing a nucleotide sequence (letters only; spaces and punctuation are stripped automatically). If you select a <strong><code>.json</code></strong> session file that was saved by a previous run, that session is restored instantly -- no re-processing required.</p>
@@ -64,7 +65,14 @@ rna_lexis_stat_cli gapped-motif      --fasta FILE --left LEFT --right RIGHT
 </blockquote>
 <h3>3 - Paste sequence</h3>
 <p>Paste one or more lines of sequence text directly into the terminal and press <strong>Enter on an empty line</strong> to finish. You will be prompted for a name for the sequence and a folder in which to save results.</p>
-<h3>4 - Python prompt</h3>
+<h3>4 - Load example dataset (NORAD)</h3>
+<p>Loads one of two small real datasets bundled with the package itself — no internet connection or account needed, since they ship inside <code>pip install</code>:</p>
+<ul>
+<li><strong>NORAD (human)</strong> — Ensembl transcript <code>ENST00000565493</code>, 5401 nt.</li>
+<li><strong>NORAD (mouse)</strong> — Ensembl transcript <code>ENSMUST00000192863</code> (<em>Norad</em>), 4945 nt.</li>
+</ul>
+<p>NORAD is a good sequence to try the tool on: it contains a well-characterised tandem repeat of the Pumilio Response Element (PRE, core motif <code>tgtatata</code>), so running the default discovery pipeline reliably surfaces a real, biologically meaningful repeat structure — useful both for learning the tool and as a sanity check that your installation works correctly. After the sequence loads you're prompted for a folder to save the session to, exactly as with the ENST-fetch option. See <code>src/rna_lexis/data/README.md</code> in the package source for full provenance details.</p>
+<h3>5 - Python prompt</h3>
 <p>Returns control to the Python interpreter.</p>
 <hr />
 <h2>Session Management</h2>
