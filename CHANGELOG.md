@@ -1,5 +1,45 @@
 # Changelog
 
+## [0.1.14] - 2026-07-16
+
+### Added
+
+- **Bundled NORAD example dataset** — human (`ENST00000565493`, 5401 nt) and
+  mouse (`ENSMUST00000192863`, 4945 nt) NORAD transcripts now ship inside
+  the pip distribution itself (`src/rna_lexis/data/`, wired via
+  `[tool.setuptools.package-data]`), so a fresh `pip install` gives every
+  user a ready-to-try real dataset with no fetching, pasting, or account
+  needed. Access programmatically via the new
+  `rna_lexis.io.example_dataset_path(name)` (`importlib.resources`-based —
+  correct whether installed from a wheel, editable install, or a repo
+  checkout). Verified end-to-end with a real wheel build installed into a
+  throwaway venv, not just the editable dev checkout.
+- **"Load example dataset (NORAD)" menu option** — new item in the Choose
+  Input menu (position 4; "Python prompt"/"Quit" renumbered to 5), loads
+  the bundled sequence instantly then prompts for a save directory,
+  mirroring the existing ENST-fetch flow. The FASTA-header-stripping logic
+  previously inlined in `choose_file()` is now a shared
+  `_load_fasta_or_text()` helper used by both.
+- **`tests/test_norad_integration.py`** (8 tests) — end-to-end integration
+  tests running the real discovery pipeline (`find_boundary`/`cores`) on
+  real biological data, distinct from T.1's synthetic unit tests. Exactly
+  reproduces the published RNA-Lexis paper's own validation numbers for
+  this transcript (163 xmotifs, 235 cores with default settings; the PRE
+  motif `tgtatata` at exactly 10 exact occurrences and 4 approximate
+  `tgtaaata` hits under 1-mismatch search) — the deterministic
+  literal-search counts are asserted exactly, while discovery-pipeline
+  counts (which could shift with future algorithm tuning) are asserted as
+  loose sanity bounds rather than pinned exact values, to avoid brittleness.
+  Also confirms human NORAD shows more organizational complexity than
+  mouse, matching the paper's own comparative finding.
+- Documented two related, pre-existing limitations discovered while
+  building this: `rna_lexis.io.read_text()` is not FASTA-aware (a `>`
+  header line's words get merged into the sequence — use
+  `_load_fasta_or_text()` or strip the header yourself), and
+  `fetch_enst_cdna()` only accepts human `ENST`-prefixed transcript IDs
+  (the mouse dataset was fetched via the lower-level, species-agnostic
+  `_fetch_ensembl_json()` instead). See `CLAUDE.md` for details.
+
 ## [0.1.13] - 2026-07-16
 
 ### Added

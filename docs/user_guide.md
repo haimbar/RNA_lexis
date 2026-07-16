@@ -44,14 +44,15 @@ It is recommended that each sequence analysed be stored in its own directory, si
 
 ## Choosing Input
 
-Every session starts by loading a sequence. Four input methods are available:
+Every session starts by loading a sequence. Five input methods are available:
 
 ```
 --- Choose Input ---
 1. Load from local file
 2. Fetch by Ensembl transcript ID (ENST)
 3. Paste sequence
-4. Python prompt
+4. Load example dataset (NORAD)
+5. Python prompt
 ```
 
 ### 1 - Load from local file
@@ -75,7 +76,16 @@ The fetched sequence is stored in a JSON file in the chosen directory and the fi
 
 Paste one or more lines of sequence text directly into the terminal and press **Enter on an empty line** to finish. You will be prompted for a name for the sequence and a folder in which to save results.
 
-### 4 - Python prompt
+### 4 - Load example dataset (NORAD)
+
+Loads one of two small real datasets bundled with the package itself — no internet connection or account needed, since they ship inside `pip install`:
+
+- **NORAD (human)** — Ensembl transcript `ENST00000565493`, 5401 nt.
+- **NORAD (mouse)** — Ensembl transcript `ENSMUST00000192863` (*Norad*), 4945 nt.
+
+NORAD is a good sequence to try the tool on: it contains a well-characterised tandem repeat of the Pumilio Response Element (PRE, core motif `tgtatata`), so running the default discovery pipeline reliably surfaces a real, biologically meaningful repeat structure — useful both for learning the tool and as a sanity check that your installation works correctly. After the sequence loads you're prompted for a folder to save the session to, exactly as with the ENST-fetch option. See `src/rna_lexis/data/README.md` in the package source for full provenance details.
+
+### 5 - Python prompt
 
 Returns control to the Python interpreter.
 

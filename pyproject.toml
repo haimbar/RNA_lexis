@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "RNA_lexis"
-version = "0.1.13"
+version = "0.1.14"
 authors = [
   { name="Haim Bar", email="haim.bar@uconn.edu" },
 ]
@@ -28,3 +28,6 @@ dependencies = ["matplotlib>=3.5.0", "numpy",
 rna_lexis = "rna_lexis.menu:main"
 rna_lexis_stat = "rna_lexis.menu:main"
 rna_lexis_stat_cli = "rna_lexis.test_cli:main"
+
+[tool.setuptools.package-data]
+rna_lexis = ["data/*.fasta", "data/README.md"]

@@ -1,5 +1,6 @@
 """File I/O, session management, and network fetch utilities."""
 
+import atexit
 import hashlib
 import os
 import os.path
@@ -11,7 +12,9 @@ import subprocess
 import sys
 import tempfile
 import urllib.request
+from contextlib import ExitStack
 from dataclasses import dataclass, asdict
+from importlib import resources as _resources
 from typing import List, Optional
 
 import pandas as pd
@@ -22,6 +25,37 @@ from rna_lexis.algorithms import find_with_mutations
 from rna_lexis.statistical import score_exact_motifs
 
 TEST_SUMMARY_SUFFIX = "_test_init.csv"
+
+EXAMPLE_DATASETS = ("NORAD_human", "NORAD_mouse")
+
+# Keeps any temp-extracted resource files alive for the life of the process
+# (only matters if the package is ever installed zipped, which pip does not
+# do by default, but importlib.resources.as_file() requires a context
+# manager either way).
+_resource_files = ExitStack()
+atexit.register(_resource_files.close)
+
+
+def example_dataset_path(name: str) -> str:
+    """Return a real filesystem path to a bundled example FASTA dataset.
+
+    Args:
+        name: One of `EXAMPLE_DATASETS` (currently ``'NORAD_human'`` or
+              ``'NORAD_mouse'``), without the `.fasta` extension.
+
+    Returns:
+        Path to the `.fasta` file, valid for the life of the process.
+        Works whether the package is installed from a wheel, an editable
+        install, or run directly from a repo checkout.
+
+    Raises:
+        ValueError: If `name` is not a known bundled dataset.
+    """
+    if name not in EXAMPLE_DATASETS:
+        raise ValueError(f"Unknown example dataset {name!r}; choose from {EXAMPLE_DATASETS}")
+    resource = _resources.files("rna_lexis").joinpath("data", f"{name}.fasta")
+    path = _resource_files.enter_context(_resources.as_file(resource))
+    return str(path)
 
 
 def init_summary_path(fn: str) -> str:

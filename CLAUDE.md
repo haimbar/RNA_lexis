@@ -9,14 +9,15 @@ API reference) — this file is about *working on* the repo, not using it.
 
 - Tests: `python3 -m pytest -q` (plain `python` may resolve to a Python
   without pytest installed in some environments — use `python3` explicitly).
-  59 tests across `test_statistical.py`, `test_algorithms.py`, `test_io.py`,
-  `test_alignment.py`, and `test_batch_cli.py` (the `rna_lexis_stat_cli`
-  subcommands) — all synthetic-data unit/end-to-end tests, no real
-  biological data or network calls. `menu.py` and `plots.py` still have
-  **no automated tests** (interactive/visual) — changes there need
-  manual/smoke verification (e.g. `python3 -c "from rna_lexis.X import Y;
-  ..."`, or rendering a menu with `gen_menu(..., clr=False)` to inspect
-  ANSI output directly).
+  67 tests: `test_statistical.py`, `test_algorithms.py`, `test_io.py`,
+  `test_alignment.py`, `test_batch_cli.py` (all synthetic-data
+  unit/end-to-end, no real biological data or network calls), plus
+  `test_norad_integration.py` (8 tests — real biology, no network calls
+  either, since it reads the bundled NORAD data rather than fetching it).
+  `menu.py` and `plots.py` still have **no automated tests**
+  (interactive/visual) — changes there need manual/smoke verification (e.g.
+  `python3 -c "from rna_lexis.X import Y; ..."`, or rendering a menu with
+  `gen_menu(..., clr=False)` to inspect ANSI output directly).
 - No linter/formatter/type-checker is configured (no flake8/mypy/ruff/
   pre-commit config, no `[tool.*]` sections in `pyproject.toml`). Match
   existing style by hand.
@@ -43,6 +44,36 @@ API reference) — this file is about *working on* the repo, not using it.
 - Keep README.md / docs/user_guide.md / llms.txt cross-links intact if you
   restructure any of them (README → user_guide.md + llms.txt; user_guide.md
   → llms.txt + README's Troubleshooting; llms.txt → both).
+
+## Bundled example data
+
+- `src/rna_lexis/data/` (human + mouse NORAD FASTA, plus its own README
+  with provenance) ships inside the pip wheel via
+  `[tool.setuptools.package-data]` in `pyproject.toml`. Access it at
+  runtime with `rna_lexis.io.example_dataset_path(name)`
+  (`importlib.resources`-based — resolves correctly whether installed from
+  a wheel, editable install, or run from a repo checkout). Don't
+  hardcode a path relative to any source file.
+- Verified this actually works end-to-end, not just in the editable dev
+  checkout: built a real wheel (`pip wheel . --no-deps`), installed it into
+  a throwaway venv, and confirmed `example_dataset_path()` resolved inside
+  that venv's own `site-packages`. Re-run this check if you change the
+  `package-data` config — it's easy to get subtly wrong in a way that only
+  breaks for real (non-editable) installs.
+- **`example_dataset_path()` returns a raw FASTA path — `read_text()` will
+  NOT clean it correctly.** `read_text()` strips non-alphabetic characters
+  but has no concept of a FASTA `>` header line, so the header's words
+  (e.g. "ENST00000565493", "NORAD") get merged straight into the sequence.
+  Use `rna_lexis.menu._load_fasta_or_text()` (shared by `choose_file()` and
+  `choose_example_dataset()`) instead, or strip the header line yourself.
+  Hit this exact bug writing the README's usage example — caught it by
+  actually running the snippet before publishing it, not by inspection.
+- **`fetch_enst_cdna()` (io.py) only accepts human `ENST`-prefixed IDs** —
+  hardcoded validation rejects mouse `ENSMUST`/other species. The
+  underlying Ensembl REST API itself is species-agnostic; only this
+  function's own guard is human-only. `NORAD_mouse.fasta` was fetched by
+  calling `_fetch_ensembl_json()` directly instead. Worth generalizing
+  `fetch_enst_cdna()` at some point, but out of scope for now.
 
 ## Module layout (`src/rna_lexis/`)
 
