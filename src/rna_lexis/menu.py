@@ -526,8 +526,16 @@ def _choose_encode_ccre():
                                    ['bold', ''], ['yellow', 'cyan']) + ' ').strip()
     if not accession:
         return None
+    # Without a chromosome hint, fetch_encode_ccre() has to scan every hg38
+    # chromosome in 10 Mb windows until it finds a match -- potentially
+    # hundreds of sequential API calls (e.g. ~180 for a chr10 accession,
+    # since chr1-chr9 are scanned first). If you know the chromosome, this
+    # narrows the search to seconds instead of a minute or more.
+    hint = safe_input(fmttxt(['Chromosome (optional, speeds up the search — e.g. chr10)',
+                               '[blank to search all chromosomes]: '],
+                              ['bold', ''], ['yellow', 'cyan']) + ' ').strip() or None
     try:
-        annotation, seq = fetch_encode_ccre(accession)
+        annotation, seq = fetch_encode_ccre(accession, hint_chrom=hint)
     except Exception as exc:
         print(fmttxt([f'Failed to fetch {accession}: {exc}'], ['bold'], ['red']))
         return None
@@ -545,6 +553,13 @@ def choose_comparison_sequence(datadir=''):
     (fetch by coordinates or by ENCODE cCRE accession), and an option to
     reuse an already-parsed RNA_lexis session instead of re-running motif
     discovery.
+
+    Paste and ENST both prompt for a save directory (same as the primary
+    loaders they reuse) and the sequence actually gets written there as a
+    session JSON (without corelist/xmotifs, since discovery hasn't run on
+    it yet) -- so it can be reloaded later via option 6 instead of
+    re-entering it. Genomic-coordinate and ENCODE-cCRE fetches are not
+    saved (no directory is even asked for); re-run the fetch to reuse them.
 
     Args:
         datadir: Initial directory for file-picker/save dialogs.
@@ -582,6 +597,25 @@ def choose_comparison_sequence(datadir=''):
 
     if data is None:
         return None
+
+    # Paste/ENST already prompted for (and got) a save directory in `dir` --
+    # honor it by actually writing the session, so it's re-loadable later
+    # via option 6. corelist/xmotifs are omitted (discovery hasn't run on
+    # this sequence yet); load_session() returning them as missing is
+    # already handled below the same as any not-yet-parsed comparison
+    # sequence.
+    if idx in (1, 3) and data.get('dir'):
+        save_path = os.path.join(data['dir'], os.path.basename(data['file_path']))
+        save_session(save_path, data={
+            'file_path': save_path,
+            'txt': data['txt'],
+            'txtb': data.get('txtb', data['txt']),
+            'is_rna': data.get('is_rna', False),
+            'dir': data['dir'],
+        })
+        print(fmttxt([f'Comparison sequence saved to: {save_path}.json'], [''], ['cyan']))
+        data['file_path'] = save_path
+
     label = (data.get('label')
              or os.path.splitext(os.path.basename(str(data.get('file_path', ''))))[0]
              or 'comparison')

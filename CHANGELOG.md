@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.2.1] - 2026-07-17
 
 Part B target #2 (see `PLAN_paper_figures.md`'s Part B) — shared-motif
 diagram, LINC01001 vs. ZMIZ1 enhancer.
@@ -56,6 +56,32 @@ diagram, LINC01001 vs. ZMIZ1 enhancer.
   arbitrary shared exact-match motifs between any two sequences. User chose
   **"shared-motif diagram"** from three proposed alternatives.
 
+### Fixed (during manual testing, before merge)
+
+- **Comparison sequence's save directory opened at the wrong level**: paste
+  and ENST reused the primary-session loaders as-is, which deliberately open
+  their save-directory picker at the *parent* of the current directory (so
+  a brand-new primary session can see sibling gene folders). For a
+  comparison sequence tied to the session already open, that's the wrong
+  default — it should stay in the current directory. Added an opt-out
+  parameter (`save_at_parent=False`) to `load_from_paste()` and
+  `choose_enst()`, used only by `choose_comparison_sequence()`.
+- **Comparison sequence was never actually saved**: paste and ENST prompted
+  for "the directory to SAVE this session's data," but
+  `choose_comparison_sequence()` discarded the chosen directory without
+  ever calling `save_session()` — the prompt implied persistence that
+  didn't happen, so a comparison sequence entered via paste/ENST couldn't
+  later be reloaded via *Use another already-parsed RNA_lexis session*.
+  Now actually written (without corelist/xmotifs, since discovery hasn't
+  run on it yet).
+- **ENCODE cCRE lookup could take a minute or more**: `fetch_encode_ccre()`
+  already had a `hint_chrom` parameter to skip straight to the right
+  chromosome, but the menu prompt never asked for it, so every lookup
+  scanned all 24 hg38 chromosomes in 10 Mb windows sequentially --
+  concretely, ~180 sequential API calls for a chr10 accession, since
+  chr1-chr9 had to be scanned first. Added an optional "Chromosome" prompt
+  to `_choose_encode_ccre()`.
+
 ### Explicitly out of scope
 
 - GeneDB `similarity.py`'s IoU / fold-enrichment / Markov-null statistical
@@ -67,7 +93,10 @@ Verified against the real LINC01001 (`ENST00000526704`) transcript and the
 ENCODE cCRE `EH38E1482203` forward-strand sequence (both used in the
 published paper) — all 6 shared motifs and their exact per-sequence hit
 counts match the submitted figure. Full test suite (89 tests, up from 75)
-passing against both NumPy 1.26 and 2.2.6.
+passing against both NumPy 1.26 and 2.2.6. Also manually tested
+interactively (all `choose_comparison_sequence()` input options: paste,
+local file, ENST, genomic coordinates, ENCODE cCRE accession), surfacing
+the three fixes above.
 
 ## [0.2.0] - 2026-07-17
 

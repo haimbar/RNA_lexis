@@ -522,9 +522,10 @@ For Z-score plots you will also be asked for a <strong>threshold</strong> (defau
 </table>
 <p><strong>Choosing a comparison sequence:</strong></p>
 <ul>
-<li><strong>Paste / local file / Ensembl ENST</strong> — same loaders used for the primary sequence; each still prompts for a save directory, so the comparison sequence can be reused later as its own session.</li>
-<li><strong>Genomic coordinates</strong> — fetches raw DNA for a <code>chrom:start-end</code> range (e.g. <code>chr10:78974544-78974893</code>) from the UCSC REST API (hg38 by default).</li>
-<li><strong>ENCODE cCRE accession</strong> — looks up a candidate cis-regulatory element by its accession (e.g. <code>EH38E1482203</code>) in the UCSC <code>encodeCcreCombined</code> track and fetches its forward-strand sequence.</li>
+<li><strong>Paste / Ensembl ENST</strong> — same loaders used for the primary sequence, including their save-directory prompt; unlike a primary session, the directory picker opens directly in the <em>current</em> session's directory rather than jumping to its parent. The fetched/pasted sequence <strong>is saved there</strong> (without motif discovery — that only runs once you generate a plot), so it can be reloaded later via <em>Use another already-parsed RNA_lexis session</em> instead of re-entering it.</li>
+<li><strong>Local file</strong> — opens a file picker directly; no save step (the source file on disk already serves that purpose).</li>
+<li><strong>Genomic coordinates</strong> — fetches raw DNA for a <code>chrom:start-end</code> range (e.g. <code>chr10:78974544-78974893</code>) from the UCSC REST API (hg38 by default). Not saved; re-run the fetch to reuse it.</li>
+<li><strong>ENCODE cCRE accession</strong> — looks up a candidate cis-regulatory element by its accession (e.g. <code>EH38E1482203</code>) in the UCSC <code>encodeCcreCombined</code> track and fetches its forward-strand sequence. Also prompts for an optional chromosome (e.g. <code>chr10</code>) — without it, the lookup scans every hg38 chromosome in 10 Mb windows and can take a minute or more (e.g. an accession on chr10 needs ~180 sequential API calls if chr1–chr9 must be scanned first); supplying the chromosome narrows this to a handful of calls. Not saved; re-run the fetch to reuse it.</li>
 <li><strong>Existing RNA_lexis session</strong> — reuses an already-parsed <code>.json</code> session, skipping motif discovery on the comparison sequence entirely.</li>
 </ul>
 <p><strong>Reading the plot:</strong></p>
@@ -535,6 +536,7 @@ For Z-score plots you will also be asked for a <strong>threshold</strong> (defau
 <li>The legend lists each motif with its occurrence count in each sequence.</li>
 </ul>
 <p>Network fetches (genomic coordinates, ENCODE cCRE) require an internet connection; failures (no connection, accession not found) are reported with a message and cancel the plot cleanly rather than crashing — re-open <em>Shared-motif diagram</em> to try again.</p>
+<p><strong>Worked example</strong> (reproduces a published RNA-Lexis paper figure): load the LINC01001 transcript (Ensembl <code>ENST00000526704</code>) as the primary sequence, then open <em>Shared-motif diagram</em> and choose <em>Fetch by ENCODE cCRE accession</em> with accession <code>EH38E1482203</code> and chromosome hint <code>chr10</code> (a ZMIZ1-proximal enhancer). Forward strand, default minimum length (6) and max motifs (6). Expect exactly 6 shared motifs — <code>aggccc</code>, <code>caggccc</code>, <code>caggcc</code>, <code>cccagc</code>, <code>cagcct</code>, <code>cagctc</code> — with per-sequence hit counts 27×/1×, 21×/1×, 24×/1×, 24×/2×, 19×/1×, 17×/1× respectively (transcript × / enhancer ×). The same accession can also be reached via <em>Fetch by genomic coordinates</em> with <code>chr10:78974544-78974893</code>, or by pasting the sequence directly — all three should produce the identical plot, since they resolve to the same underlying DNA.</p>
 <hr />
 <h3>2 - Sequence operations</h3>
 <pre><code>--- Sequence operations ---

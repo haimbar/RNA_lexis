@@ -336,9 +336,10 @@ Compares the loaded sequence against a second, independently chosen sequence, an
 
 **Choosing a comparison sequence:**
 
-- **Paste / local file / Ensembl ENST** — same loaders used for the primary sequence; each still prompts for a save directory, so the comparison sequence can be reused later as its own session.
-- **Genomic coordinates** — fetches raw DNA for a `chrom:start-end` range (e.g. `chr10:78974544-78974893`) from the UCSC REST API (hg38 by default).
-- **ENCODE cCRE accession** — looks up a candidate cis-regulatory element by its accession (e.g. `EH38E1482203`) in the UCSC `encodeCcreCombined` track and fetches its forward-strand sequence.
+- **Paste / Ensembl ENST** — same loaders used for the primary sequence, including their save-directory prompt; unlike a primary session, the directory picker opens directly in the *current* session's directory rather than jumping to its parent. The fetched/pasted sequence **is saved there** (without motif discovery — that only runs once you generate a plot), so it can be reloaded later via *Use another already-parsed RNA_lexis session* instead of re-entering it.
+- **Local file** — opens a file picker directly; no save step (the source file on disk already serves that purpose).
+- **Genomic coordinates** — fetches raw DNA for a `chrom:start-end` range (e.g. `chr10:78974544-78974893`) from the UCSC REST API (hg38 by default). Not saved; re-run the fetch to reuse it.
+- **ENCODE cCRE accession** — looks up a candidate cis-regulatory element by its accession (e.g. `EH38E1482203`) in the UCSC `encodeCcreCombined` track and fetches its forward-strand sequence. Also prompts for an optional chromosome (e.g. `chr10`) — without it, the lookup scans every hg38 chromosome in 10 Mb windows and can take a minute or more (e.g. an accession on chr10 needs ~180 sequential API calls if chr1–chr9 must be scanned first); supplying the chromosome narrows this to a handful of calls. Not saved; re-run the fetch to reuse it.
 - **Existing RNA_lexis session** — reuses an already-parsed `.json` session, skipping motif discovery on the comparison sequence entirely.
 
 **Reading the plot:**
@@ -349,6 +350,8 @@ Compares the loaded sequence against a second, independently chosen sequence, an
 - The legend lists each motif with its occurrence count in each sequence.
 
 Network fetches (genomic coordinates, ENCODE cCRE) require an internet connection; failures (no connection, accession not found) are reported with a message and cancel the plot cleanly rather than crashing — re-open *Shared-motif diagram* to try again.
+
+**Worked example** (reproduces a published RNA-Lexis paper figure): load the LINC01001 transcript (Ensembl `ENST00000526704`) as the primary sequence, then open *Shared-motif diagram* and choose *Fetch by ENCODE cCRE accession* with accession `EH38E1482203` and chromosome hint `chr10` (a ZMIZ1-proximal enhancer). Forward strand, default minimum length (6) and max motifs (6). Expect exactly 6 shared motifs — `aggccc`, `caggccc`, `caggcc`, `cccagc`, `cagcct`, `cagctc` — with per-sequence hit counts 27×/1×, 21×/1×, 24×/1×, 24×/2×, 19×/1×, 17×/1× respectively (transcript × / enhancer ×). The same accession can also be reached via *Fetch by genomic coordinates* with `chr10:78974544-78974893`, or by pasting the sequence directly — all three should produce the identical plot, since they resolve to the same underlying DNA.
 
 ---
 
