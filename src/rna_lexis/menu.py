@@ -68,6 +68,10 @@ def _prompt_save(plotly=False, session_dir=''):
 
     Returns:
         (filepath, scale) — filepath is '' if the user chose screen-only.
+        scale is always 1 (kept for backward compatibility with callers
+        that still pass it through to _spawn_plot/_save_fig) -- the former
+        "PNG high-res 3x" option was replaced with PDF (see below), so
+        nothing sets it above 1 anymore.
     """
     fn = safe_input(fmttxt(['Output file name',
                              '[leave blank to show on screen only]: '],
@@ -77,21 +81,23 @@ def _prompt_save(plotly=False, session_dir=''):
         if not os.path.isabs(fn):
             fn = os.path.join(session_dir or os.getcwd(), fn)
         root = os.path.splitext(fn)[0]
-        fmt_hint = ('[1: PNG standard (default), 2: PNG high-res 3x, 3: SVG, 4: HTML]'
+        # PDF replaces the former "PNG high-res 3x" option: both SVG and
+        # PDF are vector formats suited to publication, without high-res
+        # PNG's large-raster-file downside.
+        fmt_hint = ('[1: PNG standard (default), 2: PDF, 3: SVG, 4: HTML]'
                     if plotly else
-                    '[1: PNG standard (default), 2: PNG high-res 3x, 3: SVG]')
+                    '[1: PNG standard (default), 2: PDF, 3: SVG]')
         fmt = safe_input(fmttxt(['Output format', fmt_hint],
                                  ['bold', ''], ['yellow', 'cyan']) + ' ')
         if fmt == '2':
-            fn, scale = f'{root}.png', 3
+            fn = f'{root}.pdf'
         elif fmt == '3':
             fn = f'{root}.svg'
         elif fmt == '4' and plotly:
             fn = f'{root}.html'
         else:
             fn = f'{root}.png'
-        print(fmttxt([f"Saving as '{fn}'" + (' (high-res)' if scale > 1 else '')],
-                     [''], ['cyan']))
+        print(fmttxt([f"Saving as '{fn}'"], [''], ['cyan']))
     return fn, scale
 
 

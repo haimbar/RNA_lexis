@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.2.2] - 2026-07-17
+
+### Changed
+
+- **PDF replaces "PNG high-res 3×" as a plot output format**, in
+  `_prompt_save()`'s format menu (shared by every plot in the package —
+  Core neighbors detailed/condensed, K-mers, Coverage, Motif Match/Mutation,
+  Self-similarity arc plot, Shared-motif diagram): `[1: PNG standard
+  (default), 2: PDF, 3: SVG, (4: HTML for Plotly plots)]`. High-res PNG's
+  only advantage was print/publication quality, but it produces large
+  raster files that can still fall below journal figure-quality standards;
+  SVG (already offered) and now PDF are both vector formats that solve
+  this without that downside, so keeping a dedicated high-res-raster option
+  no longer earned its place in the menu. Standard PNG is unchanged, for
+  quick screen preview. Verified PDF export works via both rendering
+  backends already in use (`plt.savefig(...)` for matplotlib,
+  `fig.write_image(...)` via Kaleido for Plotly) — no plot-function changes
+  needed, since each already saves based on the file extension it's given.
+
 ## [0.2.1] - 2026-07-17
 
 Part B target #2 (see `PLAN_paper_figures.md`'s Part B) — shared-motif

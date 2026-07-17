@@ -155,7 +155,7 @@ Visualises how a chosen core sequence co-occurs with its neighbours across the f
 | Strings to include | 2 (xmotifs) | 1 = cores, 2 = xmotifs |
 | Plot title | `<file> <sequence>` | Free text |
 | Output file name | *(screen only)* | Leave blank to display interactively |
-| Output format | 1 (PNG standard) | 1 = PNG, 2 = PNG high-res (3×), 3 = SVG, 4 = HTML |
+| Output format | 1 (PNG standard) | 1 = PNG, 2 = PDF, 3 = SVG, 4 = HTML |
 | X-axis range | *(full range)* | `min, max` e.g. `100, 500` |
 | Minimum occurrences to include a neighbour | 2 | Neighbours occurring fewer times than this are excluded |
 | Show hairpin regions? | N | Only asked when a companion `*_hairpins.csv` file exists in the session directory |
@@ -185,7 +185,7 @@ A compact three-band overview of the same neighbourhood data, designed for long 
 | Strings to include | 2 (xmotifs) | 1 = cores, 2 = xmotifs |
 | Plot title | `<file> <sequence>` | Free text |
 | Output file name | *(screen only)* | Leave blank to display interactively |
-| Output format | 1 (PNG standard) | 1 = PNG, 2 = PNG high-res (3×), 3 = SVG, 4 = HTML |
+| Output format | 1 (PNG standard) | 1 = PNG, 2 = PDF, 3 = SVG, 4 = HTML |
 | X-axis range | *(full range)* | `min, max` e.g. `100, 500` |
 | Minimum occurrences to include a neighbour | 2 | Neighbours occurring fewer times than this are excluded |
 | Show hairpin regions? | N | Only asked when a companion `*_hairpins.csv` file exists in the session directory |
@@ -229,7 +229,7 @@ The abundance histogram shows the total number of k-mer occurrences in the text.
 
 The Rank-frequency plot shows the log of the rank of each score vs. the log of the number of occurrences. This plot is often used to check whether the distribution of k-mers follows Zipf's law.
 
-After the plot-specific parameters, you will be prompted for an **output file name** and **format** (PNG standard, PNG high-res 3×, or SVG). Leave the file name blank to display on screen only.
+After the plot-specific parameters, you will be prompted for an **output file name** and **format** (PNG standard, PDF, or SVG). Leave the file name blank to display on screen only.
 
 
 #### 1.4 Logo
@@ -257,7 +257,7 @@ Shows how much of the text is covered by cores or xmotifs, weighted by a power l
 | Strings to include | 1 (cores) | 1 = cores, 2 = xmotifs |
 | Exponent *a* | 1.2 | Score = length^a times occurrences |
 | Output file name | *(screen only)* | Leave blank to display interactively |
-| Output format | 1 (PNG standard) | 1 = PNG, 2 = PNG high-res (3×), 3 = SVG |
+| Output format | 1 (PNG standard) | 1 = PNG, 2 = PDF, 3 = SVG |
 
 #### 1.6 Motif Match/Mutation
 
@@ -270,7 +270,7 @@ Plots the positions of up to three user-supplied sequences along the full text a
 | Sequence 1 / 2 / 3 | | Leave blank to stop after fewer than 3 |
 | Mutation rate: 1 per N letters | 6 | Sets the maximum number of mismatches per sequence: `floor(L / N)` |
 | Output file | *(screen only)* | Leave blank to display interactively |
-| Output format | 1 (PNG) | 1 = PNG, 2 = PNG high-res (3×), 3 = SVG, 4 = HTML |
+| Output format | 1 (PNG) | 1 = PNG, 2 = PDF, 3 = SVG, 4 = HTML |
 | Condense x-axis? | N | If `y`, large empty regions on the x-axis are compressed |
 | Minimum gap size to compress | 1000 | Only gaps wider than this many positions are compressed (shown only when condensing) |
 
@@ -306,7 +306,7 @@ Visualises pairwise Hamming-bounded extensions among every exact occurrence of a
 | Seed sequence | | Must occur at least **3** times in the text; blank to cancel |
 | Mutation rate: 1 per N letters | 6 | Controls how divergent the flanking context may be during extension (same meaning as in *Motif extensions*) |
 | Output file | *(screen only)* | Leave blank to display interactively |
-| Output format | 1 (PNG standard) | 1 = PNG, 2 = PNG high-res (3×), 3 = SVG |
+| Output format | 1 (PNG standard) | 1 = PNG, 2 = PDF, 3 = SVG |
 
 The minimum of 3 occurrences (not 2) is because this plot also runs the same spacing-significance test as *Motif spacing / periodicity test* (Sequence operations) and shows its result on the plot — 2 occurrences give only a single gap, which that test cannot evaluate. The arc diagram itself doesn't require regular spacing to draw or interpret; the significance line is reference context, not a gate on which pairs are shown.
 
@@ -332,7 +332,7 @@ Compares the loaded sequence against a second, independently chosen sequence, an
 | Minimum motif length | 6 | Shortest shared motif to consider |
 | Max motifs to show | 6 | Each motif gets its own color; at most this many are drawn |
 | Output file | *(screen only)* | Leave blank to display interactively |
-| Output format | 1 (PNG standard) | 1 = PNG, 2 = PNG high-res (3×), 3 = SVG |
+| Output format | 1 (PNG standard) | 1 = PNG, 2 = PDF, 3 = SVG |
 
 **Choosing a comparison sequence:**
 
