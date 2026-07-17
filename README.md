@@ -14,6 +14,7 @@ called **xmotifs** and extracts their shorter conserved cores. From there you ca
 - Search for exact and approximate (mutation-tolerant) matches
 - Extend matching pairs greedily to find the longest shared context
 - **Plot self-similarity as a semicircular arc diagram** — pairwise Hamming-bounded extensions among every occurrence of a seed motif, colored by tandem-repeat hop distance
+- **Plot a shared-motif diagram against a second sequence** — connects every exact-match motif shared between the loaded sequence and a comparison sequence (paste, file, Ensembl ENST, genomic coordinates, or an ENCODE cCRE accession) as a two-row arc diagram
 - Fetch sequences directly from the Ensembl REST API by transcript ID
 - **Score motifs against a transcript-specific Markov background with FDR correction**
 - **Test mutation-tolerant motif families for statistical enrichment**

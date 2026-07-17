@@ -9,6 +9,8 @@ from rna_lexis.io import (
     _read_summary_hash,
     _summary_inputs_hash,
     _write_summary_hash,
+    fetch_encode_ccre,
+    fetch_genomic_range,
     is_valid_session,
     load_prefs,
     load_session,
@@ -143,6 +145,49 @@ class OpenFileWithDefaultSoftwareTests(unittest.TestCase):
                 open_file_with_default_software(os.path.join(d, "nope.qqzz"))
             except Exception as exc:  # pragma: no cover - failure path
                 self.fail(f"open_file_with_default_software raised: {exc!r}")
+
+
+class FetchGenomicRangeTests(unittest.TestCase):
+    def test_returns_lowercase_sequence(self):
+        with mock.patch("rna_lexis.io._fetch_ucsc_json",
+                         return_value={"dna": "ACGTacgtNN"}) as mocked:
+            seq = fetch_genomic_range("chr10", 100, 110)
+        self.assertEqual(seq, "acgtacgtnn")
+        url = mocked.call_args[0][0]
+        self.assertIn("chr10", url)
+        self.assertIn("start=100", url)
+        self.assertIn("end=110", url)
+
+    def test_raises_when_no_sequence_returned(self):
+        with mock.patch("rna_lexis.io._fetch_ucsc_json", return_value={"dna": ""}):
+            with self.assertRaises(ValueError):
+                fetch_genomic_range("chr10", 100, 110)
+
+
+class FetchEncodeCcreTests(unittest.TestCase):
+    def test_finds_accession_and_returns_annotated_sequence(self):
+        track_response = {"encodeCcreCombined": [{
+            "name": "EH38E1482203", "chrom": "chr10",
+            "chromStart": 78974544, "chromEnd": 78974893,
+            "ccre": "dELS,CTCF-bound",
+            "description": "distal enhancer-like signature",
+        }]}
+        seq_response = {"dna": "AAATGTGGGG"}
+
+        def side_effect(url):
+            return track_response if "track=encodeCcreCombined" in url else seq_response
+
+        with mock.patch("rna_lexis.io._fetch_ucsc_json", side_effect=side_effect):
+            annotation, seq = fetch_encode_ccre("EH38E1482203", hint_chrom="chr10")
+        self.assertIn("EH38E1482203", annotation)
+        self.assertIn("chr10:78974544-78974893", annotation)
+        self.assertEqual(seq, "aaatgtgggg")
+
+    def test_raises_when_accession_not_found(self):
+        with mock.patch("rna_lexis.io._fetch_ucsc_json",
+                         return_value={"encodeCcreCombined": []}):
+            with self.assertRaises(ValueError):
+                fetch_encode_ccre("EH38ENOTFOUND", hint_chrom="chr10")
 
 
 if __name__ == "__main__":

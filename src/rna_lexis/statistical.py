@@ -21,6 +21,8 @@ from typing import Iterable, Iterator, Sequence
 
 from scipy.stats import binom, poisson
 
+from rna_lexis.algorithms import cores, cover, find_boundary
+
 try:
     from scipy.stats import false_discovery_control
 except ImportError:  # pragma: no cover - compatibility for older SciPy
@@ -763,3 +765,67 @@ def spacing_periodicity_test(
         'rayleigh_z': Z,
         'p_rayleigh': p_rayleigh,
     }
+
+
+def shared_exact_motifs(
+    txt_a: str,
+    txt_b: str,
+    cores_a: Sequence[str] | None = None,
+    min_len: int = 6,
+    n_top: int = 6,
+    minxmlen: int = 7,
+    maxxmlen: int = 60,
+    mincorelen: int = 6,
+    mincount: int = 2,
+) -> list[str]:
+    """Select motifs with exact occurrences in both sequences.
+
+    Ported from GeneDB `similarity.py::main()`'s `arc_candidates`
+    construction: cores discovered jointly on the *concatenation*
+    `txt_a + '_' + txt_b` (the '_' separator prevents spurious motifs that
+    straddle the boundary) that have >= 1 exact hit in each half come
+    first -- joint discovery surfaces shared motifs that neither sequence's
+    own single-sequence core discovery necessarily finds on its own, since
+    a motif's cores depend on its own recurrence pattern within that one
+    sequence. `cores_a`, if given (e.g. sequence A's already-computed
+    `corelist`), supplements this with any additional A-cores that also
+    have an exact hit in B and weren't already found by the joint scan.
+    All candidates are ranked by weighted coverage in sequence A
+    (`algorithms.cover()`) descending.
+
+    Note: only the shared-motif *list* is reproduced here, not GeneDB's
+    concat-IoU/fold-enrichment/Markov-null statistics computed from the
+    same joint discovery -- those numbers are a separate, out-of-scope
+    analysis; this function only needs the motifs themselves.
+
+    Args:
+        txt_a:      Sequence A (used for the coverage ranking).
+        txt_b:      Sequence B (a candidate must have >= 1 exact hit here).
+        cores_a:    Optional pre-computed cores of sequence A (e.g. from an
+                    already-parsed session) to supplement the joint scan.
+        min_len:    Minimum motif length to consider (default 6).
+        n_top:      Maximum number of motifs to return (default 6).
+        minxmlen:   Passed to find_boundary() for the joint discovery scan.
+        maxxmlen:   Passed to find_boundary() for the joint discovery scan.
+        mincorelen: Passed to cores() for the joint discovery scan.
+        mincount:   Passed to find_boundary() for the joint discovery scan.
+
+    Returns:
+        Up to `n_top` motif strings, longest-coverage-in-A first.
+    """
+    concat_txt = f'{txt_a}_{txt_b}'
+    concat_xmotifs = find_boundary(concat_txt, minlen=minxmlen, maxlen=maxxmlen,
+                                    at_least=mincount)
+    concat_cores = cores(concat_txt, concat_xmotifs, minclen=mincorelen)
+
+    candidates = [c for c in concat_cores
+                  if literal_positions(c, txt_a) and literal_positions(c, txt_b)]
+    seen = set(candidates)
+    for c in (cores_a or []):
+        if c not in seen and literal_positions(c, txt_b):
+            candidates.append(c)
+            seen.add(c)
+
+    candidates = [c for c in candidates if len(c) >= min_len]
+    candidates.sort(key=lambda m: cover(m, txt_a), reverse=True)
+    return candidates[:n_top]

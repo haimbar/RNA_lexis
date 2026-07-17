@@ -19,7 +19,7 @@ except Exception:
 from rna_lexis.algorithms import (
     count_kgrams, contains_only_rna, cover, find_boundary, cores,
     find_all_matches, print_core, find_with_mutations, extend_match_pair,
-    find_longest_extensions, gen_hairpins,
+    find_longest_extensions, gen_hairpins, extendRNA,
     markov_kmer_pvalues,
     compute_default_wd,
 )
@@ -28,11 +28,12 @@ from rna_lexis.plots import (
     plot_logo, plotzscore, plotkmerhist, plot_frequency_rank,
     plot_seq_nbrs, plot_nbrs_condensed, export_nbrs_condensed,
     plot_coverage, plot_sequence_hits, plot_sequence_hits_detailed,
-    plot_self_similarity_arcs,
+    plot_self_similarity_arcs, plot_shared_motif_diagram,
 )
 from rna_lexis.io import (
     read_text, save_session, load_session, init_summary, is_valid_session,
     open_file_with_default_software, _find_valid_sessions, fetch_enst_cdna,
+    fetch_genomic_range, fetch_encode_ccre,
     load_prefs, save_prefs, example_dataset_path, EXAMPLE_DATASETS,
 )
 from rna_lexis.statistical import (
@@ -41,6 +42,7 @@ from rna_lexis.statistical import (
     mutation_family_tests,
     rank_core_candidates,
     score_gapped_motif,
+    shared_exact_motifs,
     spacing_periodicity_test,
     write_rows_csv,
 )
@@ -295,7 +297,7 @@ def choose_example_dataset(datadir=''):
     return result
 
 
-def choose_enst(datadir=''):
+def choose_enst(datadir='', save_at_parent=True):
     """Interactively prompt for an Ensembl transcript ID and load its cDNA.
 
     Before hitting the network, the function looks for a cached session JSON
@@ -307,6 +309,13 @@ def choose_enst(datadir=''):
 
     Args:
         datadir: Directory used to locate cached session files (default: '').
+        save_at_parent: When True (default), the save-directory picker opens
+            at datadir's *parent* so sibling gene directories are visible --
+            appropriate when fetching a new primary session. Pass False when
+            the fetched sequence belongs with the current session (e.g. a
+            comparison sequence via choose_comparison_sequence()), so the
+            picker opens directly in datadir instead. Does not affect the
+            cached-session search, which always walks from the parent.
 
     Returns:
         A session dict with keys ``file_path``, ``txt``, ``txtb``, ``is_rna``,
@@ -319,8 +328,10 @@ def choose_enst(datadir=''):
                     if datadir else '') or datadir or ''
     # Open the save-directory dialog at the parent level so the user sees all
     # sibling gene directories and can easily navigate to the correct one,
-    # rather than defaulting to the previous gene's directory.
-    _save_init = _search_root or None
+    # rather than defaulting to the previous gene's directory -- unless
+    # save_at_parent is False (e.g. a comparison sequence, which belongs
+    # alongside the current session, not a new gene directory).
+    _save_init = (_search_root or None) if save_at_parent else (datadir or None)
 
     while True:
         enst = safe_input(fmttxt(["Enter Ensembl transcript ID (ENST...): "],
@@ -369,7 +380,7 @@ def choose_enst(datadir=''):
             print(fmttxt([f"Failed to fetch ENST sequence: {exc}"], ['bold'], ['red']))
 
 
-def load_from_paste(datadir=''):
+def load_from_paste(datadir='', save_at_parent=True):
     """Accept a pasted nucleotide (or text) sequence from the terminal.
 
     Reads lines until an empty line is entered, strips non-alphabetic
@@ -378,6 +389,12 @@ def load_from_paste(datadir=''):
 
     Args:
         datadir: Initial directory for the save-directory picker (default: '').
+        save_at_parent: When True (default), the save-directory picker opens
+            at datadir's *parent* so sibling gene directories are visible --
+            appropriate when pasting a new primary session. Pass False when
+            the pasted sequence belongs with the current session (e.g. a
+            comparison sequence via choose_comparison_sequence()), so the
+            picker opens directly in datadir instead.
 
     Returns:
         A session dict with keys ``file_path``, ``txt``, ``txtb``, ``is_rna``,
@@ -414,9 +431,14 @@ def load_from_paste(datadir=''):
         name = default_name
 
     # Open the dialog at the parent of datadir so users see all sibling gene
-    # directories rather than defaulting to the previous gene's directory.
-    _save_init = (os.path.dirname(datadir.rstrip(os.sep))
-                  if datadir else '') or datadir or None
+    # directories rather than defaulting to the previous gene's directory --
+    # unless save_at_parent is False (e.g. a comparison sequence, which
+    # belongs alongside the current session, not a new gene directory).
+    if save_at_parent:
+        _save_init = (os.path.dirname(datadir.rstrip(os.sep))
+                      if datadir else '') or datadir or None
+    else:
+        _save_init = datadir or None
     print(fmttxt(["Choose the directory to SAVE this session's data:"], ['bold'], ['yellow']))
     path = openDir(initial_dir=_save_init)
     if not path:
@@ -462,7 +484,149 @@ def choose_input_source(datadir=''):
         return load_from_paste(datadir)
     if val == 4:
         return choose_example_dataset(datadir)
-    
+
+
+def _choose_genomic_range():
+    """Prompt for chrom:start-end genomic coordinates and fetch the DNA
+    sequence via the UCSC REST API (io.fetch_genomic_range()).
+
+    Returns:
+        Dict with keys 'label' and 'txt', or None if cancelled/invalid/failed.
+    """
+    coord = safe_input(fmttxt(['Genomic range (e.g. chr10:78974544-78974893)',
+                                '[blank to cancel]: '],
+                               ['bold', ''], ['yellow', 'cyan']) + ' ').strip()
+    if not coord:
+        return None
+    m = re.match(r'^(chr\w+):(\d+)-(\d+)$', coord)
+    if not m:
+        print(fmttxt(['Invalid format. Expected chrom:start-end, '
+                       'e.g. chr10:78974544-78974893.'], ['bold'], ['red']))
+        return None
+    chrom, start, end = m.group(1), int(m.group(2)), int(m.group(3))
+    try:
+        seq = fetch_genomic_range(chrom, start, end)
+    except Exception as exc:
+        print(fmttxt([f'Failed to fetch {coord}: {exc}'], ['bold'], ['red']))
+        return None
+    txt = sub('[^a-zA-Z]+', '', seq).lower()
+    print(fmttxt([f'Fetched {chrom}:{start}-{end}, length={len(txt)} nt'], [''], ['green']))
+    return {'label': f'{chrom}_{start}_{end}', 'txt': txt}
+
+
+def _choose_encode_ccre():
+    """Prompt for an ENCODE cCRE accession and fetch its forward-strand
+    sequence via the UCSC REST API (io.fetch_encode_ccre()).
+
+    Returns:
+        Dict with keys 'label' and 'txt', or None if cancelled/not found/failed.
+    """
+    accession = safe_input(fmttxt(['ENCODE cCRE accession (e.g. EH38E1482203)',
+                                    '[blank to cancel]: '],
+                                   ['bold', ''], ['yellow', 'cyan']) + ' ').strip()
+    if not accession:
+        return None
+    # Without a chromosome hint, fetch_encode_ccre() has to scan every hg38
+    # chromosome in 10 Mb windows until it finds a match -- potentially
+    # hundreds of sequential API calls (e.g. ~180 for a chr10 accession,
+    # since chr1-chr9 are scanned first). If you know the chromosome, this
+    # narrows the search to seconds instead of a minute or more.
+    hint = safe_input(fmttxt(['Chromosome (optional, speeds up the search — e.g. chr10)',
+                               '[blank to search all chromosomes]: '],
+                              ['bold', ''], ['yellow', 'cyan']) + ' ').strip() or None
+    try:
+        annotation, seq = fetch_encode_ccre(accession, hint_chrom=hint)
+    except Exception as exc:
+        print(fmttxt([f'Failed to fetch {accession}: {exc}'], ['bold'], ['red']))
+        return None
+    txt = sub('[^a-zA-Z]+', '', seq).lower()
+    print(fmttxt([annotation, f'length={len(txt)} nt'], ['', ''], ['green', 'green']))
+    return {'label': accession, 'txt': txt}
+
+
+def choose_comparison_sequence(datadir=''):
+    """Prompt for a second ("comparison") sequence to plot or compare
+    against the current one.
+
+    Mirrors choose_input_source(), plus two extra genome-location options
+    that make sense for a comparison target but not a primary session
+    (fetch by coordinates or by ENCODE cCRE accession), and an option to
+    reuse an already-parsed RNA_lexis session instead of re-running motif
+    discovery.
+
+    Paste and ENST both prompt for a save directory (same as the primary
+    loaders they reuse) and the sequence actually gets written there as a
+    session JSON (without corelist/xmotifs, since discovery hasn't run on
+    it yet) -- so it can be reloaded later via option 6 instead of
+    re-entering it. Genomic-coordinate and ENCODE-cCRE fetches are not
+    saved (no directory is even asked for); re-run the fetch to reuse them.
+
+    Args:
+        datadir: Initial directory for file-picker/save dialogs.
+
+    Returns:
+        Dict with keys 'label' (str), 'txt' (str), 'corelist' (list or
+        None), 'xmotifs' (list or None) -- corelist/xmotifs are None unless
+        the comparison sequence came from an existing session, in which
+        case the caller can skip re-running discovery. Returns None if
+        cancelled.
+    """
+    menu_opts = ["Paste sequence", "Load from local file",
+                 "Fetch by Ensembl transcript ID (ENST)",
+                 "Fetch by genomic coordinates (chrom:start-end, hg38)",
+                 "Fetch by ENCODE cCRE accession (e.g. EH38E1482203)",
+                 "Use another already-parsed RNA_lexis session (.json)",
+                 "Cancel"]
+    idx = show_menu("Comparison sequence", "Choose input source", menu_opts, clr=False)
+    if idx == 0 or idx == len(menu_opts):
+        return None
+
+    if idx == 1:
+        data = load_from_paste(datadir, save_at_parent=False)
+    elif idx == 2:
+        data = choose_file(datadir)
+    elif idx == 3:
+        data = choose_enst(datadir, save_at_parent=False)
+    elif idx == 4:
+        data = _choose_genomic_range()
+    elif idx == 5:
+        data = _choose_encode_ccre()
+    else:  # idx == 6
+        path = openFile(initial_dir=datadir or None)
+        data = load_session(path) if path and path.endswith('.json') else None
+
+    if data is None:
+        return None
+
+    # Paste/ENST already prompted for (and got) a save directory in `dir` --
+    # honor it by actually writing the session, so it's re-loadable later
+    # via option 6. corelist/xmotifs are omitted (discovery hasn't run on
+    # this sequence yet); load_session() returning them as missing is
+    # already handled below the same as any not-yet-parsed comparison
+    # sequence.
+    if idx in (1, 3) and data.get('dir'):
+        save_path = os.path.join(data['dir'], os.path.basename(data['file_path']))
+        save_session(save_path, data={
+            'file_path': save_path,
+            'txt': data['txt'],
+            'txtb': data.get('txtb', data['txt']),
+            'is_rna': data.get('is_rna', False),
+            'dir': data['dir'],
+        })
+        print(fmttxt([f'Comparison sequence saved to: {save_path}.json'], [''], ['cyan']))
+        data['file_path'] = save_path
+
+    label = (data.get('label')
+             or os.path.splitext(os.path.basename(str(data.get('file_path', ''))))[0]
+             or 'comparison')
+    return {
+        'label': label,
+        'txt': data['txt'],
+        'corelist': data.get('corelist'),
+        'xmotifs': data.get('xmotifs'),
+    }
+
+
 
 # fmttxt([menu_ttl[menu_level]], ['bold'], ['yellow'])
 
@@ -1388,6 +1552,50 @@ def self_similarity_arcs_input(txt, file_path=''):
                                   session_dir=os.path.dirname(os.path.abspath(file_path)) if file_path else '')
     _spawn_plot(plot_self_similarity_arcs, seq, results, positions,
                 spacing_stats=spacing_stats, file=fn_out, scale=scale)
+
+
+def shared_motif_diagram_input(txt, strs, defvals, file_path=''):
+    """Prompt for a second (comparison) sequence, find motifs shared by
+    exact match with the current sequence, and plot the connections as a
+    two-row arc diagram (e.g. a transcript vs. a candidate regulatory
+    element)."""
+    session_dir = os.path.dirname(os.path.abspath(file_path)) if file_path else ''
+    comp = choose_comparison_sequence(defvals.get('datadir') or session_dir)
+    if comp is None:
+        return
+
+    strand = safe_input(fmttxt(['Compare against forward strand or reverse complement?',
+                                 '[F]orward (default) / [R]everse complement: '],
+                                ['bold', ''], ['yellow', 'cyan']) + ' ').strip().lower()
+    comp_txt = comp['txt']
+    comp_label = comp['label']
+    if strand.startswith('r'):
+        comp_txt = extendRNA(comp_txt, xtype=3)
+        comp_label = f'{comp_label}_rc'
+
+    min_len_str = safe_input(fmttxt(['Minimum motif length', '[default: 6]: '],
+                                     ['bold', ''], ['yellow', 'cyan']) + ' ').strip()
+    min_len = int(min_len_str) if min_len_str else 6
+    n_top_str = safe_input(fmttxt(['Max motifs to show', '[default: 6]: '],
+                                   ['bold', ''], ['yellow', 'cyan']) + ' ').strip()
+    n_top = int(n_top_str) if n_top_str else 6
+
+    print(fmttxt(['Finding shared motifs (this may take a moment)...'], [''], ['cyan']))
+    shared = shared_exact_motifs(
+        txt, comp_txt, cores_a=strs['corelist'], min_len=min_len, n_top=n_top,
+        minxmlen=defvals['minxmlen'], maxxmlen=defvals['maxxmlen'],
+        mincorelen=defvals['mincorelen'], mincount=defvals['mincount'])
+    if not shared:
+        print(fmttxt(['No shared motifs (exact hits in both sequences) found.'],
+                     ['bold'], ['red']))
+        safe_input(fmttxt(['Press Enter to continue'], [''], ['white']))
+        return
+    print(fmttxt([f'{len(shared)} shared motif(s): ' + ', '.join(shared)], [''], ['white']))
+
+    gene_label = os.path.splitext(os.path.basename(file_path))[0] if file_path else 'sequence'
+    fn_out, scale = _prompt_save(plotly=False, session_dir=session_dir)
+    _spawn_plot(plot_shared_motif_diagram, txt, comp_txt, gene_label, comp_label,
+                shared, file=fn_out, scale=scale)
 
 
 def hairpins_input(txt, file_path, minSL=8, minLL=3, maxLL=40):
@@ -2333,7 +2541,7 @@ def menus():
     submenu = [["Plots", "Sequence operations", "Open Core file", "Summary statistics",
                "Show settings", "Change setting", "Open User Guide", "Clear workspace", "Load new input", "Quit"],
                ["Core neighbors (detailed)", "Core neighbors (condensed)", "K-mers", "Logo", "Coverage", "Motif Match/Mutation",
-                "Self-similarity arc plot", "Back"],
+                "Self-similarity arc plot", "Shared-motif diagram (vs. another sequence)", "Back"],
                ["Find all matches", "Search with mutations", "Motif extensions", "Print core",
                 "Motif spacing / periodicity test", "Gapped motif search",
                 "Covered area", "Core neighbors (text export)",
@@ -2439,7 +2647,7 @@ def menus():
                     _seq_labels = ["single-sequence analysis", "statistical analysis", "other"]
                     val = show_menu(file_path, menu_ttl[menu_level], submenu[menu_level],
                                     clr=defvals['clr'],
-                                    split={0: 4, 1: 7}.get(menu_level),
+                                    split={0: 4, 1: 8}.get(menu_level),
                                     splits=_seq_splits if menu_level == 2 else None,
                                     labels=_seq_labels if menu_level == 2 else None)
                     # Top level menu:
@@ -2526,6 +2734,8 @@ def menus():
                             case 7:
                                 self_similarity_arcs_input(txt, file_path)
                             case 8:
+                                shared_motif_diagram_input(txt, strs, defvals, file_path)
+                            case 9:
                                 menu_level = 0 # Go to the main menu
 
                     # Sequences:
