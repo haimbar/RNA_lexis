@@ -57,6 +57,42 @@ class PlotSelfSimilarityArcsTests(unittest.TestCase):
                                        spacing_stats=stats, file=out)
             self.assertTrue(os.path.isfile(out))
 
+    def test_consecutive_default_draws_fewer_arcs_than_all(self):
+        # 5 positions -> C(5,2)=10 total pairs, but only 4 consecutive
+        # pairs. SVG size scales with the number of drawn path elements, so
+        # it's a reliable proxy for "fewer arcs were actually drawn".
+        positions = [0, 100, 250, 500, 900]
+        results = [
+            {"pos1": positions[i], "pos2": positions[j], "total_len": 30 + i + j, "hamming": 1}
+            for i in range(len(positions)) for j in range(i + 1, len(positions))
+        ]
+        self.assertEqual(len(results), 10)
+        with tempfile.TemporaryDirectory() as d:
+            out_consecutive = os.path.join(d, "consecutive.svg")
+            out_all = os.path.join(d, "all.svg")
+            plot_self_similarity_arcs("gattaca", results, positions,
+                                       arcs="consecutive", file=out_consecutive)
+            plot_self_similarity_arcs("gattaca", results, positions,
+                                       arcs="all", file=out_all)
+            self.assertGreater(os.path.getsize(out_all), os.path.getsize(out_consecutive))
+
+    def test_label_threshold_suppresses_labels_when_exceeded(self):
+        # 16 positions -> 15 consecutive arcs: exactly at the default
+        # threshold (labels shown), then below a lowered threshold (hidden).
+        positions = list(range(0, 1600, 100))
+        results = [
+            {"pos1": positions[i], "pos2": positions[i + 1], "total_len": 30, "hamming": 1}
+            for i in range(len(positions) - 1)
+        ]
+        self.assertEqual(len(results), 15)
+        with tempfile.TemporaryDirectory() as d:
+            out_shown = os.path.join(d, "shown.svg")
+            out_hidden = os.path.join(d, "hidden.svg")
+            plot_self_similarity_arcs("gattaca", results, positions, file=out_shown)
+            plot_self_similarity_arcs("gattaca", results, positions,
+                                       label_threshold=5, file=out_hidden)
+            self.assertLess(os.path.getsize(out_hidden), os.path.getsize(out_shown))
+
 
 class PlotSharedMotifDiagramTests(unittest.TestCase):
     def setUp(self):

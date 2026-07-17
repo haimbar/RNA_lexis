@@ -1,5 +1,31 @@
 # Changelog
 
+## [0.2.3] - 2026-07-17
+
+### Changed
+
+- **Self-similarity arc plot declutters automatically for seeds with many
+  occurrences.** A seed with `n` occurrences has `n×(n-1)/2` possible
+  pairwise arcs — 300 for a seed occurring 25 times, illegible. Two
+  independent changes to `plots.plot_self_similarity_arcs()`:
+  - New `arcs` parameter (`'consecutive'` default, `'all'` available):
+    consecutive-neighbor pairs only draws `n-1` arcs instead of
+    `n*(n-1)/2`, scaling linearly instead of quadratically. Not just
+    truncation — the periodicity signal this plot is about is fundamentally
+    a consecutive-spacing story, and distant pairs are largely redundant
+    with the chain of nearby ones for a tandem repeat. Node sizing still
+    reflects the full pairwise result set regardless of which arcs are
+    drawn. `'all'` preserves the original (pre-this-change) behavior.
+  - New `label_threshold` parameter (default 15): per-arc text labels are
+    hidden once more than this many arcs are drawn, since labels overlap
+    into unreadable noise well before the arcs themselves do. The title
+    reports the active arc count/mode and why labels are hidden when
+    applicable.
+  - `menu.self_similarity_arcs_input()` gained a "consecutive-neighbor arcs
+    only, or all pairwise arcs?" prompt (default consecutive).
+  - 2 new tests in `tests/test_plots.py`, verified via SVG file size as a
+    proxy for arc/label count (91 tests total now).
+
 ## [0.2.2] - 2026-07-17
 
 ### Changed

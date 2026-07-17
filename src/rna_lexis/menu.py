@@ -1554,10 +1554,18 @@ def self_similarity_arcs_input(txt, file_path=''):
     # interpret -- shown here as reference context, not a gate on the plot.
     spacing_stats = spacing_periodicity_test(positions_all, len(txt))
 
+    # Full pairwise (n*(n-1)/2 arcs) becomes illegible fast as occurrences
+    # grow -- default to consecutive-neighbor arcs only (n-1), with all
+    # pairs available on request.
+    arc_mode = safe_input(fmttxt(['Show consecutive-neighbor arcs only, or all pairwise arcs?',
+                                   '[C]onsecutive (default) / [A]ll: '],
+                                  ['bold', ''], ['yellow', 'cyan']) + ' ').strip().lower()
+    arcs = 'all' if arc_mode.startswith('a') else 'consecutive'
+
     fn_out, scale = _prompt_save(plotly=False,
                                   session_dir=os.path.dirname(os.path.abspath(file_path)) if file_path else '')
     _spawn_plot(plot_self_similarity_arcs, seq, results, positions,
-                spacing_stats=spacing_stats, file=fn_out, scale=scale)
+                spacing_stats=spacing_stats, arcs=arcs, file=fn_out, scale=scale)
 
 
 def shared_motif_diagram_input(txt, strs, defvals, file_path=''):

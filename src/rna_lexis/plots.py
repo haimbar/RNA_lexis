@@ -1286,7 +1286,8 @@ _HOP_ARC_DEFAULT_COLOR = "#888888"  # hop >= 5 (beyond the 4-bucket legend)
 
 
 def plot_self_similarity_arcs(seed, results, positions, unit=None,
-                               spacing_stats=None, file='', scale=1):
+                               spacing_stats=None, arcs='consecutive',
+                               label_threshold=15, file='', scale=1):
     """Semicircular arc diagram of pairwise Hamming-bounded extensions.
 
     Visualises the output of find_longest_extensions() for a single seed
@@ -1300,7 +1301,10 @@ def plot_self_similarity_arcs(seed, results, positions, unit=None,
     Args:
         seed:      Seed motif string, shown in the title.
         results:   Output of find_longest_extensions(seed, txt, ...) — list
-                   of dicts with keys pos1, pos2, total_len, hamming.
+                   of dicts with keys pos1, pos2, total_len, hamming, for
+                   *every* pair of occurrences (n occurrences -> n*(n-1)/2
+                   pairs). Node sizes are always computed from the full set
+                   (see arcs, below, for which pairs are actually drawn).
         positions: Sorted list of unique occurrence positions (the arc
                    diagram's x-axis nodes) — typically the pos1/pos2 values
                    appearing in results.
@@ -1319,6 +1323,18 @@ def plot_self_similarity_arcs(seed, results, positions, unit=None,
                    the plot as an additional reference line. When None, that
                    line is omitted — the arc diagram itself doesn't require
                    regular spacing to be drawn or interpreted.
+        arcs:      Which pairs to draw arcs for. 'consecutive' (default)
+                   draws only adjacent-in-position pairs (n-1 arcs for n
+                   occurrences, scaling linearly) -- for a seed with many
+                   occurrences the full pairwise set (n*(n-1)/2 arcs) is
+                   illegible, and the periodicity signal this plot is about
+                   is fundamentally a consecutive-spacing story anyway.
+                   'all' draws every pair in `results`, matching the
+                   original (pre-decluttering) behavior.
+        label_threshold: When the number of *drawn* arcs exceeds this, the
+                   per-arc spacing/Hamming/identity text labels are omitted
+                   (the arcs themselves still draw) -- labels overlap into
+                   unreadable noise well before the arcs do. Default 15.
         file:      Output path for saving the figure (PNG/SVG/PDF). When
                    empty the figure is only displayed.
         scale:     DPI multiplier for raster export (default 1).
@@ -1331,13 +1347,25 @@ def plot_self_similarity_arcs(seed, results, positions, unit=None,
         gaps = [b - a for a, b in zip(positions[:-1], positions[1:])]
         unit = float(np.median(gaps)) if gaps else 1.0
 
-    tlen_vals = [r['total_len'] for r in results]
+    if arcs == 'consecutive':
+        sorted_pos = sorted(positions)
+        consecutive_pairs = set(zip(sorted_pos[:-1], sorted_pos[1:]))
+        drawn = [r for r in results if (r['pos1'], r['pos2']) in consecutive_pairs]
+    else:
+        drawn = results
+
+    show_labels = len(drawn) <= label_threshold
+
+    tlen_vals = [r['total_len'] for r in drawn]
     tlen_min, tlen_max = min(tlen_vals), max(tlen_vals)
     lw_scale = lambda t: 0.6 + 3.5 * (t - tlen_min) / max(tlen_max - tlen_min, 1)
 
     def hop_color(spacing):
         return _HOP_ARC_COLORS.get(hop_distance(spacing, unit), _HOP_ARC_DEFAULT_COLOR)
 
+    # Node sizes reflect the longest extension reachable from that position
+    # across *all* pairs, even when only a subset of arcs is drawn -- a
+    # node's best match elsewhere is still meaningful context.
     max_len_map = defaultdict(int)
     for r in results:
         max_len_map[r['pos1']] = max(max_len_map[r['pos1']], r['total_len'])
@@ -1349,25 +1377,26 @@ def plot_self_similarity_arcs(seed, results, positions, unit=None,
 
     fig, ax = plt.subplots(figsize=(11, 5.2))
 
-    for r in sorted(results, key=lambda r: r['total_len'], reverse=True):
+    for r in sorted(drawn, key=lambda r: r['total_len'], reverse=True):
         p0, p1 = r['pos1'], r['pos2']
         spacing = p1 - p0
         identity = 100 * (r['total_len'] - r['hamming']) / r['total_len']
         xs, ys = _semicircle(p0, p1)
         ax.plot(xs, ys, color=hop_color(spacing), lw=lw_scale(r['total_len']),
                  alpha=0.80, zorder=2)
-        mid_y = ys.max()
-        fontsize = 7.5 if spacing <= unit * 1.1 else 6.5
-        ax.text((p0 + p1) / 2, mid_y + 2,
-                f"{spacing} nt  h={r['hamming']}  ({identity:.1f}%)",
-                ha="center", va="bottom", fontsize=fontsize, color="#444")
+        if show_labels:
+            mid_y = ys.max()
+            fontsize = 7.5 if spacing <= unit * 1.1 else 6.5
+            ax.text((p0 + p1) / 2, mid_y + 2,
+                    f"{spacing} nt  h={r['hamming']}  ({identity:.1f}%)",
+                    ha="center", va="bottom", fontsize=fontsize, color="#444")
 
     for n, nr in zip(positions, node_r):
         ax.scatter(n, 0, s=nr ** 2 * 0.3, color="#2a6099",
                    zorder=5, edgecolors="white", linewidths=1.2)
         ax.text(n, -18, str(n), ha="center", va="top", fontsize=8, color="#333")
 
-    max_hop = max(hop_distance(r['pos2'] - r['pos1'], unit) for r in results)
+    max_hop = max(hop_distance(r['pos2'] - r['pos1'], unit) for r in drawn)
     for hops in range(1, min(max_hop, 4) + 1):
         ax.plot([], [], color=_HOP_ARC_COLORS[hops], lw=2.5,
                 label=f"{hops} hop{'s' if hops > 1 else ''} (~{round(hops * unit)} nt)")
@@ -1395,10 +1424,13 @@ def plot_self_similarity_arcs(seed, results, positions, unit=None,
 
     ax.axhline(0, color="#cccccc", lw=0.8, zorder=1)
     ax.set_xlim(min(positions) - 150, max(positions) + 150)
-    ax.set_ylim(-55, max((r['pos2'] - r['pos1']) / 2 for r in results) * 1.25)
+    ax.set_ylim(-55, max((r['pos2'] - r['pos1']) / 2 for r in drawn) * 1.25)
     ax.set_xlabel("Position (nt)", fontsize=11)
     ax.set_ylabel("Arc height = spacing / 2 (nt)", fontsize=10)
-    title_lines = [f"Pairwise Hamming extensions — seed: '{seed}'"]
+    title = f"Pairwise Hamming extensions — seed: '{seed}'"
+    if arcs == 'consecutive' and len(drawn) < len(results):
+        title += f"  ({len(drawn)} of {len(results)} pairs shown — consecutive-neighbor only)"
+    title_lines = [title]
     if spacing_stats is not None:
         def _p(v):
             return f"{v:.4f}" if v >= 0.0001 else "<0.0001"
@@ -1411,7 +1443,10 @@ def plot_self_similarity_arcs(seed, results, positions, unit=None,
     # overflow the figure on both sides (truncated on the left, covered by
     # the legend on the right) if kept on one.
     title_lines.append("Node size = max extension length  ·  Arc thickness = extension length")
-    title_lines.append("Arc color = hop distance  ·  Labels: spacing | h=Hamming | identity%")
+    if show_labels:
+        title_lines.append("Arc color = hop distance  ·  Labels: spacing | h=Hamming | identity%")
+    else:
+        title_lines.append(f"Arc color = hop distance  ·  Labels hidden ({len(drawn)} arcs > {label_threshold})")
     ax.set_title("\n".join(title_lines), fontsize=10)
     ax.spines[["top", "right", "left"]].set_visible(False)
     ax.tick_params(labelsize=9)

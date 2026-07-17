@@ -305,17 +305,20 @@ Visualises pairwise Hamming-bounded extensions among every exact occurrence of a
 |---|:---:|---|
 | Seed sequence | | Must occur at least **3** times in the text; blank to cancel |
 | Mutation rate: 1 per N letters | 6 | Controls how divergent the flanking context may be during extension (same meaning as in *Motif extensions*) |
+| Consecutive-neighbor arcs only, or all pairwise arcs? | Consecutive | See "Decluttering", below |
 | Output file | *(screen only)* | Leave blank to display interactively |
 | Output format | 1 (PNG standard) | 1 = PNG, 2 = PDF, 3 = SVG |
 
 The minimum of 3 occurrences (not 2) is because this plot also runs the same spacing-significance test as *Motif spacing / periodicity test* (Sequence operations) and shows its result on the plot — 2 occurrences give only a single gap, which that test cannot evaluate. The arc diagram itself doesn't require regular spacing to draw or interpret; the significance line is reference context, not a gate on which pairs are shown.
 
+**Decluttering (many occurrences):** a seed with `n` occurrences has `n×(n-1)/2` possible pairs — a seed appearing 25 times has 300, which is illegible as an arc diagram. By default only **consecutive-neighbor pairs** are drawn (`n-1` arcs, e.g. 24 for 25 occurrences): the pair between each occurrence and the next one along the sequence. This isn't just truncation — the periodicity story this plot tells is fundamentally about spacing between neighbors, and distant pairs are largely redundant with the chain of nearby ones for a tandem repeat. Node size (the longest extension reachable from that position) still reflects *all* pairs even when only some arcs are drawn. Choose "All" to see every pairwise arc instead (matches the plot's original behavior, before this default existed) — legible for a handful of occurrences, but expect visual clutter once occurrences climb into the dozens. Independent of that choice, per-arc text labels are automatically hidden once more than 15 arcs are drawn (labels overlap into unreadable noise before the arcs themselves do); the title reports how many arcs are shown and why labels are hidden when that happens.
+
 **Reading the plot:**
 
 - Each occurrence of the seed is a **node** (filled circle) on the x-axis at its position, sized by the longest extension reachable from that position.
-- Each pair of occurrences is a **semicircular arc**: thickness encodes the extension length for that pair, height encodes the spacing between the two positions (taller = farther apart).
+- Each drawn pair of occurrences is a **semicircular arc**: thickness encodes the extension length for that pair, height encodes the spacing between the two positions (taller = farther apart).
 - **Arc color encodes hop distance** — the number of tandem-repeat units separating the two positions, estimated automatically from the median spacing between consecutive occurrences (not a fixed value, since repeat-unit length differs by region): 1 hop (dark blue), 2 hops (light blue), 3 hops (orange), 4 hops (red), 5+ hops (gray).
-- Each arc is labeled with the spacing (nt), the raw Hamming distance (`h=`), and the normalized identity (%).
+- When shown, each arc is labeled with the spacing (nt), the raw Hamming distance (`h=`), and the normalized identity (%) — see "Decluttering", above, for when labels are hidden.
 - The subtitle's second line reports the spacing test: candidate period `T` (nt), the gap-cluster test p-value, and the Rayleigh test p-value — the same numbers *Motif spacing / periodicity test* reports for this seed, values below 0.05 indicate statistically significant periodic spacing.
 - The legend (outside the plot, top right) shows the hop-distance color key and a node-size key using real circle markers at the same scale as the plotted nodes.
 
