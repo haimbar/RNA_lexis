@@ -9,10 +9,13 @@ import os
 import tempfile
 import unittest
 
+import numpy as np
 import matplotlib
 matplotlib.use("Agg")
 
-from rna_lexis.plots import plot_self_similarity_arcs, plot_shared_motif_diagram
+from rna_lexis.plots import (
+    plot_self_similarity_arcs, plot_shared_motif_diagram, plot_coverage_comparison,
+)
 from rna_lexis.statistical import spacing_periodicity_test
 
 
@@ -133,6 +136,58 @@ class PlotSharedMotifDiagramTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             out = os.path.join(d, "shared.svg")
             plot_shared_motif_diagram(txt_a, txt_b, "GeneA", "GeneB", motifs, file=out)
+            self.assertTrue(os.path.isfile(out))
+
+
+class PlotCoverageComparisonTests(unittest.TestCase):
+    def setUp(self):
+        x = np.linspace(0, 6, 200)
+        self.curve_a = np.clip(0.3 + 0.4 * np.sin(x), 0, 1)
+        self.curve_b = np.clip(0.5 + 0.2 * np.cos(x), 0, 1)
+
+    def test_saves_a_file_without_raising(self):
+        with tempfile.TemporaryDirectory() as d:
+            out = os.path.join(d, "cov.png")
+            plot_coverage_comparison(self.curve_a, "Motif coverage",
+                                      self.curve_b, "GC content", file=out)
+            self.assertTrue(os.path.isfile(out))
+            self.assertGreater(os.path.getsize(out), 0)
+
+    def test_accepts_a_custom_title(self):
+        with tempfile.TemporaryDirectory() as d:
+            out = os.path.join(d, "cov.svg")
+            plot_coverage_comparison(self.curve_a, "A", self.curve_b, "B",
+                                      title="Custom title", file=out)
+            self.assertTrue(os.path.isfile(out))
+
+    def test_works_with_uniform_curves(self):
+        with tempfile.TemporaryDirectory() as d:
+            out = os.path.join(d, "cov.png")
+            zeros = np.zeros(100)
+            ones = np.ones(100)
+            plot_coverage_comparison(zeros, "Zero", ones, "One", file=out)
+            self.assertTrue(os.path.isfile(out))
+
+    def test_dual_axis_saves_a_file_without_raising(self):
+        with tempfile.TemporaryDirectory() as d:
+            out = os.path.join(d, "cov_dual.png")
+            plot_coverage_comparison(self.curve_a, "Motif coverage",
+                                      self.curve_b, "GC content",
+                                      dual_axis=True, file=out)
+            self.assertTrue(os.path.isfile(out))
+            self.assertGreater(os.path.getsize(out), 0)
+
+    def test_dual_axis_works_with_very_different_ranges(self):
+        # The scenario that surfaced the need for dual_axis: one curve
+        # spans nearly the full [0,1] range, the other a narrow band --
+        # shared-axis flattens the narrow one; dual_axis should not crash
+        # and should still produce a real file.
+        with tempfile.TemporaryDirectory() as d:
+            out = os.path.join(d, "cov_dual.svg")
+            wide = np.clip(0.1 + 0.85 * np.abs(np.sin(np.linspace(0, 6, 200))), 0, 1)
+            narrow = 0.5 + 0.05 * np.sin(np.linspace(0, 6, 200))
+            plot_coverage_comparison(wide, "Motif coverage", narrow, "GC content",
+                                      dual_axis=True, file=out)
             self.assertTrue(os.path.isfile(out))
 
 

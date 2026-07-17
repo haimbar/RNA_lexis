@@ -22,6 +22,8 @@ from rna_lexis.algorithms import (
     find_longest_extensions, gen_hairpins, extendRNA,
     markov_kmer_pvalues,
     compute_default_wd,
+    binary_coverage, gc_content_indicator, homopolymer_indicator,
+    sliding_coverage_fraction, coverage_comparison_warnings,
 )
 from rna_lexis.alignment import gotoh_global, gotoh_local, print_alignment
 from rna_lexis.plots import (
@@ -29,6 +31,7 @@ from rna_lexis.plots import (
     plot_seq_nbrs, plot_nbrs_condensed, export_nbrs_condensed,
     plot_coverage, plot_sequence_hits, plot_sequence_hits_detailed,
     plot_self_similarity_arcs, plot_shared_motif_diagram,
+    plot_coverage_comparison,
 )
 from rna_lexis.io import (
     read_text, save_session, load_session, init_summary, is_valid_session,
@@ -1612,6 +1615,127 @@ def shared_motif_diagram_input(txt, strs, defvals, file_path=''):
                 shared, file=fn_out, scale=scale)
 
 
+def _confirm_coverage_warnings(len_a, len_b, window):
+    """Print any coverage_comparison_warnings() and ask to continue.
+
+    Returns:
+        True to proceed, False to cancel (warnings present and declined).
+    """
+    warnings = coverage_comparison_warnings(len_a, len_b, window=window)
+    if not warnings:
+        return True
+    for w in warnings:
+        print(fmttxt([w], ['bold'], ['yellow']))
+    ans = safe_input(fmttxt(['Continue anyway?', '[y/N]: '],
+                             ['bold', ''], ['yellow', 'cyan']) + ' ').strip().lower()
+    return ans.startswith('y')
+
+
+def _prompt_window(default=200):
+    s = safe_input(fmttxt(['Sliding window size (nt)', f'[default: {default}]: '],
+                           ['bold', ''], ['yellow', 'cyan']) + ' ').strip()
+    if not s:
+        return default
+    try:
+        return max(1, int(s))
+    except ValueError:
+        print(fmttxt(['Invalid value, using default.'], [''], ['red']))
+        return default
+
+
+def _prompt_dual_axis():
+    """Ask whether the two coverage curves should share one 0-100% axis
+    (default -- directly comparable in absolute terms) or each get its own
+    independently scaled axis (matches how published figures with very
+    different-range curves, e.g. motif coverage vs. GC%, are often shown)."""
+    ans = safe_input(fmttxt(['Shared axis (default) or dual axis (independently scaled)?',
+                              '[S]hared / [D]ual: '],
+                             ['bold', ''], ['yellow', 'cyan']) + ' ').strip().lower()
+    return ans.startswith('d')
+
+
+def transcript_coverage_comparison_input(txt, strs, defvals, file_path=''):
+    """Prompt for a second transcript and plot both sequences' motif-coverage
+    sliding-window curves overlaid, for comparing where each is enriched
+    (e.g. human vs. mouse orthologs)."""
+    session_dir = os.path.dirname(os.path.abspath(file_path)) if file_path else ''
+    comp = choose_comparison_sequence(defvals.get('datadir') or session_dir)
+    if comp is None:
+        return
+
+    if not _confirm_coverage_warnings(len(txt), len(comp['txt']), window=200):
+        print(fmttxt(['Cancelled.'], [''], ['white']))
+        return
+
+    comp_cores = comp['corelist']
+    if comp_cores is None:
+        print(fmttxt([f"Discovering motifs in {comp['label']}..."], [''], ['cyan']))
+        comp_strs = parsedata(comp['txt'], dict(defvals))
+        comp_cores = comp_strs['corelist']
+
+    window = _prompt_window()
+    cov_a = binary_coverage(txt, strs['corelist'])
+    cov_b = binary_coverage(comp['txt'], comp_cores)
+    curve_a = sliding_coverage_fraction(cov_a, window=window)
+    curve_b = sliding_coverage_fraction(cov_b, window=window)
+
+    label_a = os.path.splitext(os.path.basename(file_path))[0] if file_path else 'sequence'
+    label_b = comp['label']
+    dual_axis = _prompt_dual_axis()
+    fn_out, scale = _prompt_save(plotly=False, session_dir=session_dir)
+    _spawn_plot(plot_coverage_comparison, curve_a, label_a, curve_b, label_b,
+                dual_axis=dual_axis, file=fn_out, scale=scale)
+
+
+def gc_coverage_comparison_input(txt, strs, file_path=''):
+    """Plot the loaded sequence's motif-coverage sliding-window curve
+    against its GC-content sliding-window curve, to see whether motif
+    hotspots coincide with (or diverge from) GC-rich regions."""
+    if not _confirm_coverage_warnings(len(txt), len(txt), window=200):
+        print(fmttxt(['Cancelled.'], [''], ['white']))
+        return
+
+    window = _prompt_window()
+    curve_motif = sliding_coverage_fraction(binary_coverage(txt, strs['corelist']), window=window)
+    curve_gc = sliding_coverage_fraction(gc_content_indicator(txt), window=window)
+
+    dual_axis = _prompt_dual_axis()
+    fn_out, scale = _prompt_save(
+        plotly=False,
+        session_dir=os.path.dirname(os.path.abspath(file_path)) if file_path else '')
+    _spawn_plot(plot_coverage_comparison, curve_motif, 'Motif coverage', curve_gc, 'GC content',
+                dual_axis=dual_axis, file=fn_out, scale=scale)
+
+
+def homopolymer_coverage_comparison_input(txt, strs, file_path=''):
+    """Plot the loaded sequence's motif-coverage sliding-window curve
+    against its homopolymer/low-complexity-run density curve, to see
+    whether motif hotspots coincide with (or diverge from) simple
+    repetitive regions."""
+    if not _confirm_coverage_warnings(len(txt), len(txt), window=200):
+        print(fmttxt(['Cancelled.'], [''], ['white']))
+        return
+
+    min_run_str = safe_input(fmttxt(['Minimum homopolymer run length', '[default: 4]: '],
+                                     ['bold', ''], ['yellow', 'cyan']) + ' ').strip()
+    try:
+        min_run = int(min_run_str) if min_run_str else 4
+    except ValueError:
+        print(fmttxt(['Invalid value, using default.'], [''], ['red']))
+        min_run = 4
+
+    window = _prompt_window()
+    curve_motif = sliding_coverage_fraction(binary_coverage(txt, strs['corelist']), window=window)
+    curve_hp = sliding_coverage_fraction(homopolymer_indicator(txt, min_run=min_run), window=window)
+
+    dual_axis = _prompt_dual_axis()
+    fn_out, scale = _prompt_save(
+        plotly=False,
+        session_dir=os.path.dirname(os.path.abspath(file_path)) if file_path else '')
+    _spawn_plot(plot_coverage_comparison, curve_motif, 'Motif coverage', curve_hp,
+                f'Homopolymer runs (>= {min_run} nt)', dual_axis=dual_axis, file=fn_out, scale=scale)
+
+
 def hairpins_input(txt, file_path, minSL=8, minLL=3, maxLL=40):
     """Prompt for hairpin parameters, run gen_hairpins, and export results to CSV."""
     import csv
@@ -2555,7 +2679,10 @@ def menus():
     submenu = [["Plots", "Sequence operations", "Open Core file", "Summary statistics",
                "Show settings", "Change setting", "Open User Guide", "Clear workspace", "Load new input", "Quit"],
                ["Core neighbors (detailed)", "Core neighbors (condensed)", "K-mers", "Logo", "Coverage", "Motif Match/Mutation",
-                "Self-similarity arc plot", "Shared-motif diagram (vs. another sequence)", "Back"],
+                "Self-similarity arc plot", "Shared-motif diagram (vs. another sequence)",
+                "Compare with another transcript (motif coverage)",
+                "Compare motif coverage vs. GC-content",
+                "Compare motif coverage vs. homopolymer/low-complexity density", "Back"],
                ["Find all matches", "Search with mutations", "Motif extensions", "Print core",
                 "Motif spacing / periodicity test", "Gapped motif search",
                 "Covered area", "Core neighbors (text export)",
@@ -2656,14 +2783,19 @@ def menus():
                                                   'stats': stats})
                     init_summary(file_path, strs['xmotifs'], strs['corelist'], txt)
                 else:
-                    # Sequence ops menu uses 3 color blocks; other menus use a single split.
+                    # Sequence ops and Plots menus use multi-block coloring; the
+                    # main menu uses a single split.
                     _seq_splits = [(8, 'yellow'), (13, 'white')]
                     _seq_labels = ["single-sequence analysis", "statistical analysis", "other"]
+                    _plots_splits = [(7, 'yellow')]
+                    _plots_labels = ["single-sequence plots", "comparative plots"]
                     val = show_menu(file_path, menu_ttl[menu_level], submenu[menu_level],
                                     clr=defvals['clr'],
-                                    split={0: 4, 1: 8}.get(menu_level),
-                                    splits=_seq_splits if menu_level == 2 else None,
-                                    labels=_seq_labels if menu_level == 2 else None)
+                                    split={0: 4}.get(menu_level),
+                                    splits=(_plots_splits if menu_level == 1 else
+                                            _seq_splits if menu_level == 2 else None),
+                                    labels=(_plots_labels if menu_level == 1 else
+                                            _seq_labels if menu_level == 2 else None))
                     # Top level menu:
                     if menu_level == 0:
                         # Quit:
@@ -2750,6 +2882,12 @@ def menus():
                             case 8:
                                 shared_motif_diagram_input(txt, strs, defvals, file_path)
                             case 9:
+                                transcript_coverage_comparison_input(txt, strs, defvals, file_path)
+                            case 10:
+                                gc_coverage_comparison_input(txt, strs, file_path)
+                            case 11:
+                                homopolymer_coverage_comparison_input(txt, strs, file_path)
+                            case 12:
                                 menu_level = 0 # Go to the main menu
 
                     # Sequences:

@@ -1602,3 +1602,82 @@ def plot_shared_motif_diagram(txt_a, txt_b, label_a, label_b, shared_motifs,
     plt.show()
 
 
+_COVERAGE_COMPARISON_COLORS = ("#1f77b4", "#d62728")
+
+
+def plot_coverage_comparison(curve_a, label_a, curve_b, label_b,
+                              dual_axis=False, title='', file='', scale=1):
+    """Overlay two sliding-window coverage-fraction curves for comparison.
+
+    Both curves are expected to already be resampled to the same length
+    over a common 0-100% position axis (algorithms.sliding_coverage_fraction())
+    -- this keeps the function agnostic to what each curve actually measures,
+    so the same plot works for motif-coverage-vs-motif-coverage (two
+    sequences), or motif-coverage-vs-GC-content / homopolymer-density (one
+    sequence, two different sliding-window statistics).
+
+    Args:
+        curve_a, curve_b: Equal-length float arrays, values in [0, 1].
+        label_a, label_b: Legend labels for each curve.
+        dual_axis:        When False (default), both curves share one 0-1
+                          axis -- directly comparable in absolute terms,
+                          which is the more honest view when that's what you
+                          want, but visually flattens whichever curve has
+                          the smaller natural range (e.g. GC content rarely
+                          nears 100%, while motif coverage often does).
+                          When True, curve_b gets its own y-axis
+                          (matplotlib twinx), each independently scaled to
+                          its own data range -- matches how the published
+                          figure this was validated against (SNHG14 motif
+                          coverage vs. GC%) presents it, at the cost of the
+                          two curves no longer being visually comparable in
+                          absolute terms.
+        title:            Plot title; defaults to "{label_a} vs {label_b}".
+        file:             Output path for saving the figure (PNG/SVG/PDF).
+                          When empty the figure is only displayed.
+        scale:            DPI multiplier for raster export (default 1).
+    """
+    x = np.linspace(0, 100, len(curve_a))
+    color_a, color_b = _COVERAGE_COMPARISON_COLORS
+
+    fig, ax = plt.subplots(figsize=(10, 5))
+
+    if dual_axis:
+        ax2 = ax.twinx()
+        for curve, label, color, axis in ((curve_a, label_a, color_a, ax),
+                                           (curve_b, label_b, color_b, ax2)):
+            axis.plot(x, curve, color=color, lw=1.3, label=label)
+            axis.axhline(np.mean(curve), color=color, lw=1, ls='--', alpha=0.8)
+            axis.tick_params(axis='y', labelcolor=color, labelsize=9)
+        ax.set_ylabel(label_a, fontsize=10, color=color_a)
+        ax2.set_ylabel(label_b, fontsize=10, color=color_b)
+        ax2.spines[["top"]].set_visible(False)
+        lines_a, labels_a = ax.get_legend_handles_labels()
+        lines_b, labels_b = ax2.get_legend_handles_labels()
+        ax.legend(lines_a + lines_b, labels_a + labels_b,
+                  loc='upper right', fontsize=9, framealpha=0.9)
+    else:
+        for curve, label, color in ((curve_a, label_a, color_a), (curve_b, label_b, color_b)):
+            ax.fill_between(x, curve, alpha=0.30, color=color)
+            ax.plot(x, curve, color=color, lw=1.3, label=label)
+            ax.axhline(np.mean(curve), color=color, lw=1, ls='--', alpha=0.8)
+        ax.set_ylim(0, 1)
+        ax.set_ylabel('Coverage fraction (sliding window)', fontsize=10)
+        ax.legend(loc='upper right', fontsize=9, framealpha=0.9)
+
+    ax.set_xlim(0, 100)
+    ax.set_xlabel('Position (% of sequence length)', fontsize=11)
+    ax.set_title(title or f'{label_a}  vs  {label_b}\nDashed lines = mean coverage', fontsize=11)
+    ax.spines[["top", "right"]].set_visible(False)
+    ax.tick_params(labelsize=9)
+
+    plt.tight_layout()
+    if file:
+        try:
+            plt.savefig(file, bbox_inches='tight', dpi=150 * scale)
+            open_file_with_default_software(file)
+        except Exception as e:
+            print(f'Could not save plot: {file}\n{e}')
+    plt.show()
+
+

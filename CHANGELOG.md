@@ -1,5 +1,86 @@
 # Changelog
 
+## [0.2.4] - 2026-07-17
+
+Part B target #1 (see `PLAN_paper_figures.md`'s Part B) — motif-coverage
+sliding-window comparison, generalized beyond the original NORAD
+human-vs-mouse spec into three "comparative plots" menu items.
+
+### Added
+
+- **"Compare with another transcript (motif coverage)"** — new Plots menu
+  item (9). Overlays the loaded sequence's motif-coverage sliding-window
+  curve with a second, independently chosen sequence's (reuses
+  `choose_comparison_sequence()`). Before plotting, warns (does not block)
+  on two independent length-mismatch concerns, each showing the actual
+  numbers so the user can judge for themselves:
+  - **Length ratio** > 1.5x (deliberately loose -- real orthologs commonly
+    diverge 20-40% in length from ordinary indels; the bundled human/mouse
+    NORAD pair is 5,401 nt vs. 4,945 nt, ratio 1.09x, comfortably under).
+  - **Absolute length** < 3x the sliding window size, since a meaningful
+    curve needs several window-widths of sequence regardless of the ratio.
+- **"Compare motif coverage vs. GC-content"** — new Plots menu item (10).
+  Self-comparison (no second sequence): motif coverage vs. the same
+  sequence's own GC-content sliding-window curve, e.g. to check whether
+  motif hotspots are just GC-rich composition or something more specific.
+- **"Compare motif coverage vs. homopolymer/low-complexity density"** — new
+  Plots menu item (11). Same idea, against homopolymer-run density
+  (fraction of each window covered by runs of >= N identical letters,
+  default N=4) instead of GC-content.
+- **`algorithms.binary_coverage(txt, motifs)`**, **`gc_content_indicator(txt)`**,
+  **`homopolymer_indicator(txt, min_run=4)`** -- per-position 0/1 indicator
+  functions (motif coverage / G-C / homopolymer-run membership).
+- **`algorithms.sliding_coverage_fraction(cov, window=200, n_points=500)`**
+  -- generic moving-average + resample-to-percentage-axis helper, shared by
+  all three indicator types above (one windowing mechanism, pluggable
+  per-position indicators -- this is what makes "compare against GC content"
+  and "compare against another transcript" the same underlying code path).
+- **`algorithms.coverage_comparison_warnings(len_a, len_b, window=200, ratio_threshold=1.5)`**
+  -- the two length checks described above, as a pure, independently
+  testable function.
+- **`plots.plot_coverage_comparison(curve_a, label_a, curve_b, label_b, dual_axis=False, ...)`**
+  -- shaded-overlay + dashed-mean-line plot of two already-computed
+  sliding-window curves; deliberately metric-agnostic (takes curves, not
+  raw sequences), so the same function renders all three menu items above.
+  `dual_axis` (default `False`, prompted for in all three menu handlers)
+  gives the second curve its own independently-scaled y-axis instead of
+  sharing one 0-100% axis with the first -- see Fixed, below, for why this
+  exists; the shared-axis default is unchanged and was confirmed preferred
+  for the common case (directly comparable in absolute terms).
+- 24 new tests (16 in `tests/test_algorithms.py`, 5 in `tests/test_plots.py`
+  -- 112 tests total now, passing against both NumPy 1.26 and 2.2.6).
+
+### Fixed (during development)
+
+- `sliding_coverage_fraction()`'s moving average initially used
+  `np.convolve(..., mode='same')`, which implicitly zero-pads outside the
+  array -- this artificially tapers the curve toward 0 near a sequence's
+  ends even when coverage there is genuinely high (caught by a test
+  asserting uniform input stays uniform). Switched to
+  `scipy.ndimage.uniform_filter1d(..., mode='nearest')`, which replicates
+  the edge value outward instead.
+- **Shared-axis plot visually misrepresented curves with very different
+  natural ranges** -- caught via manual testing against SNHG14 data and the
+  paper's own Fig. S12 (motif coverage vs. GC-content, middle panel): the
+  computed GC% was numerically correct (mean 51.96%, matching the paper's
+  stated gene average of 51.9% almost exactly), but on `plot_coverage_comparison()`'s
+  single shared 0-100% axis, GC content (natural range ~19-72%) looked
+  artificially flat next to motif coverage (which often reaches ~100%),
+  while the paper plots GC% on its own axis scaled to its own range. Added
+  `dual_axis` (see Added, above) as an opt-in fix rather than changing the
+  default, since the shared axis is more directly comparable when that's
+  what's wanted, and was confirmed as the preferred default.
+
+Manually verified against the real bundled human/mouse NORAD data (no
+length warnings, as expected) and against GC-content/homopolymer curves for
+human NORAD -- all three plots show biologically sensible, readable
+patterns (e.g. human/mouse NORAD coverage peaks and valleys align
+positionally despite mouse having overall lower coverage; motif hotspots
+are compositionally distinct from the GC-richest regions, not explained by
+them). Also verified against real SNHG14 data with `dual_axis=True`,
+reproducing the shape and proportions of the published Fig. S12 middle
+panel.
+
 ## [0.2.3] - 2026-07-17
 
 ### Changed

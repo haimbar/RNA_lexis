@@ -8,6 +8,8 @@ import numpy as np
 from collections import Counter, defaultdict
 from typing import List, NamedTuple
 
+from scipy.ndimage import uniform_filter1d
+
 
 def contains_only_rna(s, allowed_chars='atucg'):
     """Return True if every character in s belongs to the allowed nucleotide set.
@@ -1294,3 +1296,134 @@ def compute_default_wd(txt, corelist, w_min=20, w_max=80):
     n_tilde = statistics.median(counts)
     w = math.floor(N * math.log(2) / (2 * n_tilde))
     return max(w_min, min(w_max, w))
+
+
+def binary_coverage(txt: str, motifs: List[str]) -> np.ndarray:
+    """Per-position coverage indicator for a set of motifs.
+
+    Args:
+        txt:    Source text.
+        motifs: Motif strings; each exact occurrence marks its full span.
+
+    Returns:
+        int8 array of length len(txt): 1 at every position covered by >= 1
+        exact occurrence of any motif, else 0.
+    """
+    cov = np.zeros(len(txt), dtype=np.int8)
+    for m in motifs:
+        mlen = len(m)
+        for pos in find_all_matches(m, txt, ret='pos'):
+            cov[pos:pos + mlen] = 1
+    return cov
+
+
+def gc_content_indicator(txt: str) -> np.ndarray:
+    """Per-position G/C indicator (case-insensitive; U counted as not G/C).
+
+    Returns:
+        int8 array of length len(txt): 1 at each G or C position, else 0.
+        A sliding window average of this array is the window's GC fraction.
+    """
+    t = txt.lower()
+    return np.array([1 if c in 'gc' else 0 for c in t], dtype=np.int8)
+
+
+def homopolymer_indicator(txt: str, min_run: int = 4) -> np.ndarray:
+    """Per-position indicator for membership in a homopolymer run.
+
+    Args:
+        txt:     Source text.
+        min_run: Minimum run length (same character repeated) to count as a
+                 homopolymer (default 4).
+
+    Returns:
+        int8 array of length len(txt): 1 at every position that is part of
+        a maximal run of >= min_run identical (case-insensitive) characters,
+        else 0. A sliding window average is the window's homopolymer
+        (low-complexity run) density.
+    """
+    t = txt.lower()
+    n = len(t)
+    cov = np.zeros(n, dtype=np.int8)
+    i = 0
+    while i < n:
+        j = i + 1
+        while j < n and t[j] == t[i]:
+            j += 1
+        if j - i >= min_run:
+            cov[i:j] = 1
+        i = j
+    return cov
+
+
+def sliding_coverage_fraction(cov: np.ndarray, window: int = 200,
+                               n_points: int = 500) -> np.ndarray:
+    """Moving-average of a per-position indicator, resampled over 0-100%.
+
+    Args:
+        cov:      Per-position indicator array (e.g. from binary_coverage(),
+                  gc_content_indicator(), or homopolymer_indicator()).
+        window:   Sliding window width in nt (clamped to len(cov) if larger).
+        n_points: Number of evenly spaced samples to resample to, over the
+                  0-100% position axis -- lets sequences of different
+                  lengths be overlaid on a common x-axis.
+
+    Returns:
+        float array of length n_points, values in [0, 1].
+    """
+    n = len(cov)
+    w = max(1, min(window, n))
+    # mode='nearest' replicates the edge value outward instead of zero-padding
+    # -- zero-padding would artificially taper the average toward 0 near the
+    # sequence ends regardless of the actual coverage there.
+    smoothed = uniform_filter1d(cov.astype(float), size=w, mode='nearest')
+    orig_x = np.linspace(0, 100, n)
+    new_x = np.linspace(0, 100, n_points)
+    return np.interp(new_x, orig_x, smoothed)
+
+
+def coverage_comparison_warnings(len_a: int, len_b: int, window: int = 200,
+                                  ratio_threshold: float = 1.5) -> List[str]:
+    """Flag reasons a sliding-window coverage comparison may be misleading.
+
+    Two independent checks, both non-fatal (callers should warn and let the
+    user decide, not block):
+      - Length ratio: overlaying two very differently-sized sequences on a
+        common 0-100% axis implies a positional correspondence that may not
+        hold biologically (real ortholog pairs commonly diverge 20-40% in
+        length just from normal indels, so the default threshold is
+        deliberately loose -- see PLAN_paper_figures.md's B.2 discussion).
+      - Absolute length: a sliding window needs several window-widths of
+        sequence to produce a meaningful curve; too-short sequences give a
+        noisy or degenerate result regardless of the length ratio.
+
+    Args:
+        len_a, len_b:    Lengths of the two sequences being compared (pass
+                          the same value twice for a single-sequence
+                          self-comparison, e.g. motif coverage vs GC
+                          content -- the ratio check then trivially passes).
+        window:           Sliding window width in nt, as will be passed to
+                          sliding_coverage_fraction().
+        ratio_threshold:  Warn when max(len_a,len_b)/min(len_a,len_b)
+                          exceeds this (default 1.5, i.e. > 50% longer).
+
+    Returns:
+        List of human-readable warning strings (empty if no concerns).
+    """
+    warnings = []
+    ratio = max(len_a, len_b) / min(len_a, len_b)
+    if ratio > ratio_threshold:
+        warnings.append(
+            f"Sequence lengths differ substantially: {len_a} nt vs {len_b} nt "
+            f"(ratio {ratio:.2f}x, threshold {ratio_threshold}x). Overlaying "
+            f"them on a common 0-100% axis may not reflect true positional "
+            f"correspondence."
+        )
+    min_required = window * 3
+    if len_a < min_required or len_b < min_required:
+        warnings.append(
+            f"At least one sequence is short relative to the window size "
+            f"({window} nt): {len_a} nt / {len_b} nt. Recommend >= "
+            f"{min_required} nt for a meaningful sliding-window curve."
+        )
+    return warnings

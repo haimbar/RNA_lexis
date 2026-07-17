@@ -36,6 +36,8 @@ from rna_lexis.algorithms import (
     cond_prob_core, count_kgrams, zscore, hop_distance,
     markov_kmer_pvalues, gen_hairpins, allow_mutation, is_bounded,
     expand_to_boundary, extendRNA, Hairpin, contains_only_rna,
+    binary_coverage, gc_content_indicator, homopolymer_indicator,
+    sliding_coverage_fraction, coverage_comparison_warnings,
 )
 from rna_lexis.alignment import gotoh_global, gotoh_local, print_alignment, AlignmentResult
 from rna_lexis.io import (
@@ -327,6 +329,54 @@ occurrence positions for whatever motif/region they're analysing). Always
 hop_distance(580, 290)  # -> 2
 hop_distance(290, 290)  # -> 1
 ```
+
+### `binary_coverage(txt: str, motifs: list[str]) -> np.ndarray`
+
+Per-position coverage indicator: 1 at every position spanned by >= 1 exact
+occurrence of any motif in `motifs`, else 0. int8 array of length `len(txt)`.
+
+### `gc_content_indicator(txt: str) -> np.ndarray`
+
+Per-position G/C indicator (case-insensitive): 1 at each G or C, else 0. A
+sliding-window average of this array is the window's GC fraction.
+
+### `homopolymer_indicator(txt: str, min_run: int = 4) -> np.ndarray`
+
+Per-position indicator for membership in a homopolymer run: 1 at every
+position that's part of a maximal run of >= `min_run` identical
+(case-insensitive) characters, else 0. A sliding-window average is the
+window's homopolymer (low-complexity run) density.
+
+### `sliding_coverage_fraction(cov: np.ndarray, window: int = 200, n_points: int = 500) -> np.ndarray`
+
+Moving average of a per-position indicator array (e.g. from
+`binary_coverage()`, `gc_content_indicator()`, or `homopolymer_indicator()`),
+resampled to `n_points` evenly spaced samples over the 0-100% position axis —
+this is what lets sequences of different lengths be overlaid on a common
+x-axis. Uses `mode='nearest'` edge handling (not zero-padding), so uniform
+input near a sequence's ends doesn't taper artificially toward 0. Returns a
+float array of length `n_points`, values in `[0, 1]`.
+
+```python
+cov = binary_coverage(txt, corelist)
+curve = sliding_coverage_fraction(cov, window=200)
+```
+
+### `coverage_comparison_warnings(len_a: int, len_b: int, window: int = 200, ratio_threshold: float = 1.5) -> list[str]`
+
+Flags reasons a sliding-window coverage comparison between two sequences (or
+a sequence against itself, by passing the same length twice) may be
+misleading. Two independent, non-fatal checks — callers should warn and let
+the user decide, not block:
+
+- **Length ratio**: warns when `max(len_a,len_b)/min(len_a,len_b)` exceeds
+  `ratio_threshold` (default 1.5 — deliberately loose, since real ortholog
+  pairs commonly diverge 20-40% in length from ordinary indels).
+- **Absolute length**: warns when either length is below `3 * window`, since
+  a sliding window needs several window-widths of sequence for a meaningful
+  curve regardless of the ratio.
+
+Returns a list of human-readable warning strings (empty if no concerns).
 
 ### `cover(s, txt, pwr=1.1) -> float`
 
