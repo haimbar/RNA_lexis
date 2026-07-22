@@ -4,8 +4,10 @@ import numpy as np
 
 from rna_lexis.algorithms import (
     allow_mutation,
+    binary_coverage,
     compute_default_wd,
     contains_only_rna,
+    coverage_comparison_warnings,
     cores,
     count_kgrams,
     cover,
@@ -16,10 +18,13 @@ from rna_lexis.algorithms import (
     find_boundary,
     find_longest_extensions,
     find_with_mutations,
+    gc_content_indicator,
     gen_hairpins,
+    homopolymer_indicator,
     hop_distance,
     is_bounded,
     markov_kmer_pvalues,
+    sliding_coverage_fraction,
     zscore,
 )
 
@@ -191,6 +196,95 @@ class HopDistanceTests(unittest.TestCase):
         # hop bucket. Guards against ever reintroducing a fixed default.
         self.assertEqual(hop_distance(600, 300), 2)
         self.assertEqual(hop_distance(600, 600), 1)
+
+
+class BinaryCoverageTests(unittest.TestCase):
+    def test_marks_full_span_of_each_occurrence(self):
+        # "gattaca" occurs at 3-10 and 13-20 in this text.
+        txt = "ccc" + "gattaca" + "nnn" + "gattaca" + "zzz"
+        cov = binary_coverage(txt, ["gattaca"])
+        self.assertEqual(list(cov[:3]), [0, 0, 0])
+        self.assertEqual(list(cov[3:10]), [1] * 7)
+        self.assertEqual(list(cov[10:13]), [0, 0, 0])
+        self.assertEqual(list(cov[13:20]), [1] * 7)
+
+    def test_overlapping_motifs_union_without_double_counting(self):
+        cov = binary_coverage("gattacagattaca", ["gattaca"])
+        self.assertEqual(list(cov), [1] * 14)
+        self.assertTrue(set(cov.tolist()) <= {0, 1})
+
+    def test_no_motifs_gives_all_zero(self):
+        cov = binary_coverage("acgtacgt", [])
+        self.assertEqual(list(cov), [0] * 8)
+
+
+class GcContentIndicatorTests(unittest.TestCase):
+    def test_marks_g_and_c_only(self):
+        self.assertEqual(list(gc_content_indicator("ggccaaat")), [1, 1, 1, 1, 0, 0, 0, 0])
+
+    def test_case_insensitive(self):
+        self.assertEqual(list(gc_content_indicator("GgCcAaTt")), [1, 1, 1, 1, 0, 0, 0, 0])
+
+
+class HomopolymerIndicatorTests(unittest.TestCase):
+    def test_marks_runs_at_or_above_min_run(self):
+        # aaaa(4)=yes, tt(2)=no, gggg(4)=yes, c(1)=no
+        cov = homopolymer_indicator("aaaattggggc", min_run=4)
+        self.assertEqual(list(cov), [1, 1, 1, 1, 0, 0, 1, 1, 1, 1, 0])
+
+    def test_min_run_is_configurable(self):
+        cov = homopolymer_indicator("aattggc", min_run=2)
+        self.assertEqual(list(cov), [1, 1, 1, 1, 1, 1, 0])
+
+    def test_no_run_meets_threshold(self):
+        cov = homopolymer_indicator("acgtacgt", min_run=4)
+        self.assertEqual(list(cov), [0] * 8)
+
+
+class SlidingCoverageFractionTests(unittest.TestCase):
+    def test_uniform_coverage_stays_uniform(self):
+        cov = np.ones(100, dtype=np.int8)
+        curve = sliding_coverage_fraction(cov, window=10, n_points=20)
+        self.assertEqual(len(curve), 20)
+        self.assertTrue(np.allclose(curve, 1.0))
+
+    def test_no_coverage_stays_zero(self):
+        cov = np.zeros(100, dtype=np.int8)
+        curve = sliding_coverage_fraction(cov, window=10, n_points=20)
+        self.assertTrue(np.allclose(curve, 0.0))
+
+    def test_window_larger_than_input_does_not_crash(self):
+        cov = np.array([1, 0, 1, 0], dtype=np.int8)
+        curve = sliding_coverage_fraction(cov, window=1000, n_points=10)
+        self.assertEqual(len(curve), 10)
+        self.assertTrue(np.all(curve >= 0) and np.all(curve <= 1))
+
+
+class CoverageComparisonWarningsTests(unittest.TestCase):
+    def test_no_warnings_for_similar_lengths(self):
+        # Real reference case: bundled human vs mouse NORAD (5401 vs 4945 nt).
+        self.assertEqual(coverage_comparison_warnings(5401, 4945, window=200), [])
+
+    def test_warns_on_large_length_ratio(self):
+        warnings = coverage_comparison_warnings(5401, 2000, window=200)
+        self.assertEqual(len(warnings), 1)
+        self.assertIn("differ substantially", warnings[0])
+
+    def test_warns_on_short_sequences_regardless_of_ratio(self):
+        # Equal lengths (ratio 1.0) but both short relative to the window.
+        warnings = coverage_comparison_warnings(300, 300, window=200)
+        self.assertEqual(len(warnings), 1)
+        self.assertIn("short relative to the window", warnings[0])
+
+    def test_can_return_both_warnings_at_once(self):
+        warnings = coverage_comparison_warnings(1000, 100, window=200)
+        self.assertEqual(len(warnings), 2)
+
+    def test_ratio_threshold_is_configurable(self):
+        # 1000 vs 900 -> ratio ~1.111: passes a looser threshold, fails a tighter one.
+        self.assertEqual(coverage_comparison_warnings(1000, 900, window=1, ratio_threshold=1.2), [])
+        warnings = coverage_comparison_warnings(1000, 900, window=1, ratio_threshold=1.05)
+        self.assertTrue(any("differ substantially" in w for w in warnings))
 
 
 if __name__ == "__main__":

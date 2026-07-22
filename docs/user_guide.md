@@ -139,7 +139,10 @@ Opens the Plots submenu:
 6. Motif Match/Mutation
 7. Self-similarity arc plot
 8. Shared-motif diagram (vs. another sequence)
-9. Back
+9. Compare with another transcript (motif coverage)
+10. Compare motif coverage vs. GC-content
+11. Compare motif coverage vs. homopolymer/low-complexity density
+12. Back
 ```
 
 #### 1.1 Core neighbors (detailed)
@@ -355,6 +358,59 @@ Compares the loaded sequence against a second, independently chosen sequence, an
 Network fetches (genomic coordinates, ENCODE cCRE) require an internet connection; failures (no connection, accession not found) are reported with a message and cancel the plot cleanly rather than crashing — re-open *Shared-motif diagram* to try again.
 
 **Worked example** (reproduces a published RNA-Lexis paper figure): load the LINC01001 transcript (Ensembl `ENST00000526704`) as the primary sequence, then open *Shared-motif diagram* and choose *Fetch by ENCODE cCRE accession* with accession `EH38E1482203` and chromosome hint `chr10` (a ZMIZ1-proximal enhancer). Forward strand, default minimum length (6) and max motifs (6). Expect exactly 6 shared motifs — `aggccc`, `caggccc`, `caggcc`, `cccagc`, `cagcct`, `cagctc` — with per-sequence hit counts 27×/1×, 21×/1×, 24×/1×, 24×/2×, 19×/1×, 17×/1× respectively (transcript × / enhancer ×). The same accession can also be reached via *Fetch by genomic coordinates* with `chr10:78974544-78974893`, or by pasting the sequence directly — all three should produce the identical plot, since they resolve to the same underlying DNA.
+
+#### 1.9 Compare with another transcript (motif coverage)
+
+Overlays the loaded sequence's motif-coverage sliding-window curve with a second, independently chosen transcript's — e.g. comparing a human transcript against its mouse ortholog to see whether motif-dense regions line up positionally.
+
+**Prompts:**
+
+| Prompt | Default | Notes |
+|---|:---:|---|
+| Comparison sequence source | | Same chooser as *Shared-motif diagram* — paste, local file, Ensembl ENST, genomic coordinates, ENCODE cCRE accession, or an existing session |
+| *(length-check warnings, if any — see below)* | | `[y/N]` continue anyway |
+| Sliding window size (nt) | 200 | Width of the moving-average window used to compute local coverage |
+| Shared axis or dual axis? | Shared | See "Shared vs. dual axis", below |
+| Output file | *(screen only)* | Leave blank to display interactively |
+| Output format | 1 (PNG standard) | 1 = PNG, 2 = PDF, 3 = SVG |
+
+**Length checks:** a sliding-window coverage curve is resampled onto a common 0–100% position axis so sequences of different lengths can be overlaid — but that implies a positional correspondence that isn't always meaningful. Before plotting, two independent checks run and print a warning (not a hard block — you can always continue) with the actual numbers:
+
+- **Length ratio** — warns when the longer sequence is more than 1.5× the shorter one's length. This is deliberately loose: real orthologs commonly diverge 20–40% in length from ordinary indels (e.g. the bundled human NORAD is 5,401 nt vs. mouse's 4,945 nt, a ratio of 1.09× — comfortably under the threshold), so a tighter cutoff would flag legitimate comparisons.
+- **Absolute length** — warns when either sequence is shorter than 3× the sliding window size (600 nt for the default 200 nt window), since a sliding-window curve needs several window-widths of sequence to produce a meaningful shape at all.
+
+**Reading the plot:** each sequence's motif coverage is shown as a shaded curve (blue/red) over position (0–100% of that sequence's own length), with a dashed horizontal line at its mean. Where the two curves' peaks and valleys align positionally suggests conserved motif-dense regions; where they diverge suggests lineage-specific differences.
+
+**Shared vs. dual axis:** by default both curves share one 0–100% axis, so their values are directly comparable in absolute terms — this is the more honest view, but it visually flattens whichever curve has the smaller natural range (most relevant for §1.10/§1.11: GC content and homopolymer density rarely approach 100%, while motif coverage often does, so on a shared axis the flatter curve can look artificially small even when it's actually varying a lot). Choosing "dual" gives the second curve its own independently-scaled axis (right side, color-matched ticks) — each curve then fills the vertical space proportionally to its own shape, which is how published figures comparing these kinds of differently-scaled quantities are typically drawn, at the cost of the two curves no longer being visually comparable in absolute height.
+
+#### 1.10 Compare motif coverage vs. GC-content
+
+Same underlying comparison as above, but against the loaded sequence's own GC-content sliding-window curve instead of a second sequence — no second sequence needed, since both curves come from the same transcript. Useful for checking whether motif hotspots are simply explained by GC-rich composition, or are compositionally distinct.
+
+**Prompts:**
+
+| Prompt | Default | Notes |
+|---|:---:|---|
+| *(length-check warning, if any)* | | Only the absolute-length check applies (both curves are always the same length); `[y/N]` continue anyway |
+| Sliding window size (nt) | 200 | |
+| Shared axis or dual axis? | Shared | See §1.9's "Shared vs. dual axis" — most relevant here, since GC content's range is typically much narrower than motif coverage's |
+| Output file | *(screen only)* | Leave blank to display interactively |
+| Output format | 1 (PNG standard) | 1 = PNG, 2 = PDF, 3 = SVG |
+
+#### 1.11 Compare motif coverage vs. homopolymer/low-complexity density
+
+Same as above, but against a homopolymer-run density curve: the fraction of each sliding window covered by runs of the same letter repeated at least *N* times (default 4, e.g. `aaaa`, `tttt`). Useful as a check on whether motif hotspots are just simple repetitive sequence, or something more specific.
+
+**Prompts:**
+
+| Prompt | Default | Notes |
+|---|:---:|---|
+| *(length-check warning, if any)* | | Only the absolute-length check applies; `[y/N]` continue anyway |
+| Minimum homopolymer run length | 4 | Shortest same-letter run counted as "low-complexity" |
+| Sliding window size (nt) | 200 | |
+| Shared axis or dual axis? | Shared | See §1.9's "Shared vs. dual axis" |
+| Output file | *(screen only)* | Leave blank to display interactively |
+| Output format | 1 (PNG standard) | 1 = PNG, 2 = PDF, 3 = SVG |
 
 ---
 

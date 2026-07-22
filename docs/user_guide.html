@@ -112,7 +112,10 @@ Press <strong>Ctrl+C</strong> to exit the program immediately.</p>
 6. Motif Match/Mutation
 7. Self-similarity arc plot
 8. Shared-motif diagram (vs. another sequence)
-9. Back
+9. Compare with another transcript (motif coverage)
+10. Compare motif coverage vs. GC-content
+11. Compare motif coverage vs. homopolymer/low-complexity density
+12. Back
 </code></pre>
 <h4>1.1 Core neighbors (detailed)</h4>
 <p>Visualises how a chosen core sequence co-occurs with its neighbours across the full text, with one horizontal lane per neighbour.</p>
@@ -543,6 +546,140 @@ For Z-score plots you will also be asked for a <strong>threshold</strong> (defau
 </ul>
 <p>Network fetches (genomic coordinates, ENCODE cCRE) require an internet connection; failures (no connection, accession not found) are reported with a message and cancel the plot cleanly rather than crashing — re-open <em>Shared-motif diagram</em> to try again.</p>
 <p><strong>Worked example</strong> (reproduces a published RNA-Lexis paper figure): load the LINC01001 transcript (Ensembl <code>ENST00000526704</code>) as the primary sequence, then open <em>Shared-motif diagram</em> and choose <em>Fetch by ENCODE cCRE accession</em> with accession <code>EH38E1482203</code> and chromosome hint <code>chr10</code> (a ZMIZ1-proximal enhancer). Forward strand, default minimum length (6) and max motifs (6). Expect exactly 6 shared motifs — <code>aggccc</code>, <code>caggccc</code>, <code>caggcc</code>, <code>cccagc</code>, <code>cagcct</code>, <code>cagctc</code> — with per-sequence hit counts 27×/1×, 21×/1×, 24×/1×, 24×/2×, 19×/1×, 17×/1× respectively (transcript × / enhancer ×). The same accession can also be reached via <em>Fetch by genomic coordinates</em> with <code>chr10:78974544-78974893</code>, or by pasting the sequence directly — all three should produce the identical plot, since they resolve to the same underlying DNA.</p>
+<h4>1.9 Compare with another transcript (motif coverage)</h4>
+<p>Overlays the loaded sequence's motif-coverage sliding-window curve with a second, independently chosen transcript's — e.g. comparing a human transcript against its mouse ortholog to see whether motif-dense regions line up positionally.</p>
+<p><strong>Prompts:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Prompt</th>
+<th align="center">Default</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Comparison sequence source</td>
+<td align="center"></td>
+<td>Same chooser as <em>Shared-motif diagram</em> — paste, local file, Ensembl ENST, genomic coordinates, ENCODE cCRE accession, or an existing session</td>
+</tr>
+<tr>
+<td><em>(length-check warnings, if any — see below)</em></td>
+<td align="center"></td>
+<td><code>[y/N]</code> continue anyway</td>
+</tr>
+<tr>
+<td>Sliding window size (nt)</td>
+<td align="center">200</td>
+<td>Width of the moving-average window used to compute local coverage</td>
+</tr>
+<tr>
+<td>Shared axis or dual axis?</td>
+<td align="center">Shared</td>
+<td>See "Shared vs. dual axis", below</td>
+</tr>
+<tr>
+<td>Output file</td>
+<td align="center"><em>(screen only)</em></td>
+<td>Leave blank to display interactively</td>
+</tr>
+<tr>
+<td>Output format</td>
+<td align="center">1 (PNG standard)</td>
+<td>1 = PNG, 2 = PDF, 3 = SVG</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Length checks:</strong> a sliding-window coverage curve is resampled onto a common 0–100% position axis so sequences of different lengths can be overlaid — but that implies a positional correspondence that isn't always meaningful. Before plotting, two independent checks run and print a warning (not a hard block — you can always continue) with the actual numbers:</p>
+<ul>
+<li><strong>Length ratio</strong> — warns when the longer sequence is more than 1.5× the shorter one's length. This is deliberately loose: real orthologs commonly diverge 20–40% in length from ordinary indels (e.g. the bundled human NORAD is 5,401 nt vs. mouse's 4,945 nt, a ratio of 1.09× — comfortably under the threshold), so a tighter cutoff would flag legitimate comparisons.</li>
+<li><strong>Absolute length</strong> — warns when either sequence is shorter than 3× the sliding window size (600 nt for the default 200 nt window), since a sliding-window curve needs several window-widths of sequence to produce a meaningful shape at all.</li>
+</ul>
+<p><strong>Reading the plot:</strong> each sequence's motif coverage is shown as a shaded curve (blue/red) over position (0–100% of that sequence's own length), with a dashed horizontal line at its mean. Where the two curves' peaks and valleys align positionally suggests conserved motif-dense regions; where they diverge suggests lineage-specific differences.</p>
+<p><strong>Shared vs. dual axis:</strong> by default both curves share one 0–100% axis, so their values are directly comparable in absolute terms — this is the more honest view, but it visually flattens whichever curve has the smaller natural range (most relevant for §1.10/§1.11: GC content and homopolymer density rarely approach 100%, while motif coverage often does, so on a shared axis the flatter curve can look artificially small even when it's actually varying a lot). Choosing "dual" gives the second curve its own independently-scaled axis (right side, color-matched ticks) — each curve then fills the vertical space proportionally to its own shape, which is how published figures comparing these kinds of differently-scaled quantities are typically drawn, at the cost of the two curves no longer being visually comparable in absolute height.</p>
+<h4>1.10 Compare motif coverage vs. GC-content</h4>
+<p>Same underlying comparison as above, but against the loaded sequence's own GC-content sliding-window curve instead of a second sequence — no second sequence needed, since both curves come from the same transcript. Useful for checking whether motif hotspots are simply explained by GC-rich composition, or are compositionally distinct.</p>
+<p><strong>Prompts:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Prompt</th>
+<th align="center">Default</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><em>(length-check warning, if any)</em></td>
+<td align="center"></td>
+<td>Only the absolute-length check applies (both curves are always the same length); <code>[y/N]</code> continue anyway</td>
+</tr>
+<tr>
+<td>Sliding window size (nt)</td>
+<td align="center">200</td>
+<td></td>
+</tr>
+<tr>
+<td>Shared axis or dual axis?</td>
+<td align="center">Shared</td>
+<td>See §1.9's "Shared vs. dual axis" — most relevant here, since GC content's range is typically much narrower than motif coverage's</td>
+</tr>
+<tr>
+<td>Output file</td>
+<td align="center"><em>(screen only)</em></td>
+<td>Leave blank to display interactively</td>
+</tr>
+<tr>
+<td>Output format</td>
+<td align="center">1 (PNG standard)</td>
+<td>1 = PNG, 2 = PDF, 3 = SVG</td>
+</tr>
+</tbody>
+</table>
+<h4>1.11 Compare motif coverage vs. homopolymer/low-complexity density</h4>
+<p>Same as above, but against a homopolymer-run density curve: the fraction of each sliding window covered by runs of the same letter repeated at least <em>N</em> times (default 4, e.g. <code>aaaa</code>, <code>tttt</code>). Useful as a check on whether motif hotspots are just simple repetitive sequence, or something more specific.</p>
+<p><strong>Prompts:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Prompt</th>
+<th align="center">Default</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><em>(length-check warning, if any)</em></td>
+<td align="center"></td>
+<td>Only the absolute-length check applies; <code>[y/N]</code> continue anyway</td>
+</tr>
+<tr>
+<td>Minimum homopolymer run length</td>
+<td align="center">4</td>
+<td>Shortest same-letter run counted as "low-complexity"</td>
+</tr>
+<tr>
+<td>Sliding window size (nt)</td>
+<td align="center">200</td>
+<td></td>
+</tr>
+<tr>
+<td>Shared axis or dual axis?</td>
+<td align="center">Shared</td>
+<td>See §1.9's "Shared vs. dual axis"</td>
+</tr>
+<tr>
+<td>Output file</td>
+<td align="center"><em>(screen only)</em></td>
+<td>Leave blank to display interactively</td>
+</tr>
+<tr>
+<td>Output format</td>
+<td align="center">1 (PNG standard)</td>
+<td>1 = PNG, 2 = PDF, 3 = SVG</td>
+</tr>
+</tbody>
+</table>
 <hr />
 <h3>2 - Sequence operations</h3>
 <pre><code>--- Sequence operations ---
