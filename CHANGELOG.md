@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.2.5] - 2026-08-01
+
+No code changes. Adds archival/distribution metadata requested by the
+journal handling the associated paper.
+
+### Added
+
+- `CITATION.cff` — machine-readable citation metadata (authors, license,
+  repository URL, and the Zenodo DOI for this release), picked up by
+  GitHub's "Cite this repository" button and by Zenodo/Zotero.
+- Zenodo DOI badge in `README.md`.
+- `.github/workflows/publish-pypi.yml` — publishes to PyPI via trusted
+  publishing (OIDC, no stored token) whenever a GitHub release is
+  published.
+
 ## [0.2.4] - 2026-07-17
 
 Part B target #1 (see `PLAN_paper_figures.md`'s Part B) — motif-coverage
