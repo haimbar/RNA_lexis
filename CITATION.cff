@@ -1,0 +1,18 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "RNA_lexis"
+abstract: "A python package to explore RNA data"
+authors:
+  - family-names: "Bar"
+    given-names: "Haim"
+    email: "haim.bar@uconn.edu"
+    affiliation: "University of Connecticut"
+  - family-names: "Bester"
+    given-names: "Assaf"
+    email: "bestera@technion.ac.il"
+    affiliation: "Technion"
+version: "0.2.4"
+date-released: "2026-08-01"
+license: "MIT"
+repository-code: "https://github.com/haimbar/RNA_lexis"
+url: "https://github.com/haimbar/RNA_lexis"
