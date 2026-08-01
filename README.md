@@ -1,5 +1,7 @@
 # RNA_lexis
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21744120.svg)](https://doi.org/10.5281/zenodo.21744120)
+
 **RNA_lexis** is an interactive command-line tool for exploring RNA (or DNA) sequence data.
 
 Starting from a nucleotide sequence, it automatically identifies repeating subsequences

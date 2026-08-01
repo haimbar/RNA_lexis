@@ -16,3 +16,8 @@ date-released: "2026-08-01"
 license: "MIT"
 repository-code: "https://github.com/haimbar/RNA_lexis"
 url: "https://github.com/haimbar/RNA_lexis"
+doi: "10.5281/zenodo.21744120"
+identifiers:
+  - type: doi
+    value: "10.5281/zenodo.21744120"
+    description: "Archived snapshot of version 0.2.4"
