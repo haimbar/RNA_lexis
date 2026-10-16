@@ -821,27 +821,25 @@ def gen_hairpins(rna, minSL=8, minLL=3, maxLL=40) -> List[Hairpin]:
     Lrna = len(rna)
     revrna = extendRNA(rna, xtype=3)   # reverse complement
 
-    # --- seed dictionaries: position -> minSL-mer ---
-    seqdict = {f'{i:0>6}': rna[i:i+minSL]
-               for i in range(Lrna - 2*minSL - minLL)}
-    revdict  = {f'{i:0>6}': revrna[i:i+minSL]
-                for i in range(Lrna - 2*minSL - minLL)
-                if revrna[i:i+minSL] in seqdict.values()}
-    if not revdict:
+    # --- seeds: minSL-mers at positions 0 .. Lrna-2*minSL-minLL-1 ---
+    # Only seeds that occur in both the sequence and its reverse complement
+    # can start a hairpin.  Membership is tested against sets (the previous
+    # version scanned dict.values(), which made this step quadratic).
+    npos = max(Lrna - 2*minSL - minLL, 0)
+    fwd_seeds = {rna[i:i+minSL] for i in range(npos)}
+    rev_to_keys = defaultdict(list)          # seed -> positions in revrna
+    for i in range(npos):
+        sd = revrna[i:i+minSL]
+        if sd in fwd_seeds:
+            rev_to_keys[sd].append(i)
+    if not rev_to_keys:
         return []
 
-    seqdict = {f'{i:0>6}': rna[i:i+minSL]
-               for i in range(Lrna - 2*minSL - minLL)
-               if rna[i:i+minSL] in revdict.values()}
-    if not seqdict:
-        return []
-
-    seq_to_keys = defaultdict(list)
-    for k, v in seqdict.items():
-        seq_to_keys[v].append(k)
-    rev_to_keys = defaultdict(list)
-    for k, v in revdict.items():
-        rev_to_keys[v].append(k)
+    seq_to_keys = defaultdict(list)          # seed -> positions in rna
+    for i in range(npos):
+        sd = rna[i:i+minSL]
+        if sd in rev_to_keys:
+            seq_to_keys[sd].append(i)
 
     hairpins: List[Hairpin] = []
     occupied = [False] * Lrna   # prevents reporting overlapping hairpins twice
@@ -849,23 +847,23 @@ def gen_hairpins(rna, minSL=8, minLL=3, maxLL=40) -> List[Hairpin]:
     for seed, rev_positions in rev_to_keys.items():
         for pr in rev_positions:
             for px in seq_to_keys[seed]:
-                leng = Lrna - int(pr) - int(px)
+                leng = Lrna - pr - px
                 if leng < 2*minSL + minLL:
                     continue
-                if rna[int(px):int(px)+leng] == revrna[int(pr):int(pr)+leng]:
+                if rna[px:px+leng] == revrna[pr:pr+leng]:
                     continue    # perfect self-reverse-complement — skip
 
                 # extend the stem as far as bases match
                 stemlen = 0
                 for ps in range(leng):
-                    if rna[int(px)+ps] == revrna[int(pr)+ps]:
+                    if rna[px+ps] == revrna[pr+ps]:
                         stemlen += 1
                     else:
                         break
 
                 looplen = leng - 2*stemlen
                 if stemlen > minSL and minLL <= looplen <= maxLL:
-                    start = int(px)
+                    start = px
                     end   = start + leng
                     if not any(occupied[start:end]):
                         hairpins.append(Hairpin(

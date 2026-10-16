@@ -287,5 +287,112 @@ class CoverageComparisonWarningsTests(unittest.TestCase):
         self.assertTrue(any("differ substantially" in w for w in warnings))
 
 
+# Verbatim copy of gen_hairpins before the seed filtering was rewritten with
+# sets (it scanned dict.values(), which is quadratic in sequence length).  The
+# rewrite must return identical results, in identical order.
+from collections import defaultdict
+from rna_lexis.algorithms import Hairpin
+
+def _gen_hairpins_reference(rna, minSL=8, minLL=3, maxLL=40) :
+    Lrna = len(rna)
+    revrna = extendRNA(rna, xtype=3)   # reverse complement
+
+    # --- seed dictionaries: position -> minSL-mer ---
+    seqdict = {f'{i:0>6}': rna[i:i+minSL]
+               for i in range(Lrna - 2*minSL - minLL)}
+    revdict  = {f'{i:0>6}': revrna[i:i+minSL]
+                for i in range(Lrna - 2*minSL - minLL)
+                if revrna[i:i+minSL] in seqdict.values()}
+    if not revdict:
+        return []
+
+    seqdict = {f'{i:0>6}': rna[i:i+minSL]
+               for i in range(Lrna - 2*minSL - minLL)
+               if rna[i:i+minSL] in revdict.values()}
+    if not seqdict:
+        return []
+
+    seq_to_keys = defaultdict(list)
+    for k, v in seqdict.items():
+        seq_to_keys[v].append(k)
+    rev_to_keys = defaultdict(list)
+    for k, v in revdict.items():
+        rev_to_keys[v].append(k)
+
+    hairpins = []
+    occupied = [False] * Lrna   # prevents reporting overlapping hairpins twice
+
+    for seed, rev_positions in rev_to_keys.items():
+        for pr in rev_positions:
+            for px in seq_to_keys[seed]:
+                leng = Lrna - int(pr) - int(px)
+                if leng < 2*minSL + minLL:
+                    continue
+                if rna[int(px):int(px)+leng] == revrna[int(pr):int(pr)+leng]:
+                    continue    # perfect self-reverse-complement — skip
+
+                # extend the stem as far as bases match
+                stemlen = 0
+                for ps in range(leng):
+                    if rna[int(px)+ps] == revrna[int(pr)+ps]:
+                        stemlen += 1
+                    else:
+                        break
+
+                looplen = leng - 2*stemlen
+                if stemlen > minSL and minLL <= looplen <= maxLL:
+                    start = int(px)
+                    end   = start + leng
+                    if not any(occupied[start:end]):
+                        hairpins.append(Hairpin(
+                            start    = start,
+                            end      = end,
+                            stem_len = stemlen,
+                            loop_len = looplen,
+                            stem_seq = rna[start : start + stemlen],
+                            loop_seq = rna[start + stemlen : start + stemlen + looplen],
+                        ))
+                        occupied[start:end] = [True] * leng
+
+    hairpins.sort(key=lambda hp: hp.start)
+    return hairpins
+
+
+class HairpinEquivalenceTests(unittest.TestCase):
+    """gen_hairpins must match the original implementation exactly."""
+
+    PARAMS = [dict(), dict(minSL=6, minLL=3, maxLL=20), dict(minSL=5, minLL=4, maxLL=60),
+              dict(minSL=8, minLL=1, maxLL=10)]
+
+    def _random_seqs(self):
+        rng = np.random.default_rng(7)
+        seqs = ["", "a", "acgt" * 3, "a" * 40, "acgu" * 30]
+        for n in (30, 60, 150, 400, 1200):
+            for alphabet in ("acgt", "acgtn", "ac", "at"):
+                s = "".join(rng.choice(list(alphabet), n))
+                seqs.append(s)
+                seqs.append(s.upper())
+        # planted stems, with stem mismatches and repeated arms
+        for _ in range(30):
+            stem = "".join(rng.choice(list("acgt"), int(rng.integers(6, 16))))
+            loop = "".join(rng.choice(list("acgt"), int(rng.integers(3, 30))))
+            flank = "".join(rng.choice(list("acgt"), int(rng.integers(0, 80))))
+            hp = stem + loop + extendRNA(stem, xtype=3)
+            seqs.append(flank + hp + flank + hp + flank)
+        # tandem repeats
+        for unit in ("acgcgt", "gcgcgcgc", "aaaacccc", "ggatcc"):
+            seqs.append(unit * 25)
+        return seqs
+
+    def test_identical_to_original_implementation(self):
+        n_nonempty = 0
+        for s in self._random_seqs():
+            for p in self.PARAMS:
+                new, old = gen_hairpins(s, **p), _gen_hairpins_reference(s, **p)
+                self.assertEqual(new, old, (s, p))
+                n_nonempty += bool(new)
+        self.assertGreater(n_nonempty, 20)   # the comparison is not vacuous
+
+
 if __name__ == "__main__":
     unittest.main()
