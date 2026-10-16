@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.2.5] - 2026-10-16
+
+### Changed
+
+- **`algorithms.gen_hairpins` is much faster; its output is unchanged.** The seed
+  filter tested `kmer in some_dict.values()` for every position, a linear scan
+  per test and so quadratic in sequence length. It now tests membership in sets
+  and keeps the same iteration order, so the hairpins, and their order, are
+  identical. On 802 human Gencode v39 transcripts (up to 20 kb) the total time
+  fell from 241 s to 1.8 s, and KCNQ1OT1 (91,667 nt) from about 186 s to 0.7 s.
+  The results also match the hairpins stored in GeneDB for all 802.
+- New test `HairpinEquivalenceTests` compares `gen_hairpins` with a verbatim
+  copy of the previous implementation on random, planted-stem and
+  tandem-repeat sequences under several parameter sets.
+
 ## [0.2.4] - 2026-07-17
 
 Part B target #1 (see `PLAN_paper_figures.md`'s Part B) — motif-coverage
