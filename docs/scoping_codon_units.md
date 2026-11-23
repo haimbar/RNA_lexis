@@ -117,12 +117,28 @@ pattern wildcards. Raw symbols reappear only on output, escaped as needed.
 
 - `normalize_sequence()` and the `ALPHABET` constant take the `Alphabet`.
   The module-level nucleotide constant stays as the default.
-- Background model. Order 0 at the unit level is the codon-usage background
-  and is the natural null for coding sequence. Order 1 over 64 units has
-  4096 transition cells, which is sparse for a transcript of a few hundred
-  codons, so the pseudocount matters. A third option is a background built
-  from nucleotide frequencies by position within the codon. Which of these is
-  the default is an open question (section 9).
+- Background model (recommended default, pending the calibration in
+  section 7; see section 9, question 1). Order 0 over the declared units,
+  which for codons is the transcript's own codon usage, with the counts
+  shrunk toward a simpler model instead of a flat pseudocount. For a codon
+  alphabet the shrinkage target is a nucleotide model by codon position;
+  for other alphabets it is uniform. The estimate is
+  (count + s * q) / (N + s), where q is the target and s its strength. A
+  flat pseudocount of 1 over 64 units would be about 18% of the mass for a
+  300-codon transcript, which is why it is not used.
+  - Higher orders are available but not the default. Order 1 over 64 units
+    has 4,095 free parameters, which overfits a transcript of a few hundred
+    codons and absorbs real repeats into the background.
+  - When the user does not set the order, it is the highest one for which
+    |alphabet|^(order + 1) <= N / 5. This gives order 0 for 64 codons at
+    N = 400, and order 1 for 26 letters at N ~ 10,000.
+  - Nucleotide mode keeps order 1 as the default, so existing results do
+    not change.
+  - The background is estimated from the text being tested, so a repeated
+    motif inflates its own unit counts. The effect makes the test
+    conservative and grows with alphabet size and shorter text. Estimating
+    with xmotif occurrences masked is a candidate fix; the calibration
+    checks whether it is needed.
 - `hamming_variants` and `_variant_count` take the declared alphabet, and
   the `max_variants` guard needs a unit-level default.
 
@@ -272,6 +288,24 @@ calibration sweeps (`calibration_sweep.py`, `sim_k_calibration.py`). The
 simulations will need a codon-level generator with codon-usage bias, not
 just uniform symbols.
 
+**Background calibration (prerequisite for phase 2).** Before the
+background default is fixed, a small simulation compares the candidates on
+false-positive rate:
+
+- Text generated from a realistic codon usage table, and from a Markov
+  amino-acid model with codon choice, so there is real structure but no
+  planted motifs.
+- Backgrounds compared: order 0 with a flat pseudocount, the nucleotide
+  model by codon position, and the shrinkage hybrid recommended in
+  section 3.4, each at a few transcript lengths (about 100, 300, 1,500
+  codons).
+- Measured: the false-positive rate of `score_exact_motifs` at the nominal
+  FDR level, and the power to recover a planted repeat, with and without
+  masking the motif when estimating the background.
+
+The hybrid becomes the default only if it is calibrated at the lengths
+above; otherwise the section 3.4 recommendation is revised.
+
 ## 8. Testing
 
 - The existing 67 tests are the regression guard: nucleotide mode must give
@@ -299,8 +333,14 @@ just uniform symbols.
 
 ## 9. Open questions
 
-1. **Default background for codon mode:** codon usage (order 0), order 1
-   with a heavy pseudocount, or a nucleotide-by-codon-position model.
+1. **Default background for codon mode:** recommended, not yet decided.
+   Order 0 over the declared units (codon usage), shrunk toward a
+   nucleotide model by codon position (section 3.4). Order 1 over 64 units
+   is rejected as the default because it overfits and absorbs repeats. The
+   decision is confirmed or revised by the calibration in section 7, which
+   must run before phase 2. Related but separate: question 2 asks a
+   different question (dependence on synonymous choice with the amino acid
+   sequence held fixed), not a better background for the same test.
 2. **A synonymous-shuffle null:** keep the amino acid sequence, permute the
    codons within each amino acid. It tests directly whether a motif depends
    on synonymous choice. A natural fit for the motivation, but a separate
@@ -334,7 +374,8 @@ Each phase should be shippable and leave nucleotide behavior unchanged.
    with tests.
 2. Statistics and algorithms take the alphabet: `normalize_sequence`,
    `MarkovBackground`, variant enumeration, gapped motifs, mutation marker
-   and regex escaping.
+   and regex escaping. Starts only after the background calibration in
+   section 7 has fixed the default.
 3. Display decoding: plots, CSV columns and console output.
 4. Menu, batch CLI and documentation (`user_guide.md`, `README.md`,
    `llms.txt` cross-links kept intact).
@@ -373,3 +414,6 @@ Not part of the first release. Listed so the design leaves room for them.
 5. **Codon-level reverse complement and stop-codon splitting** of segments
    (section 3.7).
 6. **Arbitrary token vocabularies,** such as whole words (section 4).
+7. **Reference codon usage as a background:** an organism-wide codon usage
+   table as an alternative to the transcript's own, for short transcripts
+   where the transcript-specific estimate is poor.
