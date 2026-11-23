@@ -86,11 +86,11 @@ over 64. Concretely:
 - The `Alphabet` is saved with a session and written into result files, so a
   later analysis of another text can use the same one.
 - **Each alphabet carries its own analysis defaults:** the background
-  settings (order, shrinkage target and strength) and the motif-length and
+  settings (order and pseudocount) and the motif-length and
   mismatch defaults of section 7. Built-in alphabets ship calibrated
   values. A user-defined alphabet file may specify its own; if it does
-  not, the generic rule applies (order chosen from the text length,
-  shrinkage toward uniform). Some defaults are rules that depend on the
+  not, the generic rule applies (order 1 when N >= K^2, otherwise order 0,
+  with a flat pseudocount of 1). Some defaults are rules that depend on the
   text length, not constants. The command-line and menu options override
   them.
 
@@ -125,28 +125,45 @@ pattern wildcards. Raw symbols reappear only on output, escaped as needed.
 
 - `normalize_sequence()` and the `ALPHABET` constant take the `Alphabet`.
   The module-level nucleotide constant stays as the default.
-- Background model (recommended default, pending the calibration in
-  section 7; see section 9, question 1). Order 0 over the declared units,
-  which for codons is the transcript's own codon usage, with the counts
-  shrunk toward a simpler model instead of a flat pseudocount. For a codon
-  alphabet the shrinkage target is a nucleotide model by codon position;
-  for other alphabets it is uniform. The estimate is
-  (count + s * q) / (N + s), where q is the target and s its strength. A
-  flat pseudocount of 1 over 64 units would be about 18% of the mass for a
-  300-codon transcript, which is why it is not used.
-  - Higher orders are available but not the default. Order 1 over 64 units
-    has 4,095 free parameters, which overfits a transcript of a few hundred
-    codons and absorbs real repeats into the background.
-  - When the user does not set the order, it is the highest one for which
-    |alphabet|^(order + 1) <= N / 5. This gives order 0 for 64 codons at
-    N = 400, and order 1 for 26 letters at N ~ 10,000.
+- Background model (calibrated; results in `calibration/README.md`). The
+  background is a Markov model of the declared units, estimated from the
+  text under test with a flat pseudocount of 1 per symbol, as
+  `MarkovBackground` does today.
+  - **Codons: order 0**, that is the transcript's own codon usage.
+  - **Letter alphabets (about 24 to 26 symbols): order 1.**
+  - **Rule for the order:** order 1 when N >= K^2 (at least one observation
+    per transition on average, K the declared alphabet size), otherwise
+    order 0; never above 1 by default. It matches every case tested:
+    codons (K^2 = 4,096, N up to 1,500: order 0), letters (K^2 = 576 to
+    676, N >= 1,000: order 1) and nucleotides (K^2 = 16: order 1, as
+    today). Codon text with N >= 4,096, where the rule would switch to
+    order 1, was not tested.
+  - **Rejected alternatives,** each measured: shrinking the counts toward a
+    nucleotide-by-codon-position model (no better than the flat
+    pseudocount, and strong shrinkage is worse); estimating the background
+    with the tested word's own occurrences masked out (anti-conservative:
+    the expected count is at least 2x too small for 48% of the repeated
+    words at 100 codons); order 1 over 64 codons (KL 0.47 to 0.54 against
+    0.06 to 0.09 at 1,500 codons); a fixed reference codon usage
+    (anti-conservative, since a gene's usage differs from the genome's);
+    and order 2 or higher for letters with a flat pseudocount (not
+    calibrated even at 50,000 letters).
+  - A repeated word raises its own unit counts, which makes the test
+    slightly conservative, most at small N. That is the safe direction and
+    is left as it is.
   - Nucleotide mode keeps order 1 as the default, so existing results do
     not change.
-  - The background is estimated from the text being tested, so a repeated
-    motif inflates its own unit counts. The effect makes the test
-    conservative and grows with alphabet size and shorter text. Estimating
-    with xmotif occurrences masked is a candidate fix; the calibration
-    checks whether it is needed.
+- **Multiple-testing family: every possible word of each length.** The
+  Benjamini-Hochberg correction must run over all K^k words of each tested
+  length k (the sum over the lengths tested), not over the repeated words
+  only. `score_exact_motifs` corrects over the candidate list it is given,
+  and that list is already selected for being repeated; on codon null text
+  that flags chance repeats in 84 to 100% of texts even with the true model
+  as the background. Counting every word seen at least once does not fix
+  it. The correction over all K^k words gives 0.00 false positives for
+  every sound background. This is a **change to existing behavior** if it
+  is also applied in nucleotide mode (see section 9, question 9), and so
+  needs the owner's decision.
 - `hamming_variants` and `_variant_count` take the declared alphabet, and
   the `max_variants` guard needs a unit-level default.
 
@@ -306,25 +323,28 @@ calibration sweeps (`calibration_sweep.py`, `sim_k_calibration.py`). The
 simulations will need a codon-level generator with codon-usage bias, not
 just uniform symbols.
 
-**Background calibration (prerequisite for phase 2).** Before the
-background default is fixed, a small simulation compares the candidates on
-false-positive rate:
+**Background calibration (done).** The simulation is in `calibration/`; the
+write-up, tables and data provenance are in `calibration/README.md`, and
+the tables are generated into `calibration/results/SUMMARY.md`. It used 177
+real human coding sequences (195,989 codons) for codon usage and amino-acid
+structure, and four real texts for letters (Mark Antony's oration, the
+opening of the Odyssey in Greek reduced to 24 base letters, Genesis, and the
+US Constitution), with null texts of known generating model and planted
+repeats. The result is the recommendation in section 3.4: order 0 for
+codons, order 1 for letters, a flat pseudocount of 1, and a correction over
+all possible words. The simulation also checks its own scoring against the
+package's on nucleotide text.
 
-- Text generated from a realistic codon usage table, and from a Markov
-  amino-acid model with codon choice, so there is real structure but no
-  planted motifs.
-- Backgrounds compared: order 0 with a flat pseudocount, the nucleotide
-  model by codon position, and the shrinkage hybrid recommended in
-  section 3.4, each at a few transcript lengths (about 100, 300, 1,500
-  codons).
-- Measured: the false-positive rate of `score_exact_motifs` at the nominal
-  FDR level, and the power to recover a planted repeat, with and without
-  masking the motif when estimating the background.
+Still open in this section:
 
-The hybrid becomes the codon alphabet's default only if it is calibrated
-at the lengths above; otherwise the section 3.4 recommendation is revised.
-The same simulation is repeated for each other built-in alphabet, using a
-generator that matches its structure.
+- **Discovery parameters** (`minlen`, `minclen`, the permitted mismatches)
+  were not calibrated. On codon null text the discovery step produced
+  candidates in at most 0.7% of texts for an xmotif minimum length of 2 to
+  4, so false positives from it are negligible, but the power of the full
+  pipeline needs planted *families* (a core with variable extensions), not
+  exact repeats.
+- Codon text longer than 1,500 codons, amino-acid alphabets, and smoother
+  estimators for letters at order 2 and above.
 
 ## 8. Testing
 
@@ -353,22 +373,15 @@ generator that matches its structure.
 
 ## 9. Open questions
 
-1. ~~Default background~~ Decided in structure: the default belongs to the
-   alphabet (section 3.2), so there is no single global default. The
-   values are pending the calibration in section 7, which must run before
-   phase 2, once per built-in alphabet:
-   - nucleotide: order 1, unchanged, no calibration needed;
-   - codon: order 0 over the declared units (codon usage), shrunk toward a
-     nucleotide model by codon position (section 3.4); order 1 over 64
-     units is rejected because it overfits and absorbs repeats;
-   - amino acid and Latin letters: calibrated separately, with uniform
-     shrinkage targets. Latin letters use the Mark Antony text and the
-     existing GeneDB sweeps.
-
-   A user-defined alphabet without its own defaults gets the generic rule
-   and is not calibrated. Related but separate: question 2 asks a
-   different question (dependence on synonymous choice with the amino acid
-   sequence held fixed), not a better background for the same test.
+1. ~~Default background~~ Calibrated (section 3.4). The default belongs to
+   the alphabet (section 3.2): codon order 0, letters order 1, nucleotides
+   order 1 unchanged, all with a flat pseudocount of 1, chosen by the rule
+   "order 1 when N >= K^2". A user-defined alphabet without its own
+   defaults gets that rule. The results are in `calibration/README.md`.
+   The shrinkage model originally proposed here was not needed. Related but
+   separate: question 2 asks a different question (dependence on
+   synonymous choice with the amino acid sequence held fixed), not a better
+   background for the same test.
 2. ~~A synonymous-shuffle null~~ Decided: wishlist, high priority, not
    in the first release (section 12, item 1). It asks a different question
    from question 1: whether a motif depends on synonymous choice with the
@@ -396,6 +409,17 @@ generator that matches its structure.
    are on the wishlist (section 12).
 8. ~~Packaging name~~ Decided: revisit the name when the tool is ready
    (section 6).
+9. **Multiple-testing family in nucleotide mode (needs the owner's
+   decision).** Codon and letter modes will correct over all K^k possible
+   words (section 3.4). Applying the same correction in nucleotide mode
+   would make `score_exact_motifs` calibrated for any discovery settings
+   but would change the numbers in the published analysis. On iid
+   nucleotide text the paper's settings (xmotif minimum length 8, at least
+   3 occurrences, core minimum length 7) are already calibrated (0.3% and
+   0.7% false positives at 900 and 4,500 nt), while the CLI defaults
+   (7, 2, 5) are not (12% and 58%). Options: leave nucleotide mode as it is
+   and document the CLI defaults; add the corrected family as an option;
+   or make it the default.
 
 ## 10. Suggested phases
 
@@ -406,8 +430,10 @@ Each phase should be shippable and leave nucleotide behavior unchanged.
    with tests.
 2. Statistics and algorithms take the alphabet: `normalize_sequence`,
    `MarkovBackground`, variant enumeration, gapped motifs, mutation marker
-   and regex escaping. Starts only after the background calibration in
-   section 7 has fixed the default.
+   and regex escaping. The background defaults and the multiple-testing
+   family are fixed by the calibration (sections 3.4 and 7), so this phase
+   can start; the nucleotide-mode family question (section 9, question 9)
+   needs a decision first.
 3. Display decoding: plots, CSV columns and console output.
 4. Menu, batch CLI and documentation (`user_guide.md`, `README.md`,
    `llms.txt` cross-links kept intact).
@@ -444,7 +470,10 @@ the gapped-motif code.
 
 ## 11. Risks
 
-- The statistical defaults (section 7) are the largest unknown. A wrong
+- The discovery defaults (section 7) are still uncalibrated, and the
+  background and family results are from simulation with known truth. Real
+  text has structure no Markov model captures, so on language "significant"
+  means "repeated beyond what letter-pair frequencies explain". A wrong
   default produces plausible-looking but meaningless motifs.
 - The mutation-marker refactor touches `algorithms.py`, `plots.py` and
   `menu.py`, none of which are fully covered by tests (plots and menu have
@@ -497,10 +526,17 @@ Not part of the first release. Listed so the design leaves room for them.
 5. **Codon-level reverse complement and stop-codon splitting** of segments
    (section 3.7).
 6. **Arbitrary token vocabularies,** such as whole words (section 4).
-7. **Reference codon usage as a background:** an organism-wide codon usage
-   table as an alternative to the transcript's own, for short transcripts
-   where the transcript-specific estimate is poor.
-8. **"Calibrate for my data" command:** for a user-defined alphabet, run
+7. **Reference codon usage:** an organism-wide codon usage table. As a
+   background in place of the transcript's own it was measured and rejected
+   (anti-conservative, since a gene's usage differs from the genome's), so
+   the only remaining use is as a prior for the conditional codon usage in
+   item 1, where the per-gene counts are thin.
+8. **Smoother estimators for letters at order 2 and above:** shrink each
+   context toward the next lower order. The flat-pseudocount order 2 is
+   anti-conservative even at 50,000 letters; an interpolated one might not
+   be (the same idea helped codon order 1 in the calibration, though not
+   enough to recommend it).
+9. **"Calibrate for my data" command:** for a user-defined alphabet, run
    the section 7 simulation from the user's own text (simulating from its
    fitted background) and report the false-positive rate and a suggested
    background setting. Not scheduled.

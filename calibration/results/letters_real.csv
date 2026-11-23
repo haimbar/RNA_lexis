@@ -1,0 +1,17 @@
+corpus,background_order,supported_words_strict,supported_words_loose
+antony,0,602,771
+antony,1,228,315
+antony,2,137,209
+antony,3,275,398
+homer,0,943,1329
+homer,1,261,436
+homer,2,128,278
+homer,3,231,499
+genesis,0,1521,1735
+genesis,1,749,951
+genesis,2,504,737
+genesis,3,921,1203
+constitution,0,6522,7785
+constitution,1,3316,4365
+constitution,2,1827,2775
+constitution,3,2741,3852
