@@ -2,6 +2,21 @@
 
 ## [Unreleased]
 
+### Documentation
+
+- **The batch CLI examples in the README and the user guide did not work.** They showed
+  `--fasta FILE` and `--motifs m1 m2 ...`; the CLI takes `--input FILE`, requires
+  `--output`, and `--motifs` is a file. The examples are corrected.
+- **Documented that the default settings of the statistical core ranking
+  (`rank-cores`, menu 2.9) call cores "statistically supported" in random text.**
+  With xmotif minimum length 7, minimum occurrences 2 and candidate minimum length 5,
+  at least one such core appeared in 12% of random 900-nt texts, 31% of 2,000-nt texts
+  and 49% of 4,500-nt texts (nothing planted, 300 texts each). The false-discovery
+  correction runs over the candidate list, which is already selected for being repeated.
+  Behavior is unchanged. Settings of 8, 3 and 7 gave none in 300 random texts at each
+  length, at the price of missing motifs that occur only twice or are shorter than 7.
+  The check is `calibration/nucleotide_cli_check.py`.
+
 ### Added
 
 - **Alphabets and units (phase 1 of the codon-level work; not yet used by the

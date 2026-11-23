@@ -85,14 +85,18 @@ Phrase length in codons / number of copies.
 | 1500 | order1_flat_pc1 | 0.00 | 0.00 | 0.01 | 0.13 | 1.00 |
 | 1500 | oracle | 0.04 | 0.23 | 0.88 | 0.82 | 1.00 |
 
-## The existing nucleotide pipeline on iid nucleotide text
+## `rna_lexis_stat_cli rank-cores` on iid nucleotide text (nucleotide_cli_check.py)
 
-| nt | settings (xmotif minlen, at_least, core minlen) | texts | fraction with candidates | false-positive rate |
-|---|---|---|---|---|
-| 900 | cli_default(7,2,5) | 300 | 0.6067 | 0.1167 |
-| 900 | paper(8,3,7) | 300 | 0.0033 | 0.0033 |
-| 4500 | cli_default(7,2,5) | 300 | 1.0 | 0.5767 |
-| 4500 | paper(8,3,7) | 300 | 0.0067 | 0.0067 |
+Share of random texts (nothing planted) in which at least one core is called statistically supported.
+
+| nt | settings | --min-xmotif-len | --min-count | --candidate-min-len | texts | fraction with candidates | fraction with a supported core |
+|---|---|---|---|---|---|---|---|
+| 900 | CLI defaults | 7 | 2 | 5 | 300 | 0.5433 | 0.1167 |
+| 900 | stricter | 8 | 3 | 7 | 300 | 0.0 | 0.0 |
+| 2000 | CLI defaults | 7 | 2 | 5 | 300 | 0.9767 | 0.3133 |
+| 2000 | stricter | 8 | 3 | 7 | 300 | 0.0 | 0.0 |
+| 4500 | CLI defaults | 7 | 2 | 5 | 300 | 1.0 | 0.4933 |
+| 4500 | stricter | 8 | 3 | 7 | 300 | 0.0 | 0.0 |
 
 On codon null text the full pipeline (xmotifs, shared substrings, scoring) found candidates in at most 0.007 of texts, over minlen 2-4 and N = 100-1500, and the highest false-positive rate over all backgrounds was 0.000.
 

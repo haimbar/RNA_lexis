@@ -1,5 +1,0 @@
-n_nt,"settings(xmotif_minlen,at_least,cand_minlen)",texts,frac_with_candidates,fp_rate
-900,"cli_default(7,2,5)",300,0.6067,0.1167
-900,"paper(8,3,7)",300,0.0033,0.0033
-4500,"cli_default(7,2,5)",300,1.0,0.5767
-4500,"paper(8,3,7)",300,0.0067,0.0067

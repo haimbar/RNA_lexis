@@ -161,9 +161,8 @@ pattern wildcards. Raw symbols reappear only on output, escaped as needed.
   that flags chance repeats in 84 to 100% of texts even with the true model
   as the background. Counting every word seen at least once does not fix
   it. The correction over all K^k words gives 0.00 false positives for
-  every sound background. This is a **change to existing behavior** if it
-  is also applied in nucleotide mode (see section 9, question 9), and so
-  needs the owner's decision.
+  every sound background. Nucleotide mode is left as it is (section 9,
+  question 9); the new family applies to the new alphabets.
 - `hamming_variants` and `_variant_count` take the declared alphabet, and
   the `max_variants` guard needs a unit-level default.
 
@@ -409,17 +408,16 @@ Still open in this section:
    are on the wishlist (section 12).
 8. ~~Packaging name~~ Decided: revisit the name when the tool is ready
    (section 6).
-9. **Multiple-testing family in nucleotide mode (needs the owner's
-   decision).** Codon and letter modes will correct over all K^k possible
-   words (section 3.4). Applying the same correction in nucleotide mode
-   would make `score_exact_motifs` calibrated for any discovery settings
-   but would change the numbers in the published analysis. On iid
-   nucleotide text the paper's settings (xmotif minimum length 8, at least
-   3 occurrences, core minimum length 7) are already calibrated (0.3% and
-   0.7% false positives at 900 and 4,500 nt), while the CLI defaults
-   (7, 2, 5) are not (12% and 58%). Options: leave nucleotide mode as it is
-   and document the CLI defaults; add the corrected family as an option;
-   or make it the default.
+9. ~~Multiple-testing family in nucleotide mode~~ Decided: leave nucleotide
+   mode as it is, and document the CLI defaults. Codon and letter modes
+   correct over all K^k possible words (section 3.4); nucleotide mode keeps
+   correcting over the candidate list, so existing results keep their
+   meaning. On iid nucleotide text the CLI defaults (`--min-xmotif-len 7
+   --min-count 2 --candidate-min-len 5`) call a core supported in 12% of
+   900-nt, 31% of 2,000-nt and 49% of 4,500-nt texts, while 8, 3 and 7
+   gave none in 300 texts at each length. This is now documented in the
+   README, the user guide, `llms.txt` and the changelog. Adding the
+   corrected family to nucleotide mode as an option stays possible later.
 
 ## 10. Suggested phases
 

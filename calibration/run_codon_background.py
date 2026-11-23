@@ -16,8 +16,6 @@ Experiments
            background and the family from the discovery step.
   pipeline the CLI's full xmotif -> shared-substring -> score pipeline on the same null texts
            (shows how often the discovery step produces anything to test at all).
-  nt       the package's own pipeline on iid nucleotide text, as a reference for what the
-           existing defaults do.
   real     the scoring stage on real genes (descriptive: real genes contain real repeats).
 
 Usage:  python3 run_codon_background.py [--reps 400] [--power-reps 200] [--quick]
@@ -250,31 +248,6 @@ def pipeline_null_task(args):
     return ("pipeline", (kind, N), res)
 
 
-def nt_task(args):
-    """The package's own pipeline on iid nucleotide text (the existing defaults)."""
-    import contextlib
-    import io
-    from rna_lexis.statistical import rank_core_candidates
-    from rna_lexis.algorithms import find_boundary
-    n_nt, rep = args
-    rng = np.random.default_rng([4, n_nt, rep])
-    sym = _G["names"][rng.integers(len(_G["names"]))]
-    cod = np.bincount(_G["genes"][sym], minlength=H.NCOD)
-    nt = np.zeros(4)
-    for c in range(H.NCOD):
-        for j in range(3):
-            nt[H.NT_OF[c, j]] += cod[c]
-    nt /= nt.sum()
-    txt = "".join("acgt"[i] for i in rng.choice(4, size=n_nt, p=nt))
-    out = {}
-    for label, (mlen, at_least, cmin) in {"cli_default(7,2,5)": (7, 2, 5), "paper(8,3,7)": (8, 3, 7)}.items():
-        with contextlib.redirect_stdout(io.StringIO()):
-            xm = sorted(set(find_boundary(txt, minlen=mlen, maxlen=60, at_least=at_least)), key=lambda x: (-len(x), x))
-            rows = rank_core_candidates(txt, xm, candidate_min_len=cmin, markov_order=1) if xm else []
-        out[label] = {"n_cand": len(rows), "supported": sum(r["statistically_supported"] for r in rows)}
-    return ("nt", n_nt, out)
-
-
 def real_task(sym):
     units = _G["genes"][sym][:1500].astype(np.int64)
     if len(units) < 100:
@@ -293,12 +266,11 @@ def main():
     ap.add_argument("--reps", type=int, default=400)
     ap.add_argument("--power-reps", type=int, default=200)
     ap.add_argument("--pipeline-reps", type=int, default=150)
-    ap.add_argument("--nt-reps", type=int, default=300)
     ap.add_argument("--quick", action="store_true", help="tiny run to check the plumbing")
     ap.add_argument("--procs", type=int, default=max(1, (os.cpu_count() or 2) - 1))
     a = ap.parse_args()
     if a.quick:
-        a.reps, a.power_reps, a.pipeline_reps, a.nt_reps = 6, 4, 4, 6
+        a.reps, a.power_reps, a.pipeline_reps = 6, 4, 4
     print(f"selfcheck: {H.selfcheck()} candidates match the package", flush=True)
 
     _init()
@@ -309,7 +281,6 @@ def main():
     tasks += [(pipeline_null_task, (k, N, r)) for k in "AB" for N in NS for r in range(a.pipeline_reps)]
     tasks += [(quality_task, (k, N, r)) for k in "AB" for N in NS for r in range(a.reps // 2)]
     tasks += [(repeated_words_task, (k, N, r)) for k in "AB" for N in NS for r in range(a.reps)]
-    tasks += [(nt_task, (n, rep)) for n in (900, 4500) for rep in range(a.nt_reps)]
     tasks += [(real_task, s) for s in real_syms]
 
     t0 = time.time()
@@ -419,22 +390,6 @@ def summarize(results, a):
             bgs = {k: round(v / c["texts"], 4) for k, v in c.items() if k not in ("texts", "with_cand", "cand")}
             w.writerow([kind, N, mx, cm, int(c["texts"]), round(c["with_cand"] / c["texts"], 4),
                         round(c["cand"] / c["texts"], 3), ";".join(f"{k}={v}" for k, v in bgs.items())])
-
-    # ---- nucleotide reference ----
-    nt = defaultdict(lambda: defaultdict(float))
-    for r in results:
-        if r[0] == "nt":
-            _, n_nt, res = r
-            for label, d in res.items():
-                c = nt[(n_nt, label)]
-                c["texts"] += 1
-                c["with_cand"] += d["n_cand"] > 0
-                c["fp"] += d["supported"] > 0
-    with open(out / f"{tag}nucleotide_reference.csv", "w", newline="", encoding="utf-8") as fh:
-        w = csv.writer(fh)
-        w.writerow(["n_nt", "settings(xmotif_minlen,at_least,cand_minlen)", "texts", "frac_with_candidates", "fp_rate"])
-        for (n_nt, label), c in sorted(nt.items()):
-            w.writerow([n_nt, label, int(c["texts"]), round(c["with_cand"] / c["texts"], 4), round(c["fp"] / c["texts"], 4)])
 
     # ---- real genes ----
     rl = defaultdict(lambda: defaultdict(float))

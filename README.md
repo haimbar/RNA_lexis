@@ -181,11 +181,43 @@ A separate command-line interface supports batch statistical workflows without
 entering the interactive menu:
 
 ```
-rna_lexis_stat_cli score-exact       --fasta FILE --motifs m1 m2 …
-rna_lexis_stat_cli rank-cores        --fasta FILE
-rna_lexis_stat_cli mutation-families --fasta FILE --motifs m1 m2 …
-rna_lexis_stat_cli gapped-motif      --fasta FILE --left LEFT --right RIGHT
+rna_lexis_stat_cli score-exact       --input FILE --motifs MOTIF_FILE --output OUT.csv
+rna_lexis_stat_cli rank-cores        --input FILE --output OUT.csv
+rna_lexis_stat_cli mutation-families --input FILE --motifs MOTIF_FILE --output OUT.csv
+rna_lexis_stat_cli gapped-motif      --input FILE --left LEFT --right RIGHT --output OUT.csv
 ```
+
+`--input` is a FASTA or plain sequence file. `--motifs` (and `--xmotifs`) is a file
+holding the motifs: a plain list, a CSV/TSV (name the column with `--motif-column`),
+or a session JSON. `<command> --help` lists every option and its default.
+
+#### Default settings and false positives
+
+The *Rank core motifs (Markov/FDR)* menu option and `rank-cores` use the same
+defaults: minimum xmotif length 7, minimum occurrences 2 (`--min-count`), candidate
+minimum core length 5. With these settings, on a long sequence the ranking can call
+a core *statistically supported* in random text, and more often the longer the text
+is. In a simulation on random nucleotide text with nothing planted (the composition
+of a human coding sequence, 300 texts per length), at least one core was called
+supported in **12%** of 900-nt texts, **31%** of 2,000-nt texts and **49%** of
+4,500-nt texts. The cause is that the false-discovery correction runs over the
+candidate list only, and that list has already been selected for being repeated, so
+it counts too few tests. The behavior is left as it is, so existing results keep
+their meaning.
+
+With stricter settings, minimum xmotif length 8, minimum occurrences 3 and
+candidate minimum core length 7, none of 300 random texts at any of those lengths had
+a supported core, and none had any candidate at all. In the CLI that is
+`--min-xmotif-len 8 --min-count 3 --candidate-min-len 7`; in the menu, set *Min xmotif
+length* and *Min occurrences* under *Change setting*, and answer 7 to *Candidate
+minimum core length*. The price is that a motif occurring only twice, or shorter than
+7, can no longer be found.
+
+For a sequence longer than about 1,000 nt, treat a core that is supported only under
+the default settings as a lead to check, not a finding: rerun with the stricter
+settings and see whether it survives. The simulation uses random text; real
+transcripts contain real repeats, which is what the ranking is meant to find. The
+script and results are in `calibration/` (see `calibration/README.md`).
 
 ## Requirements
 

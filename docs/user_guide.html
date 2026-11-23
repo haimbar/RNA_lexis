@@ -27,11 +27,14 @@ rna_lexis_stat      # alias for the same interactive menu
 python -m rna_lexis # without installing
 </code></pre>
 <p>For batch statistical workflows without entering the interactive menu:</p>
-<pre><code class="language-bash">rna_lexis_stat_cli score-exact       --fasta FILE --motifs m1 m2 …
-rna_lexis_stat_cli rank-cores        --fasta FILE
-rna_lexis_stat_cli mutation-families --fasta FILE --motifs m1 m2 …
-rna_lexis_stat_cli gapped-motif      --fasta FILE --left LEFT --right RIGHT
+<pre><code class="language-bash">rna_lexis_stat_cli score-exact       --input FILE --motifs MOTIF_FILE --output OUT.csv
+rna_lexis_stat_cli rank-cores        --input FILE --output OUT.csv
+rna_lexis_stat_cli mutation-families --input FILE --motifs MOTIF_FILE --output OUT.csv
+rna_lexis_stat_cli gapped-motif      --input FILE --left LEFT --right RIGHT --output OUT.csv
 </code></pre>
+<p><code>--input</code> is a FASTA or plain sequence file; <code>--motifs</code> is a file of motifs (a plain list,
+a CSV/TSV with <code>--motif-column</code>, or a session JSON). <code>&lt;command&gt; --help</code> lists every option.
+See <em>2.9 Rank core motifs</em> for the default settings of <code>rank-cores</code> and their false-positive rate.</p>
 <p>At startup the tool checks the <strong>last used directory</strong> (remembered from the previous session) for saved session files (<code>.json</code>). If no last-used directory is recorded it falls back to the <strong>default data directory</strong> (set by the user in <em>Change setting</em>), and then to the current working directory:</p>
 <ul>
 <li>If <strong>exactly one</strong> valid session file is found, it is loaded automatically — no prompt is shown.</li>
@@ -123,56 +126,56 @@ Press <strong>Ctrl+C</strong> to exit the program immediately.</p>
 <table>
 <thead>
 <tr>
-<th align="left">Prompt</th>
-<th align="center">Default</th>
-<th align="left">Notes</th>
+<th style="text-align: left;">Prompt</th>
+<th style="text-align: center;">Default</th>
+<th style="text-align: left;">Notes</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td align="left">Sequence to analyse</td>
-<td align="center">no default</td>
-<td align="left">Must be present in the text</td>
+<td style="text-align: left;">Sequence to analyse</td>
+<td style="text-align: center;">no default</td>
+<td style="text-align: left;">Must be present in the text</td>
 </tr>
 <tr>
-<td align="left">Neighbourhood width</td>
-<td align="center">adaptive W(N)</td>
-<td align="left">Number of positions on each side of the sequence</td>
+<td style="text-align: left;">Neighbourhood width</td>
+<td style="text-align: center;">adaptive W(N)</td>
+<td style="text-align: left;">Number of positions on each side of the sequence</td>
 </tr>
 <tr>
-<td align="left">Strings to include</td>
-<td align="center">2 (xmotifs)</td>
-<td align="left">1 = cores, 2 = xmotifs</td>
+<td style="text-align: left;">Strings to include</td>
+<td style="text-align: center;">2 (xmotifs)</td>
+<td style="text-align: left;">1 = cores, 2 = xmotifs</td>
 </tr>
 <tr>
-<td align="left">Plot title</td>
-<td align="center"><code>&lt;file&gt; &lt;sequence&gt;</code></td>
-<td align="left">Free text</td>
+<td style="text-align: left;">Plot title</td>
+<td style="text-align: center;"><code>&lt;file&gt; &lt;sequence&gt;</code></td>
+<td style="text-align: left;">Free text</td>
 </tr>
 <tr>
-<td align="left">Output file name</td>
-<td align="center"><em>(screen only)</em></td>
-<td align="left">Leave blank to display interactively</td>
+<td style="text-align: left;">Output file name</td>
+<td style="text-align: center;"><em>(screen only)</em></td>
+<td style="text-align: left;">Leave blank to display interactively</td>
 </tr>
 <tr>
-<td align="left">Output format</td>
-<td align="center">1 (PNG standard)</td>
-<td align="left">1 = PNG, 2 = PDF, 3 = SVG, 4 = HTML</td>
+<td style="text-align: left;">Output format</td>
+<td style="text-align: center;">1 (PNG standard)</td>
+<td style="text-align: left;">1 = PNG, 2 = PDF, 3 = SVG, 4 = HTML</td>
 </tr>
 <tr>
-<td align="left">X-axis range</td>
-<td align="center"><em>(full range)</em></td>
-<td align="left"><code>min, max</code> e.g. <code>100, 500</code></td>
+<td style="text-align: left;">X-axis range</td>
+<td style="text-align: center;"><em>(full range)</em></td>
+<td style="text-align: left;"><code>min, max</code> e.g. <code>100, 500</code></td>
 </tr>
 <tr>
-<td align="left">Minimum occurrences to include a neighbour</td>
-<td align="center">2</td>
-<td align="left">Neighbours occurring fewer times than this are excluded</td>
+<td style="text-align: left;">Minimum occurrences to include a neighbour</td>
+<td style="text-align: center;">2</td>
+<td style="text-align: left;">Neighbours occurring fewer times than this are excluded</td>
 </tr>
 <tr>
-<td align="left">Show hairpin regions?</td>
-<td align="center">N</td>
-<td align="left">Only asked when a companion <code>*_hairpins.csv</code> file exists in the session directory</td>
+<td style="text-align: left;">Show hairpin regions?</td>
+<td style="text-align: center;">N</td>
+<td style="text-align: left;">Only asked when a companion <code>*_hairpins.csv</code> file exists in the session directory</td>
 </tr>
 </tbody>
 </table>
@@ -192,56 +195,56 @@ Press <strong>Ctrl+C</strong> to exit the program immediately.</p>
 <table>
 <thead>
 <tr>
-<th align="left">Prompt</th>
-<th align="center">Default</th>
-<th align="left">Notes</th>
+<th style="text-align: left;">Prompt</th>
+<th style="text-align: center;">Default</th>
+<th style="text-align: left;">Notes</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td align="left">Sequence to analyse</td>
-<td align="center">no default</td>
-<td align="left">Must be present in the text</td>
+<td style="text-align: left;">Sequence to analyse</td>
+<td style="text-align: center;">no default</td>
+<td style="text-align: left;">Must be present in the text</td>
 </tr>
 <tr>
-<td align="left">Neighbourhood width</td>
-<td align="center">adaptive W(N)</td>
-<td align="left">Number of positions on each side of the sequence</td>
+<td style="text-align: left;">Neighbourhood width</td>
+<td style="text-align: center;">adaptive W(N)</td>
+<td style="text-align: left;">Number of positions on each side of the sequence</td>
 </tr>
 <tr>
-<td align="left">Strings to include</td>
-<td align="center">2 (xmotifs)</td>
-<td align="left">1 = cores, 2 = xmotifs</td>
+<td style="text-align: left;">Strings to include</td>
+<td style="text-align: center;">2 (xmotifs)</td>
+<td style="text-align: left;">1 = cores, 2 = xmotifs</td>
 </tr>
 <tr>
-<td align="left">Plot title</td>
-<td align="center"><code>&lt;file&gt; &lt;sequence&gt;</code></td>
-<td align="left">Free text</td>
+<td style="text-align: left;">Plot title</td>
+<td style="text-align: center;"><code>&lt;file&gt; &lt;sequence&gt;</code></td>
+<td style="text-align: left;">Free text</td>
 </tr>
 <tr>
-<td align="left">Output file name</td>
-<td align="center"><em>(screen only)</em></td>
-<td align="left">Leave blank to display interactively</td>
+<td style="text-align: left;">Output file name</td>
+<td style="text-align: center;"><em>(screen only)</em></td>
+<td style="text-align: left;">Leave blank to display interactively</td>
 </tr>
 <tr>
-<td align="left">Output format</td>
-<td align="center">1 (PNG standard)</td>
-<td align="left">1 = PNG, 2 = PDF, 3 = SVG, 4 = HTML</td>
+<td style="text-align: left;">Output format</td>
+<td style="text-align: center;">1 (PNG standard)</td>
+<td style="text-align: left;">1 = PNG, 2 = PDF, 3 = SVG, 4 = HTML</td>
 </tr>
 <tr>
-<td align="left">X-axis range</td>
-<td align="center"><em>(full range)</em></td>
-<td align="left"><code>min, max</code> e.g. <code>100, 500</code></td>
+<td style="text-align: left;">X-axis range</td>
+<td style="text-align: center;"><em>(full range)</em></td>
+<td style="text-align: left;"><code>min, max</code> e.g. <code>100, 500</code></td>
 </tr>
 <tr>
-<td align="left">Minimum occurrences to include a neighbour</td>
-<td align="center">2</td>
-<td align="left">Neighbours occurring fewer times than this are excluded</td>
+<td style="text-align: left;">Minimum occurrences to include a neighbour</td>
+<td style="text-align: center;">2</td>
+<td style="text-align: left;">Neighbours occurring fewer times than this are excluded</td>
 </tr>
 <tr>
-<td align="left">Show hairpin regions?</td>
-<td align="center">N</td>
-<td align="left">Only asked when a companion <code>*_hairpins.csv</code> file exists in the session directory</td>
+<td style="text-align: left;">Show hairpin regions?</td>
+<td style="text-align: center;">N</td>
+<td style="text-align: left;">Only asked when a companion <code>*_hairpins.csv</code> file exists in the session directory</td>
 </tr>
 </tbody>
 </table>
@@ -292,34 +295,34 @@ For Z-score plots you will also be asked for a <strong>threshold</strong> (defau
 <thead>
 <tr>
 <th>Prompt</th>
-<th align="center">Default</th>
+<th style="text-align: center;">Default</th>
 <th>Notes</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <td>Sequence to analyse</td>
-<td align="center">no default</td>
+<td style="text-align: center;">no default</td>
 <td>Must be present in the text</td>
 </tr>
 <tr>
 <td>Bases on each side</td>
-<td align="center">0</td>
+<td style="text-align: center;">0</td>
 <td>Flanking context to include</td>
 </tr>
 <tr>
 <td>Max mutations</td>
-<td align="center">0</td>
+<td style="text-align: center;">0</td>
 <td>Fuzzy matching; capped at len/6</td>
 </tr>
 <tr>
 <td>Format</td>
-<td align="center">pdf</td>
+<td style="text-align: center;">pdf</td>
 <td><code>pdf</code> or <code>svg</code></td>
 </tr>
 <tr>
 <td>Output file name</td>
-<td align="center"><code>&lt;seq&gt;_logo</code></td>
+<td style="text-align: center;"><code>&lt;seq&gt;_logo</code></td>
 <td></td>
 </tr>
 </tbody>
@@ -365,39 +368,39 @@ For Z-score plots you will also be asked for a <strong>threshold</strong> (defau
 <thead>
 <tr>
 <th>Prompt</th>
-<th align="center">Default</th>
+<th style="text-align: center;">Default</th>
 <th>Notes</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <td>Sequence 1 / 2 / 3</td>
-<td align="center"></td>
+<td style="text-align: center;"></td>
 <td>Leave blank to stop after fewer than 3</td>
 </tr>
 <tr>
 <td>Mutation rate: 1 per N letters</td>
-<td align="center">6</td>
+<td style="text-align: center;">6</td>
 <td>Sets the maximum number of mismatches per sequence: <code>floor(L / N)</code></td>
 </tr>
 <tr>
 <td>Output file</td>
-<td align="center"><em>(screen only)</em></td>
+<td style="text-align: center;"><em>(screen only)</em></td>
 <td>Leave blank to display interactively</td>
 </tr>
 <tr>
 <td>Output format</td>
-<td align="center">1 (PNG)</td>
+<td style="text-align: center;">1 (PNG)</td>
 <td>1 = PNG, 2 = PDF, 3 = SVG, 4 = HTML</td>
 </tr>
 <tr>
 <td>Condense x-axis?</td>
-<td align="center">N</td>
+<td style="text-align: center;">N</td>
 <td>If <code>y</code>, large empty regions on the x-axis are compressed</td>
 </tr>
 <tr>
 <td>Minimum gap size to compress</td>
-<td align="center">1000</td>
+<td style="text-align: center;">1000</td>
 <td>Only gaps wider than this many positions are compressed (shown only when condensing)</td>
 </tr>
 </tbody>
@@ -417,19 +420,19 @@ For Z-score plots you will also be asked for a <strong>threshold</strong> (defau
 <thead>
 <tr>
 <th>Prompt</th>
-<th align="center">Default</th>
+<th style="text-align: center;">Default</th>
 <th>Notes</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <td>Position range</td>
-<td align="center">full sequence</td>
+<td style="text-align: center;">full sequence</td>
 <td><code>start,end</code> e.g. <code>200,800</code>; ranges &gt; 500 nt render slowly</td>
 </tr>
 <tr>
 <td>Output HTML file</td>
-<td align="center"><code>&lt;name&gt;_detail.html</code></td>
+<td style="text-align: center;"><code>&lt;name&gt;_detail.html</code></td>
 <td>Always saved as HTML; <code>.html</code> is appended if omitted</td>
 </tr>
 </tbody>
@@ -442,34 +445,34 @@ For Z-score plots you will also be asked for a <strong>threshold</strong> (defau
 <thead>
 <tr>
 <th>Prompt</th>
-<th align="center">Default</th>
+<th style="text-align: center;">Default</th>
 <th>Notes</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <td>Seed sequence</td>
-<td align="center"></td>
+<td style="text-align: center;"></td>
 <td>Must occur at least <strong>3</strong> times in the text; blank to cancel</td>
 </tr>
 <tr>
 <td>Mutation rate: 1 per N letters</td>
-<td align="center">6</td>
+<td style="text-align: center;">6</td>
 <td>Controls how divergent the flanking context may be during extension (same meaning as in <em>Motif extensions</em>)</td>
 </tr>
 <tr>
 <td>Consecutive-neighbor arcs only, or all pairwise arcs?</td>
-<td align="center">Consecutive</td>
+<td style="text-align: center;">Consecutive</td>
 <td>See "Decluttering", below</td>
 </tr>
 <tr>
 <td>Output file</td>
-<td align="center"><em>(screen only)</em></td>
+<td style="text-align: center;"><em>(screen only)</em></td>
 <td>Leave blank to display interactively</td>
 </tr>
 <tr>
 <td>Output format</td>
-<td align="center">1 (PNG standard)</td>
+<td style="text-align: center;">1 (PNG standard)</td>
 <td>1 = PNG, 2 = PDF, 3 = SVG</td>
 </tr>
 </tbody>
@@ -492,39 +495,39 @@ For Z-score plots you will also be asked for a <strong>threshold</strong> (defau
 <thead>
 <tr>
 <th>Prompt</th>
-<th align="center">Default</th>
+<th style="text-align: center;">Default</th>
 <th>Notes</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <td>Comparison sequence source</td>
-<td align="center"></td>
+<td style="text-align: center;"></td>
 <td>Paste, local file, Ensembl ENST, genomic coordinates (<code>chrom:start-end</code>, hg38), ENCODE cCRE accession, or an existing RNA_lexis session</td>
 </tr>
 <tr>
 <td>Forward strand or reverse complement</td>
-<td align="center">Forward</td>
+<td style="text-align: center;">Forward</td>
 <td>Compares the comparison sequence's reverse complement instead, when relevant (e.g. strand orientation matters for regulatory elements)</td>
 </tr>
 <tr>
 <td>Minimum motif length</td>
-<td align="center">6</td>
+<td style="text-align: center;">6</td>
 <td>Shortest shared motif to consider</td>
 </tr>
 <tr>
 <td>Max motifs to show</td>
-<td align="center">6</td>
+<td style="text-align: center;">6</td>
 <td>Each motif gets its own color; at most this many are drawn</td>
 </tr>
 <tr>
 <td>Output file</td>
-<td align="center"><em>(screen only)</em></td>
+<td style="text-align: center;"><em>(screen only)</em></td>
 <td>Leave blank to display interactively</td>
 </tr>
 <tr>
 <td>Output format</td>
-<td align="center">1 (PNG standard)</td>
+<td style="text-align: center;">1 (PNG standard)</td>
 <td>1 = PNG, 2 = PDF, 3 = SVG</td>
 </tr>
 </tbody>
@@ -553,39 +556,39 @@ For Z-score plots you will also be asked for a <strong>threshold</strong> (defau
 <thead>
 <tr>
 <th>Prompt</th>
-<th align="center">Default</th>
+<th style="text-align: center;">Default</th>
 <th>Notes</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <td>Comparison sequence source</td>
-<td align="center"></td>
+<td style="text-align: center;"></td>
 <td>Same chooser as <em>Shared-motif diagram</em> — paste, local file, Ensembl ENST, genomic coordinates, ENCODE cCRE accession, or an existing session</td>
 </tr>
 <tr>
 <td><em>(length-check warnings, if any — see below)</em></td>
-<td align="center"></td>
+<td style="text-align: center;"></td>
 <td><code>[y/N]</code> continue anyway</td>
 </tr>
 <tr>
 <td>Sliding window size (nt)</td>
-<td align="center">200</td>
+<td style="text-align: center;">200</td>
 <td>Width of the moving-average window used to compute local coverage</td>
 </tr>
 <tr>
 <td>Shared axis or dual axis?</td>
-<td align="center">Shared</td>
+<td style="text-align: center;">Shared</td>
 <td>See "Shared vs. dual axis", below</td>
 </tr>
 <tr>
 <td>Output file</td>
-<td align="center"><em>(screen only)</em></td>
+<td style="text-align: center;"><em>(screen only)</em></td>
 <td>Leave blank to display interactively</td>
 </tr>
 <tr>
 <td>Output format</td>
-<td align="center">1 (PNG standard)</td>
+<td style="text-align: center;">1 (PNG standard)</td>
 <td>1 = PNG, 2 = PDF, 3 = SVG</td>
 </tr>
 </tbody>
@@ -604,34 +607,34 @@ For Z-score plots you will also be asked for a <strong>threshold</strong> (defau
 <thead>
 <tr>
 <th>Prompt</th>
-<th align="center">Default</th>
+<th style="text-align: center;">Default</th>
 <th>Notes</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <td><em>(length-check warning, if any)</em></td>
-<td align="center"></td>
+<td style="text-align: center;"></td>
 <td>Only the absolute-length check applies (both curves are always the same length); <code>[y/N]</code> continue anyway</td>
 </tr>
 <tr>
 <td>Sliding window size (nt)</td>
-<td align="center">200</td>
+<td style="text-align: center;">200</td>
 <td></td>
 </tr>
 <tr>
 <td>Shared axis or dual axis?</td>
-<td align="center">Shared</td>
+<td style="text-align: center;">Shared</td>
 <td>See §1.9's "Shared vs. dual axis" — most relevant here, since GC content's range is typically much narrower than motif coverage's</td>
 </tr>
 <tr>
 <td>Output file</td>
-<td align="center"><em>(screen only)</em></td>
+<td style="text-align: center;"><em>(screen only)</em></td>
 <td>Leave blank to display interactively</td>
 </tr>
 <tr>
 <td>Output format</td>
-<td align="center">1 (PNG standard)</td>
+<td style="text-align: center;">1 (PNG standard)</td>
 <td>1 = PNG, 2 = PDF, 3 = SVG</td>
 </tr>
 </tbody>
@@ -643,39 +646,39 @@ For Z-score plots you will also be asked for a <strong>threshold</strong> (defau
 <thead>
 <tr>
 <th>Prompt</th>
-<th align="center">Default</th>
+<th style="text-align: center;">Default</th>
 <th>Notes</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <td><em>(length-check warning, if any)</em></td>
-<td align="center"></td>
+<td style="text-align: center;"></td>
 <td>Only the absolute-length check applies; <code>[y/N]</code> continue anyway</td>
 </tr>
 <tr>
 <td>Minimum homopolymer run length</td>
-<td align="center">4</td>
+<td style="text-align: center;">4</td>
 <td>Shortest same-letter run counted as "low-complexity"</td>
 </tr>
 <tr>
 <td>Sliding window size (nt)</td>
-<td align="center">200</td>
+<td style="text-align: center;">200</td>
 <td></td>
 </tr>
 <tr>
 <td>Shared axis or dual axis?</td>
-<td align="center">Shared</td>
+<td style="text-align: center;">Shared</td>
 <td>See §1.9's "Shared vs. dual axis"</td>
 </tr>
 <tr>
 <td>Output file</td>
-<td align="center"><em>(screen only)</em></td>
+<td style="text-align: center;"><em>(screen only)</em></td>
 <td>Leave blank to display interactively</td>
 </tr>
 <tr>
 <td>Output format</td>
-<td align="center">1 (PNG standard)</td>
+<td style="text-align: center;">1 (PNG standard)</td>
 <td>1 = PNG, 2 = PDF, 3 = SVG</td>
 </tr>
 </tbody>
@@ -741,29 +744,29 @@ For Z-score plots you will also be asked for a <strong>threshold</strong> (defau
 <thead>
 <tr>
 <th>Prompt</th>
-<th align="center">Default</th>
+<th style="text-align: center;">Default</th>
 <th>Notes</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <td>Motif</td>
-<td align="center"></td>
+<td style="text-align: center;"></td>
 <td>Blank to cancel</td>
 </tr>
 <tr>
 <td>Search method</td>
-<td align="center">1 (Exact)</td>
+<td style="text-align: center;">1 (Exact)</td>
 <td><code>1</code> = exact (<code>find_all_matches</code>); <code>2</code> = with mutations (<code>find_with_mutations</code>)</td>
 </tr>
 <tr>
 <td>Search mutation rate: 1 per N letters</td>
-<td align="center">6</td>
+<td style="text-align: center;">6</td>
 <td>Only shown when search method = 2</td>
 </tr>
 <tr>
 <td>Extension mutation rate: 1 per N letters</td>
-<td align="center">6</td>
+<td style="text-align: center;">6</td>
 <td>Controls how divergent the flanking context may be during extension</td>
 </tr>
 </tbody>
@@ -805,19 +808,19 @@ m &lt; 6 (low power).</p>
 <thead>
 <tr>
 <th>Prompt</th>
-<th align="center">Default</th>
+<th style="text-align: center;">Default</th>
 <th>Notes</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <td>Sequence to test</td>
-<td align="center"></td>
+<td style="text-align: center;"></td>
 <td>Blank to cancel</td>
 </tr>
 <tr>
 <td>Mutations: 0 = exact only, or N for 1-per-N-nt</td>
-<td align="center">0</td>
+<td style="text-align: center;">0</td>
 <td>Enter 6 to allow 1 mutation per 6 nt; maximum N is 6 (rate 1/6)</td>
 </tr>
 </tbody>
@@ -853,34 +856,34 @@ and scores the whole family under the Markov background.</p>
 <thead>
 <tr>
 <th>Prompt</th>
-<th align="center">Default</th>
+<th style="text-align: center;">Default</th>
 <th>Notes</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <td>Left anchor sequence</td>
-<td align="center"></td>
+<td style="text-align: center;"></td>
 <td>Blank to cancel</td>
 </tr>
 <tr>
 <td>Right anchor sequence</td>
-<td align="center"></td>
+<td style="text-align: center;"></td>
 <td>Blank to cancel</td>
 </tr>
 <tr>
 <td>Minimum gap length</td>
-<td align="center">0</td>
+<td style="text-align: center;">0</td>
 <td></td>
 </tr>
 <tr>
 <td>Maximum gap length</td>
-<td align="center">30</td>
+<td style="text-align: center;">30</td>
 <td></td>
 </tr>
 <tr>
 <td>Output CSV file</td>
-<td align="center"><code>&lt;session&gt;_gapped_motif.csv</code></td>
+<td style="text-align: center;"><code>&lt;session&gt;_gapped_motif.csv</code></td>
 <td></td>
 </tr>
 </tbody>
@@ -942,36 +945,36 @@ printed to the terminal.</p>
 <table>
 <thead>
 <tr>
-<th align="left">Prompt</th>
-<th align="center">Default</th>
-<th align="left">Notes</th>
+<th style="text-align: left;">Prompt</th>
+<th style="text-align: center;">Default</th>
+<th style="text-align: left;">Notes</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td align="left">Sequence to analyse</td>
-<td align="center">no default</td>
-<td align="left">Must be present in the text</td>
+<td style="text-align: left;">Sequence to analyse</td>
+<td style="text-align: center;">no default</td>
+<td style="text-align: left;">Must be present in the text</td>
 </tr>
 <tr>
-<td align="left">Neighbourhood width</td>
-<td align="center">adaptive W(N)</td>
-<td align="left">Half-window used for interval expansion and gap merging</td>
+<td style="text-align: left;">Neighbourhood width</td>
+<td style="text-align: center;">adaptive W(N)</td>
+<td style="text-align: left;">Half-window used for interval expansion and gap merging</td>
 </tr>
 <tr>
-<td align="left">Strings to include</td>
-<td align="center">2 (xmotifs)</td>
-<td align="left">1 = cores, 2 = xmotifs</td>
+<td style="text-align: left;">Strings to include</td>
+<td style="text-align: center;">2 (xmotifs)</td>
+<td style="text-align: left;">1 = cores, 2 = xmotifs</td>
 </tr>
 <tr>
-<td align="left">X-axis range</td>
-<td align="center"><em>(full range)</em></td>
-<td align="left"><code>min, max</code> e.g. <code>100, 500</code> — limits which positions are considered</td>
+<td style="text-align: left;">X-axis range</td>
+<td style="text-align: center;"><em>(full range)</em></td>
+<td style="text-align: left;"><code>min, max</code> e.g. <code>100, 500</code> — limits which positions are considered</td>
 </tr>
 <tr>
-<td align="left">Output CSV file</td>
-<td align="center"><code>&lt;session&gt;_&lt;seq&gt;_regions.csv</code></td>
-<td align="left">In the session directory; leave blank to use the default</td>
+<td style="text-align: left;">Output CSV file</td>
+<td style="text-align: center;"><code>&lt;session&gt;_&lt;seq&gt;_regions.csv</code></td>
+<td style="text-align: left;">In the session directory; leave blank to use the default</td>
 </tr>
 </tbody>
 </table>
@@ -1010,39 +1013,39 @@ enrichment ratio exceeds the minimum enrichment.</p>
 <thead>
 <tr>
 <th>Prompt</th>
-<th align="center">Default</th>
+<th style="text-align: center;">Default</th>
 <th>Notes</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <td>Candidate minimum core length</td>
-<td align="center">5</td>
+<td style="text-align: center;">5</td>
 <td>Shortest substring to test</td>
 </tr>
 <tr>
 <td>Candidate maximum core length</td>
-<td align="center">18</td>
+<td style="text-align: center;">18</td>
 <td>Longest substring to test</td>
 </tr>
 <tr>
 <td>Minimum xmotif-type support</td>
-<td align="center">2</td>
+<td style="text-align: center;">2</td>
 <td>Candidate must appear in at least this many xmotif families</td>
 </tr>
 <tr>
 <td>Minimum Markov enrichment</td>
-<td align="center">10</td>
+<td style="text-align: center;">10</td>
 <td><code>observed / expected</code> ratio threshold</td>
 </tr>
 <tr>
 <td>FDR q-value threshold</td>
-<td align="center">0.05</td>
+<td style="text-align: center;">0.05</td>
 <td>Benjamini–Hochberg threshold</td>
 </tr>
 <tr>
 <td>Output CSV file</td>
-<td align="center"><code>&lt;session&gt;_ranked_cores_markov.csv</code></td>
+<td style="text-align: center;"><code>&lt;session&gt;_ranked_cores_markov.csv</code></td>
 <td></td>
 </tr>
 </tbody>
@@ -1103,6 +1106,22 @@ enrichment ratio exceeds the minimum enrichment.</p>
 </tbody>
 </table>
 <p>Up to 15 supported candidates are printed to the terminal after the CSV is saved.</p>
+<p><strong>Default settings and false positives.</strong> The defaults above and in <em>6 - Change setting</em>
+(minimum xmotif length 7, minimum occurrences 2, candidate minimum core length 5) are
+permissive. On random nucleotide text with nothing planted, at least one core was called
+<em>statistically supported</em> in 12% of 900-nt texts, 31% of 2,000-nt texts and 49% of 4,500-nt
+texts. The false-discovery correction runs over the candidate list only, which is already
+selected for being repeated, so it counts too few tests; the behavior is left unchanged so
+that existing results keep their meaning. With minimum xmotif length 8, minimum occurrences
+3 and candidate minimum core length 7, none of 300 random texts at any of those lengths had
+a supported core (and none had any candidate). Set <em>Min xmotif length</em> and <em>Min occurrences</em>
+in <em>Change setting</em> and answer 7 to the first prompt above; the same settings in the batch
+CLI are <code>--min-xmotif-len 8 --min-count 3 --candidate-min-len 7</code>. The price is that a motif
+occurring only twice, or shorter than 7, can no longer be found.</p>
+<p>For a sequence longer than about 1,000 nt, treat a core supported only under the default
+settings as a lead to check: rerun with the stricter settings and see whether it survives.
+The simulation uses random text; real transcripts contain real repeats, which is what this
+ranking is meant to find. Details: <code>calibration/README.md</code> in the repository.</p>
 <h4>2.10 Mutation-family scoring</h4>
 <p>Tests one or more motifs at every Hamming radius allowed by the mutation cap.
 For each motif and radius, the complete neighbourhood — all sequences within that
@@ -1113,44 +1132,44 @@ best-supported radius per motif is written to a separate <code>_best.csv</code> 
 <thead>
 <tr>
 <th>Prompt</th>
-<th align="center">Default</th>
+<th style="text-align: center;">Default</th>
 <th>Notes</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <td>Motif source</td>
-<td align="center">1</td>
+<td style="text-align: center;">1</td>
 <td>1 = enter a motif, 2 = current cores, 3 = current xmotifs</td>
 </tr>
 <tr>
 <td>Motif</td>
-<td align="center"></td>
+<td style="text-align: center;"></td>
 <td>Only shown when source = 1; blank to cancel</td>
 </tr>
 <tr>
 <td>Mutation search cap: 1 per N letters</td>
-<td align="center">6</td>
+<td style="text-align: center;">6</td>
 <td>Sets the maximum Hamming radius tested</td>
 </tr>
 <tr>
 <td>Minimum family enrichment</td>
-<td align="center">5</td>
+<td style="text-align: center;">5</td>
 <td>Enrichment threshold for the full Hamming neighbourhood</td>
 </tr>
 <tr>
 <td>Maximum expected family count</td>
-<td align="center">5</td>
+<td style="text-align: center;">5</td>
 <td>Families with a higher expected count are not scored</td>
 </tr>
 <tr>
 <td>FDR q-value threshold</td>
-<td align="center">0.05</td>
+<td style="text-align: center;">0.05</td>
 <td>BH threshold applied across all (motif, radius) pairs</td>
 </tr>
 <tr>
 <td>Output CSV file</td>
-<td align="center"><code>&lt;session&gt;_mutation_family_tests.csv</code></td>
+<td style="text-align: center;"><code>&lt;session&gt;_mutation_family_tests.csv</code></td>
 <td>Full results</td>
 </tr>
 </tbody>
@@ -1224,24 +1243,24 @@ best-supported radius per motif is written to a separate <code>_best.csv</code> 
 <table>
 <thead>
 <tr>
-<th align="center">Order</th>
+<th style="text-align: center;">Order</th>
 <th>Null conditions on</th>
 <th>Typical use</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td align="center">0</td>
+<td style="text-align: center;">0</td>
 <td>Single-nucleotide (A/C/G/U) frequencies</td>
 <td>Equivalent to the old shuffle null</td>
 </tr>
 <tr>
-<td align="center">1 <em>(default)</em></td>
+<td style="text-align: center;">1 <em>(default)</em></td>
 <td>Dinucleotide frequencies</td>
 <td>Recommended for sequences of a few kb</td>
 </tr>
 <tr>
-<td align="center">2</td>
+<td style="text-align: center;">2</td>
 <td>Trinucleotide frequencies</td>
 <td>Longer sequences or k-mers ≥ 10</td>
 </tr>
@@ -1255,24 +1274,24 @@ best-supported radius per motif is written to a separate <code>_best.csv</code> 
 <thead>
 <tr>
 <th>Prompt</th>
-<th align="center">Default</th>
+<th style="text-align: center;">Default</th>
 <th>Notes</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <td>k-mer length</td>
-<td align="center">6</td>
+<td style="text-align: center;">6</td>
 <td>Length of the substrings to count (≥ 2)</td>
 </tr>
 <tr>
 <td>Markov background order</td>
-<td align="center">1</td>
+<td style="text-align: center;">1</td>
 <td>0 = nucleotide, 1 = dinucleotide, … (max k−2)</td>
 </tr>
 <tr>
 <td>Output CSV file</td>
-<td align="center"><code>&lt;name&gt;_kmer&lt;k&gt;_order&lt;order&gt;_markov_pvalues.csv</code></td>
+<td style="text-align: center;"><code>&lt;name&gt;_kmer&lt;k&gt;_order&lt;order&gt;_markov_pvalues.csv</code></td>
 <td>Path to the results file</td>
 </tr>
 </tbody>
@@ -1338,19 +1357,19 @@ with fewer than 3 occurrences are skipped automatically.</p>
 <thead>
 <tr>
 <th>Prompt</th>
-<th align="center">Default</th>
+<th style="text-align: center;">Default</th>
 <th>Notes</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <td>Mutations: 0 = exact only, or N for 1-per-N-nt</td>
-<td align="center">0</td>
+<td style="text-align: center;">0</td>
 <td>Same rate as the single-sequence spacing test; maximum N is 6</td>
 </tr>
 <tr>
 <td>Output CSV file</td>
-<td align="center"><code>&lt;session&gt;_spacing_batch.csv</code></td>
+<td style="text-align: center;"><code>&lt;session&gt;_spacing_batch.csv</code></td>
 <td></td>
 </tr>
 </tbody>

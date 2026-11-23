@@ -23,11 +23,15 @@ python -m rna_lexis # without installing
 For batch statistical workflows without entering the interactive menu:
 
 ```bash
-rna_lexis_stat_cli score-exact       --fasta FILE --motifs m1 m2 …
-rna_lexis_stat_cli rank-cores        --fasta FILE
-rna_lexis_stat_cli mutation-families --fasta FILE --motifs m1 m2 …
-rna_lexis_stat_cli gapped-motif      --fasta FILE --left LEFT --right RIGHT
+rna_lexis_stat_cli score-exact       --input FILE --motifs MOTIF_FILE --output OUT.csv
+rna_lexis_stat_cli rank-cores        --input FILE --output OUT.csv
+rna_lexis_stat_cli mutation-families --input FILE --motifs MOTIF_FILE --output OUT.csv
+rna_lexis_stat_cli gapped-motif      --input FILE --left LEFT --right RIGHT --output OUT.csv
 ```
+
+`--input` is a FASTA or plain sequence file; `--motifs` is a file of motifs (a plain list,
+a CSV/TSV with `--motif-column`, or a session JSON). `<command> --help` lists every option.
+See *2.9 Rank core motifs* for the default settings of `rank-cores` and their false-positive rate.
 
 At startup the tool checks the **last used directory** (remembered from the previous session) for saved session files (`.json`). If no last-used directory is recorded it falls back to the **default data directory** (set by the user in *Change setting*), and then to the current working directory:
 
@@ -657,6 +661,24 @@ enrichment ratio exceeds the minimum enrichment.
 | `rank_coverage` | Secondary rank (coverage) |
 
 Up to 15 supported candidates are printed to the terminal after the CSV is saved.
+
+**Default settings and false positives.** The defaults above and in *6 - Change setting*
+(minimum xmotif length 7, minimum occurrences 2, candidate minimum core length 5) are
+permissive. On random nucleotide text with nothing planted, at least one core was called
+*statistically supported* in 12% of 900-nt texts, 31% of 2,000-nt texts and 49% of 4,500-nt
+texts. The false-discovery correction runs over the candidate list only, which is already
+selected for being repeated, so it counts too few tests; the behavior is left unchanged so
+that existing results keep their meaning. With minimum xmotif length 8, minimum occurrences
+3 and candidate minimum core length 7, none of 300 random texts at any of those lengths had
+a supported core (and none had any candidate). Set *Min xmotif length* and *Min occurrences*
+in *Change setting* and answer 7 to the first prompt above; the same settings in the batch
+CLI are `--min-xmotif-len 8 --min-count 3 --candidate-min-len 7`. The price is that a motif
+occurring only twice, or shorter than 7, can no longer be found.
+
+For a sequence longer than about 1,000 nt, treat a core supported only under the default
+settings as a lead to check: rerun with the stricter settings and see whether it survives.
+The simulation uses random text; real transcripts contain real repeats, which is what this
+ranking is meant to find. Details: `calibration/README.md` in the repository.
 
 #### 2.10 Mutation-family scoring
 

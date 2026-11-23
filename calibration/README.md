@@ -63,11 +63,15 @@ Counting every word seen at least once does not fix it. Correcting over all 64^k
 the false-positive rate is 0.00 for every sound background. The same correction is what makes each
 background's error visible, so it is the family to use for codons and letters.
 
-For the existing nucleotide pipeline the discovery step is strict enough to hide most of this. On iid
-nucleotide text, the paper's settings (xmotif minimum length 8, at least 3 occurrences, core minimum
-length 7) give 0.3% and 0.7% false positives at 900 and 4,500 nt. The CLI defaults (7, 2, 5) give 12% and
-58%. That is a statement about existing behavior, not about this work, and is for the maintainers to
-decide.
+For the existing nucleotide pipeline the discovery step hides most of this when it is strict.
+`nucleotide_cli_check.py` runs the CLI's own two calls (`_discover_xmotifs`, `rank_core_candidates`) on iid
+nucleotide text with the composition of a human coding sequence, 300 texts per length. With the CLI
+defaults (`--min-xmotif-len 7 --min-count 2 --candidate-min-len 5`) at least one core is called supported in
+12% of 900-nt texts, 31% of 2,000-nt texts and 49% of 4,500-nt texts. With `--min-xmotif-len 8 --min-count 3
+--candidate-min-len 7`, the settings used in the whale and finch analyses, none of the 300 texts at any
+length had a supported core, and none had any candidate. The trade-off is that motifs occurring only twice
+or shorter than 7 cannot be found. The decision was to leave nucleotide mode as it is and document the CLI
+defaults (README, user guide, `llms.txt`, `CHANGELOG.md`).
 
 ### 2. Codons: order 0, flat pseudocount 1
 
@@ -131,6 +135,7 @@ this; that needs planted *families* (a core with variable extensions), which exa
 
 ## Data and provenance
 
+* `nucleotide_cli_check.py` also reads `data/human_cds.fasta`, for the nucleotide composition of the random text.
 * `data/human_cds.fasta`: coding sequences (stop codon removed) of the canonical transcripts of 177 human
   genes from the Ensembl REST API, fetched by `fetch_cds.py` (the gene list is in the script; only symbols
   are sent). 195,989 codons. Three genes were rejected (MYC and VEGFA do not start at an ATG in their
@@ -152,6 +157,7 @@ python3 calibration/fetch_cds.py                       # only to refresh data/hu
 python3 calibration/harness.py                         # self-check against the package
 python3 calibration/run_codon_background.py            # about 45 s
 RNA_LEXIS_TEXTS=/path/to/texts python3 calibration/run_letters_background.py --reps 120 --power-reps 60   # about 3 min
+python3 calibration/nucleotide_cli_check.py            # about 1 min
 python3 calibration/summarize.py
 ```
 

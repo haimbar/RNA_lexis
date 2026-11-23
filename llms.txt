@@ -542,6 +542,8 @@ rows = score_exact_motifs(txt, corelist, xmotifs=xmotifs)
 
 ### `rank_core_candidates(txt, xmotifs, *, candidate_min_len=5, candidate_max_len=18, min_xmotif_type_support=2, **score_kwargs) -> list[dict]`
 
+Caution: with the default settings (xmotifs found with minimum length 7 and 2 occurrences, `candidate_min_len=5`), random nucleotide text gets at least one `statistically_supported` core in about 12% of 900-nt, 31% of 2,000-nt and 49% of 4,500-nt texts, because the FDR correction runs over the candidate list only. Xmotif minimum length 8, 3 occurrences (`min_count=3`) and `candidate_min_len=7` gave none in 300 random texts at each of those lengths. See `calibration/README.md`.
+
 Enumerate all shared substrings of `xmotifs` within the length range, score each
 against the Markov background, and return a ranked list. Same columns as
 `score_exact_motifs`, plus `rank_statistical` and `rank_coverage`.

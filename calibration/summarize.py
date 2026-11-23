@@ -79,10 +79,11 @@ def main():
     L.append(table(["N", "background"] + [f"{a}/{b}" for a, b in cells], rows))
 
     # ---- discovery + nucleotide reference -------------------------------------------
-    L.append("## The existing nucleotide pipeline on iid nucleotide text\n")
-    L.append(table(["nt", "settings (xmotif minlen, at_least, core minlen)", "texts", "fraction with candidates", "false-positive rate"],
-                   [[r["n_nt"], r["settings(xmotif_minlen,at_least,cand_minlen)"], r["texts"], r["frac_with_candidates"], r["fp_rate"]]
-                    for r in rd("nucleotide_reference.csv")]))
+    L.append("## `rna_lexis_stat_cli rank-cores` on iid nucleotide text (nucleotide_cli_check.py)\n")
+    L.append("Share of random texts (nothing planted) in which at least one core is called statistically supported.\n")
+    L.append(table(["nt", "settings", "--min-xmotif-len", "--min-count", "--candidate-min-len", "texts", "fraction with candidates", "fraction with a supported core"],
+                   [[r["n_nt"], r["settings"], r["min_xmotif_len"], r["min_count"], r["candidate_min_len"], r["texts"],
+                     r["frac_with_candidates"], r["frac_with_supported_core"]] for r in rd("nucleotide_cli_check.csv")]))
     pl = rd("pipeline_null.csv")
     mx = max(float(v.split("=")[1]) for r in pl for v in r["fp_rate_by_background"].split(";"))
     wc = max(float(r["frac_with_candidates"]) for r in pl)

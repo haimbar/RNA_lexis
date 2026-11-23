@@ -1,0 +1,7 @@
+n_nt,settings,min_xmotif_len,min_count,candidate_min_len,texts,frac_with_candidates,frac_with_supported_core
+900,CLI defaults,7,2,5,300,0.5433,0.1167
+900,stricter,8,3,7,300,0.0,0.0
+2000,CLI defaults,7,2,5,300,0.9767,0.3133
+2000,stricter,8,3,7,300,0.0,0.0
+4500,CLI defaults,7,2,5,300,1.0,0.4933
+4500,stricter,8,3,7,300,0.0,0.0
