@@ -615,7 +615,9 @@ Not part of the first release. Listed so the design leaves room for them.
    and amino-acid substitution matrices (BLOSUM) for the alignment code
    (section 3.7).
 4. **Unit-level view of the positions around a motif** (replaces the earlier
-   "unit-level logo plot" item; background in `docs/TODO-unit-level-logo.txt`). A
+   "unit-level logo plot" item; background in `docs/TODO-unit-level-logo.txt`; a first
+   version, the log-odds heatmap, is in phase 5 and its status is under
+   "Phase 5 status"). A
    logo draws each position as a stack of symbols scaled by information content,
    which is capped at log2(K) bits: about 4.7 for 26 letters, 4.3 for 20 amino
    acids and 6 for 64 codons. In language or protein text the positions around a
@@ -656,3 +658,52 @@ Not part of the first release. Listed so the design leaves room for them.
    the section 7 simulation from the user's own text (simulating from its
    fitted background) and report the false-positive rate and a suggested
    background setting. Not scheduled.
+10. **Several documents, with and without concatenation.** Analyze a set of
+    documents separately and jointly, and compare what each one uses. Texts in the
+    same language differ in vocabulary (the US Constitution and *Winnie the Pooh*),
+    and texts from different periods differ in spelling ("chuse" in the Constitution,
+    "choose" in a 21st-century law), although they share much. Two ways to run a
+    corpus, which answer different questions: *separately* (each document keeps its
+    own xmotifs, cores and background, and the results are compared), and
+    *concatenated* (one text with a segment boundary between documents, so a motif
+    cannot span two of them; discovery then finds what recurs across documents, and
+    the statistics use one pooled background). Things this needs, none built yet:
+    - a corpus object that holds the documents, their alphabet and their segment
+      boundaries, and reports for every motif in which documents it occurs and how
+      often (the segment machinery of sections 3.5 and 3.6 is the base);
+    - a test for whether a motif is enriched in one document relative to another
+      or to the rest of the corpus (a two-sample version of the current test, with
+      the correction taken over the pooled search space);
+    - **variants across documents.** "chuse" and "choose" differ by an insertion, so
+      the Hamming-tolerant search of the package will not link them; linking
+      spelling variants needs alignment-based (edit-distance) matching, for which
+      the Gotoh code is the starting point;
+    - uses: classifying a new document (or a gene) by which of a reference
+      collection's motifs it contains, and item 11.
+11. **Detecting similar documents in a corpus.** For every pair of documents, a
+    similarity from the motifs they share (for example the weighted coverage of the
+    shared cores, or a Jaccard index of the core sets), then ranking, clustering or an
+    ordination of the documents, and a flag for near-duplicates. Questions to settle:
+    what null a "similar" pair is compared with (two documents drawn from the same
+    background share some motifs by chance, more so the longer they are); how to
+    compare documents of very different lengths; and cost, since all pairs is
+    quadratic in the number of documents, which for a large corpus calls for an index
+    (for example from the k-mers or cores of each document) instead of a pairwise
+    search. Depends on item 10 for the representation. The same machinery would find
+    genes with similar motif content.
+12. **DNA methylation.** A fifth symbol for a methylated cytosine (say `M`), so that
+    the alphabet is `a c g t m` and a methylated C is not lost or confused with an
+    unmethylated one. First version, as proposed: look for the patterns that would be
+    found if the Ms (or some of them) were Cs. Notes for when this is built:
+    - the simplest form is a **many-to-one projection** of the alphabet (`m` becomes
+      `c`), which is the same mechanism as the codon-to-amino-acid projection of
+      phase 5; "some of them" needs a pattern that matches either symbol (a class
+      `[cm]`), which is a different feature (matching under an equivalence);
+    - the statistics need a decision: a background over five symbols, or over the
+      projected four, and which the declared alphabet size K is for the correction;
+    - methylation is largely at CpG, and on the opposite strand a methylated C
+      appears as the G of a CpG, so reverse complements and strand handling need
+      thought (a symbol for the opposite-strand mark, or a rule);
+    - where the data come from (bisulfite or enzymatic conversion, nanopore calls) and
+      what is a methylated "letter" when only a fraction of reads is methylated: a
+      threshold, or a per-position fraction that the symbols cannot hold.
