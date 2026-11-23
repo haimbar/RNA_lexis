@@ -341,10 +341,10 @@ above; otherwise the section 3.4 recommendation is revised.
    must run before phase 2. Related but separate: question 2 asks a
    different question (dependence on synonymous choice with the amino acid
    sequence held fixed), not a better background for the same test.
-2. **A synonymous-shuffle null:** keep the amino acid sequence, permute the
-   codons within each amino acid. It tests directly whether a motif depends
-   on synonymous choice. A natural fit for the motivation, but a separate
-   feature.
+2. ~~A synonymous-shuffle null~~ Decided: wishlist, high priority, not
+   in the first release (section 12, item 1). It asks a different question
+   from question 1: whether a motif depends on synonymous choice with the
+   amino acid sequence held fixed.
 3. ~~Where `eng2rna` lives~~ Decided: it stays in GeneDB. The package gets
    a generalized codec instead (section 3.8). Remaining detail: which
    assignment rules (explicit, seeded permutation, balanced) ship first.
@@ -381,8 +381,7 @@ Each phase should be shippable and leave nucleotide behavior unchanged.
    `llms.txt` cross-links kept intact).
 5. Alphabet-aware defaults and calibration; amino-acid projection; unit-level
    logo.
-6. Optional: unit distance matrices, synonymous-shuffle null, packaging
-   alias.
+6. Wishlist items (section 12), starting with the synonymous-codon test.
 
 ## 11. Risks
 
@@ -398,17 +397,42 @@ Each phase should be shippable and leave nucleotide behavior unchanged.
 
 Not part of the first release. Listed so the design leaves room for them.
 
-1. **Other genetic codes:** mitochondrial, and the other NCBI translation
+1. **Synonymous-codon test (high priority).** Whether a codon motif
+   repeats beyond what its peptide implies, with the amino acid sequence
+   held fixed. Not part of the first release, but the design keeps room for
+   it: the amino-acid projection (section 3.7) and a replaceable codon table
+   are the prerequisites.
+   - Analytic, no shuffling. For a codon motif m, let n be the number of
+     places where the peptide window equals the translation of m. Under
+     the null each such window matches the exact codons with probability
+     p, the product along the motif of the conditional codon usage
+     q(codon | amino acid). The observed codon count is tested against
+     Binomial(n, p), with the existing overlap handling.
+   - Splits the Q1 enrichment into peptide-level enrichment (the same
+     pipeline on the amino-acid projection) and excess concordance given
+     the peptide (this test).
+   - Needs at least two peptide-level occurrences, so it applies to
+     repeat-rich regions. Single-codon amino acids (Met, Trp) carry no
+     information; a report column for the motif's synonymous information
+     (roughly the log of the number of synonymous options across its
+     positions) tells the user how much the test could have shown.
+   - Cannot distinguish selection from a recent duplication, which also
+     keeps codons identical. The documentation should say so.
+   - q(codon | amino acid) is thin for rare amino acids in one transcript,
+     so item 7 below is its natural shrinkage target.
+   - A shuffle simulation is useful only as a unit test of the analytic
+     p-values.
+   - A cheap companion that could ride along with the projection: classify
+     each mismatch in an approximate hit as synonymous or non-synonymous.
+     Not scheduled.
+2. **Other genetic codes:** mitochondrial, and the other NCBI translation
    tables, for the codon-to-amino-acid projection (section 3.7). The first
    release has the standard code only. The projection should be a
    replaceable table, not hardcoded, so this is an addition and not a
    rewrite.
-2. **Unit distance matrices:** partial credit for near-synonymous codons,
+3. **Unit distance matrices:** partial credit for near-synonymous codons,
    and amino-acid substitution matrices (BLOSUM) for the alignment code
    (section 3.7).
-3. **Synonymous-shuffle null:** permute codons within each amino acid to
-   test whether a motif depends on synonymous choice (section 9,
-   question 2).
 4. **Unit-level logo plot:** its own renderer for 64 or more symbols
    (section 5).
 5. **Codon-level reverse complement and stop-codon splitting** of segments
