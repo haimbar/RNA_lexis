@@ -714,6 +714,31 @@ from the statistical functions keep the internal string, so they can be fed back
 
 ## Worked workflows
 
+### 0 — Read a coding sequence in codons
+
+Every codon is one unit: positions, lengths and mismatches are in codons, synonymous codons
+are different units, and results are written as `ATG AAA TTT`. Run on a toy 400-codon text
+with a planted 7-codon core family it reports 15 supported motifs, all pieces of that core.
+
+```python
+from rna_lexis.alphabet import codon
+from rna_lexis.tokenizers import tokenize
+from rna_lexis.algorithms import find_boundary
+from rna_lexis.statistical import rank_core_candidates, write_rows_csv
+
+A = codon()                                            # 64 codons, read three nucleotides at a time
+seq = "".join(l.strip() for l in open("cds.fasta") if not l.startswith(">"))
+tok = tokenize(seq, A, frame=0)                        # tok.text: one character per codon
+xmotifs = sorted(set(find_boundary(tok.text, minlen=4, maxlen=60, at_least=2)))
+rows = rank_core_candidates(tok.text, xmotifs, candidate_min_len=3, alphabet=A)
+write_rows_csv("ranked_cores.csv", rows, alphabet=A)   # motifs decoded: ATG AAA TTT
+```
+
+The same from the shell: `rna_lexis_stat_cli rank-cores --input cds.fasta --output ranked_cores.csv
+--alphabet codon --min-xmotif-len 4 --candidate-min-len 3`. In the interactive menu the choice is
+made when new text is loaded. Lengths are in units; the nucleotide defaults (7, 6, 5) are long
+for codons (these starting points are not calibrated).
+
 ### 1 — Standard pipeline: load → discover → save
 
 ```python
@@ -887,7 +912,7 @@ if len(positions) >= 3:
 |---|---|
 | Sequence characters | `read_text` returns `[a-z]` only; pass this directly to all algorithm functions |
 | RNA vs DNA | If input contains `'u'` (and no `'t'`), replace `u→t` before calling algorithms; set `is_rna=True` in SessionData |
-| Statistical functions | Expect lower-case, `u`-free sequences; call `normalize_sequence()` if unsure |
+| Statistical functions | Expect lower-case, `u`-free sequences; call `normalize_sequence()` if unsure. With `alphabet=`, texts and motifs are *internal strings* from `tokenize(...).text`, and a character that is not an internal character raises `ValueError` |
 | Minimum length for mutations | `find_with_mutations` requires `len(seq) >= 1/mutr` (default 6 nt) to apply substitutions |
 | Minimum occurrences for `cover()` | Returns 0 when `s` appears fewer than twice |
 | `find_longest_extensions` | Returns `[]` when seed occurs fewer than twice; O(n²) in occurrences |

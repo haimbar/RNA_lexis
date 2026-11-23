@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **Non-nucleotide text loaded in the menu is now read as Latin letters.** Previously
+  such text kept the nucleotide-only statistics code, which silently dropped everything
+  that is not A, C, G, T or U, so the statistical items gave meaningless results.
+  Plots and searches are unchanged (letters are their own internal characters); the
+  statistical items and the summary table now use the declared 26-letter alphabet. Old
+  session files without an alphabet load as before.
+
 ### Documentation
 
 - **The batch CLI examples in the README and the user guide did not work.** They showed
@@ -19,6 +28,25 @@
 
 ### Added
 
+- **The menu and the batch CLI can read text as codons, letters or other units (phase 4
+  of the codon-level work).** When new text is loaded the menu asks how to read it:
+  automatic, codons (with a reading frame), Latin letters, or an alphabet from a JSON
+  file. The alphabet and a short reading summary are saved in the session and restored
+  when it is loaded, and the main menu shows the alphabet next to the file name. Every
+  input handler takes the alphabet: typed queries are read like the text (codon queries
+  are typed as nucleotides, `.` stays a one-unit wildcard), results are decoded for the
+  screen and for CSV files, "nt" becomes the unit name, and the session summary
+  (`_test_init.csv`) is computed over the declared alphabet and shows motifs as labels.
+  Items that need nucleotides (logo, GC-content comparison, hairpins, the reverse-
+  complement option of the shared-motif diagram, the BLAST bit score and E-value) are
+  refused with an explanation. Comparison sequences are read over the session's alphabet,
+  and a saved session read over a different alphabet is refused. `rna_lexis_stat_cli`
+  takes `--alphabet` (nucleotide, codon, latin, or an alphabet file), `--frame` and
+  `--on-unknown skip|error`; FASTA records are segments no motif spans, and
+  `--markov-order` now defaults to None (order 1 for nucleotides as before, the
+  calibrated rule over an alphabet). Nucleotide sessions and CLI calls behave exactly as
+  before (23 menu outputs compared). 41 new tests drive the menu handlers with scripted
+  answers and the CLI end to end.
 - **Results can be shown as codons, letters or syllables (phase 3 of the codon-level
   work).** `Alphabet.show(internal, mask=None, sep=None, upper=False, pad=False)` turns
   an internal string into readable text, with a mask for "this unit differs" (upper

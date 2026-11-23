@@ -24,6 +24,7 @@ called **xmotifs** and extracts their shorter conserved cores. From there you ca
 - **Search for anchor-gap-anchor gapped motif patterns**
 - **Test whether motif occurrences are spaced periodically (gap-cluster and Rayleigh tests)**
 - Clear workspace (remove all generated files while preserving the input sequence)
+- **Read the text in codons, letters or other units, not only nucleotides** — pick an alphabet when the text is loaded (codons with a reading frame, Latin letters, or an alphabet file such as Greek letters or syllables); positions, mismatches, statistics, plots and result files are then in those units, and synonymous codons stay distinct. See *Reading text as codons, letters or other units* below.
 - **Try it instantly on a real dataset** — human and mouse NORAD transcripts
   ship with the package itself (`pip install` and go, no fetching or
   pasting required); see *Load example dataset* below.
@@ -60,11 +61,12 @@ characterises every xmotif and core. The file is named `<session>_test_init.csv`
 | `p_stable` | Binomial p-value for sequence stability (see below) |
 | `maxmut` | maximum mutations allowed by the search (`floor(len × mutr)`, capped at `M`) |
 
-### Statistical columns (RNA/DNA sequences only)
+### Statistical columns (nucleotide text, or text read over an alphabet)
 
-For sequences whose alphabet is a subset of `{a, c, g, t, u}`, the following
+For sequences whose alphabet is a subset of `{a, c, g, t, u}`, and for text read over
+an alphabet (see *Reading text as codons, letters or other units*), the following
 columns are also added by scoring each motif against a transcript-specific
-first-order Markov background:
+Markov background (first order for nucleotides; the calibrated default for other alphabets):
 
 | column | description |
 |---|---|
@@ -175,6 +177,31 @@ that positions cluster at a consistent phase relative to T.
 Either test reaching p < 0.05 is reported as a positive periodicity signal.
 Requires at least 3 exact occurrences.
 
+### Reading text as codons, letters or other units
+
+By default a sequence is nucleotides. When new text is loaded the menu asks how to read
+it: **automatic** (nucleotides if the text is only A, C, G, T or U, otherwise Latin
+letters), **codons** (three nucleotides at a time, with a reading frame, so synonymous
+codons are different units), **Latin letters**, or **an alphabet from a file** (Greek
+letters, syllable names, ...). Everything is then in those units: positions, lengths and
+mismatch counts, the statistics, the plots, and the result files, which show
+`ATG AAA TTT` and not nine nucleotides. The alphabet is *declared*, not observed: a
+letter that never occurs still counts, so an English text with no `z` is analysed over 26
+letters.
+
+For these alphabets the Markov background is order 0 for codons and order 1 for letters,
+and the false-discovery correction runs within each motif length over every possible
+word of that length. Both were chosen by simulation (`calibration/README.md`). Items that
+need nucleotides (logo, hairpins, GC content, reverse complement) are not available, and
+the menu says so. The batch CLI takes `--alphabet`, `--frame` and `--on-unknown`; the
+sections *Reading the Text* and *Batch CLI* of `docs/user_guide.md` and the alphabet
+modules in `llms.txt` give the details and a worked example.
+
+```
+rna_lexis_stat_cli rank-cores --input cds.fasta --output cores.csv --alphabet codon \
+    --min-xmotif-len 4 --candidate-min-len 3
+```
+
 ### Batch CLI (`rna_lexis_stat_cli`)
 
 A separate command-line interface supports batch statistical workflows without
@@ -189,7 +216,9 @@ rna_lexis_stat_cli gapped-motif      --input FILE --left LEFT --right RIGHT --ou
 
 `--input` is a FASTA or plain sequence file. `--motifs` (and `--xmotifs`) is a file
 holding the motifs: a plain list, a CSV/TSV (name the column with `--motif-column`),
-or a session JSON. `<command> --help` lists every option and its default.
+or a session JSON. `<command> --help` lists every option and its default. Add `--alphabet codon` (or `latin`, or
+an alphabet file), `--frame` and `--on-unknown skip|error` to read the text in codons, letters or
+other units; without `--alphabet` nothing changes.
 
 #### Default settings and false positives
 

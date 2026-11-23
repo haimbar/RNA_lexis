@@ -78,12 +78,57 @@ See <em>2.9 Rank core motifs</em> for the default settings of <code>rank-cores</
 <h3>5 - Python prompt</h3>
 <p>Returns control to the Python interpreter.</p>
 <hr />
+<h2>Reading the Text: Nucleotides, Codons, Letters and Other Alphabets</h2>
+<p>By default the tool treats a sequence as nucleotides: every position, length and mismatch is counted in nucleotides. It can also read the text in <strong>units</strong> — codons, letters, syllables — so that positions, lengths, mismatch counts and every plot are in those units, and results are shown as the units themselves (<code>ATG AAA TTT</code>, not nine nucleotides).</p>
+<p>After a new input is loaded the menu asks how to read it:</p>
+<pre><code>--- How to read the text ---
+1. Automatic (nucleotides if only A, C, G, T or U; otherwise Latin letters)
+2. Codons (read 3 nucleotides at a time)
+3. Latin letters (a-z)
+4. An alphabet from a file (e.g. Greek letters, syllables)
+5. Cancel
+</code></pre>
+<ul>
+<li><strong>Automatic</strong> leaves nucleotide text exactly as before. Any other text (English, a protein written in one-letter codes) is read as Latin letters.</li>
+<li><strong>Codons</strong> asks for a <strong>reading frame</strong> (0, 1 or 2): the number of nucleotides to skip at the start. Use the frame that starts the coding sequence; the Ensembl option fetches the full transcript including untranslated regions, so for coding analysis use a coding sequence (CDS) file. A codon that contains something other than A, C, G, T or U (such as <code>N</code>) is skipped as a whole, so the frame is never shifted by it, and a partial codon at the end is dropped. Synonymous codons are different units, so they are distinguished.</li>
+<li><strong>An alphabet from a file</strong> reads text over any set of symbols (see below).</li>
+</ul>
+<p>The choice is saved in the session file and restored when the session is loaded; the main menu shows it next to the file name, and <em>Show settings</em> shows what was read (units read, symbols skipped, characters dropped).</p>
+<h3>The alphabet is declared, not observed</h3>
+<p>An alphabet is the full set of symbols, whether or not a given text uses them. An English text with no <code>z</code> is still analysed over 26 letters, and a transcript that never uses one of the 64 codons is still analysed over 64. This matters for the statistics: pseudocounts, the number of possible words and the number of variants of a motif all use the declared size.</p>
+<h3>Typing queries</h3>
+<p>Queries (a motif to search for, an anchor, a seed) are read the same way as the text. For codons, type nucleotides: <code>atgaaagct</code> is the three units <code>atg aaa gct</code>. <code>.</code> stands for any one unit where the prompt says it is allowed, so <code>atgaaa.</code> is two codons followed by any codon. Symbols that are not in the alphabet are dropped with a warning.</p>
+<h3>Unknown symbols</h3>
+<p>A symbol that is not in the alphabet is skipped with a warning that says how many were skipped, which ones and where (digits and punctuation in a text file, for example). Skipping makes the units on either side of it neighbors that were not neighbors in the file, so a motif found across a skipped symbol may not exist in the original. The batch CLI can stop instead (<code>--on-unknown error</code>).</p>
+<h3>An alphabet file</h3>
+<p>An alphabet file is JSON. The simplest form lists the symbols:</p>
+<pre><code class="language-json">{&quot;name&quot;: &quot;Greek letters&quot;,
+ &quot;symbols&quot;: [&quot;α&quot;, &quot;β&quot;, &quot;γ&quot;, &quot;δ&quot;, &quot;ε&quot;, &quot;ζ&quot;, &quot;η&quot;, &quot;θ&quot;, &quot;ι&quot;, &quot;κ&quot;, &quot;λ&quot;, &quot;μ&quot;,
+             &quot;ν&quot;, &quot;ξ&quot;, &quot;ο&quot;, &quot;π&quot;, &quot;ρ&quot;, &quot;σ&quot;, &quot;τ&quot;, &quot;υ&quot;, &quot;φ&quot;, &quot;χ&quot;, &quot;ψ&quot;, &quot;ω&quot;]}
+</code></pre>
+<p>Other fields (all optional): <code>"mode"</code> (<code>"chars"</code> one character per symbol, the default; <code>"fixed"</code> with <code>"width"</code> characters per symbol, as codons; <code>"words"</code> whitespace-separated labels, e.g. syllable names), <code>"extras"</code> (single characters that belong to the alphabet beside the symbols, such as a space or digits; they count in the statistics and can appear inside motifs), <code>"unit_name"</code> (what axes call one symbol), <code>"display_sep"</code> (what goes between symbols when shown), <code>"aliases"</code> (for example <code>{"u": "t"}</code>), <code>"case_sensitive"</code>, and <code>"symbols"</code> entries of the form <code>{"label": "a", "code": "ttt"}</code> to give each symbol a nucleotide code. Python helpers in <code>rna_lexis.alphabet</code>, <code>rna_lexis.tokenizers</code> and <code>rna_lexis.codec</code> build alphabets and codebooks and convert between units and nucleotides (see <code>llms.txt</code>).</p>
+<h3>What changes in the analysis</h3>
+<ul>
+<li><strong>The background.</strong> The Markov background is order 0 for codons and order 1 for letter alphabets (order 1 when the text has at least one observation per transition, otherwise order 0); chosen by simulation (<code>calibration/README.md</code>).</li>
+<li><strong>The multiple-testing correction</strong> in <em>Rank core motifs</em>, and in the summary table, corrects within each motif length over all <code>K^L</code> possible words (<code>K</code> = alphabet size). Nucleotide text keeps its existing correction, so numbers are not comparable between the two modes.</li>
+<li><strong>Lengths are in units.</strong> <em>Min xmotif length</em>, <em>Min core length</em> and the candidate lengths in <em>Rank core motifs</em> count units, and the nucleotide defaults (7, 6, 5) are long for codons: 7 codons is 21 nucleotides. For codons try a minimum xmotif length of 4 and candidate core length of 3. These are starting points; they have not been calibrated.</li>
+<li><strong>Motifs never span a segment boundary</strong> (the units on either side of a boundary between FASTA records or pasted blocks are not neighbors).</li>
+<li><strong>Not available for other alphabets</strong>, because they need nucleotides: <em>Logo</em>, <em>Compare motif coverage vs. GC-content</em>, <em>Export hairpins to CSV</em>, the reverse-complement option of the shared-motif diagram, and the BLAST bit score and E-value of <em>Alignment score</em>. The menu says so and returns.</li>
+<li><strong>Comparison sequences</strong> (shared-motif diagram, coverage comparison) are read over the same alphabet; a saved session read over a different alphabet is refused.</li>
+</ul>
+<h3>Batch CLI</h3>
+<p><code>rna_lexis_stat_cli</code> takes the same choice: <code>--alphabet</code> (<code>nucleotide</code>, <code>codon</code>, <code>latin</code>, or the path of an alphabet file), <code>--frame</code> (reading frame for codons) and <code>--on-unknown</code> (<code>skip</code>, the default, or <code>error</code>). Motifs, anchors and queries are read the same way, FASTA records are segments, and results are written as the alphabet's labels:</p>
+<pre><code class="language-bash">rna_lexis_stat_cli rank-cores --input cds.fasta --output cores.csv \
+    --alphabet codon --frame 0 --min-xmotif-len 4 --candidate-min-len 3
+</code></pre>
+<p>Without <code>--alphabet</code> nothing changes.</p>
+<hr />
 <h2>Session Management</h2>
 <p>After loading a sequence the tool automatically:</p>
 <ul>
 <li><strong>Parses</strong> the text to find xmotifs and cores.</li>
 <li><strong>Saves a session file</strong> (<code>&lt;name&gt;.json</code>) containing the sequence, xmotifs, cores, and summary statistics. On the next run, if this is the only session file in the directory, it is loaded automatically and the parsing step is skipped.</li>
-<li><strong>Creates a summary CSV</strong> (<code>&lt;name&gt;_test_init.csv</code>) with per-sequence statistics (length, occurrence count, mutation rate, stability p-value, and — for RNA/DNA sequences — Markov enrichment and FDR q-values) and opens it in your default spreadsheet application.</li>
+<li><strong>Creates a summary CSV</strong> (<code>&lt;name&gt;_test_init.csv</code>) with per-sequence statistics (length, occurrence count, mutation rate, stability p-value, and — for nucleotide text or text read over an alphabet — Markov enrichment and FDR q-values) and opens it in your default spreadsheet application.</li>
 </ul>
 <p>To re-open that CSV at any time, use <strong>Open Core file</strong> from the main menu. See below, in the Main Menu section.</p>
 <hr />

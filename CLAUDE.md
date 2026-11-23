@@ -9,7 +9,7 @@ API reference) — this file is about *working on* the repo, not using it.
 
 - Tests: `python3 -m pytest -q` (plain `python` may resolve to a Python
   without pytest installed in some environments — use `python3` explicitly).
-  230 tests: `test_statistical.py`, `test_algorithms.py`, `test_io.py`,
+  271 tests: `test_statistical.py`, `test_algorithms.py`, `test_io.py`,
   `test_alignment.py`, `test_batch_cli.py` (all synthetic-data
   unit/end-to-end, no real biological data or network calls), plus
   `test_norad_integration.py` (8 tests — real biology, no network calls
@@ -97,8 +97,8 @@ mapping), `tokenizers.py` (text → internal string, with unknown-symbol and
 frame handling) and `codec.py` (units ↔ nucleotide text, codebook files).
 `statistical.py` takes `alphabet=` throughout (phase 2) and the display code decodes
 results for it (phase 3: `Alphabet.show`, the plot functions, `print_core`,
-`print_alignment`, `write_rows_csv`); `menu.py` and the CLI do not use alphabets yet
-(phase 4).
+`print_alignment`, `write_rows_csv`); `menu.py` and `test_cli.py` read the text over an
+alphabet (phase 4: `_choose_reading` in the menu, `--alphabet` in the CLI).
 
 ## Known gotchas / established conventions
 

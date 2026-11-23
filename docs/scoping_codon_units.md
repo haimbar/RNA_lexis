@@ -535,6 +535,32 @@ Left for phase 4: the menu and CLI (choosing an alphabet, loading a codebook, `-
 `--frame`, `--on-unknown`), hiding or warning on the nucleotide-only items, session files
 that remember the alphabet, and the user-facing documentation.
 
+### Phase 4 status
+
+Phase 4 is implemented: the menu, the batch CLI and the user-facing documentation, with 41
+new tests (menu handlers driven by scripted answers, the CLI end to end). Nucleotide sessions
+and CLI calls behave exactly as before (23 menu outputs compared before and after). Choices:
+
+- **Where the choice is made.** When new text is loaded the menu asks how to read it
+  (automatic, codons with a frame, Latin letters, an alphabet file); loading a saved
+  session restores its alphabet. The CLI takes `--alphabet`, `--frame`, `--on-unknown`.
+  Automatic reads non-nucleotide text as Latin letters, which changes the statistical
+  items for such text (they previously dropped every character that is not A, C, G, T, U);
+  this is in the changelog.
+- **Typed queries are read like the text**, so codon motifs are typed as nucleotides; `.`
+  stays a one-unit wildcard where the prompt allows it.
+- **Per-alphabet defaults are not wired in yet.** The Markov order and the multiple-testing
+  family follow the calibration, but the length defaults (minimum xmotif, core and candidate
+  lengths) are still the nucleotide ones; the user guide says so and gives codon starting
+  points that are not calibrated. Calibrating them, and letting an alphabet file carry its own
+  `defaults`, is the remaining phase 5 work.
+- **Mixed-up answers in a scripted run are not an error in the menu.** The menu has no
+  automated terminal tests; the new tests replace `safe_input` with a script and check the
+  handlers directly, including that nothing private-use reaches the console or a file.
+- **Not done:** the interactive "Change setting" prompts do not offer per-alphabet defaults,
+  the ENST fetch still returns the full transcript (use a CDS file for codon work), and
+  `plot_logo`, hairpins and GC content remain nucleotide-only.
+
 ## 11. Risks
 
 - The discovery defaults (section 7) are still uncalibrated, and the
