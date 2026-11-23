@@ -5,6 +5,7 @@ import sys
 import glob
 import webbrowser
 import multiprocessing
+import warnings
 from os import getpid, chdir
 from os.path import dirname
 from re import sub
@@ -26,6 +27,8 @@ from rna_lexis.algorithms import (
     sliding_coverage_fraction, coverage_comparison_warnings,
 )
 from rna_lexis.alignment import gotoh_global, gotoh_local, print_alignment
+from rna_lexis.alphabet import Alphabet, BOUNDARY, latin, codon, get_alphabet
+from rna_lexis.tokenizers import tokenize
 from rna_lexis.plots import (
     plot_logo, plotzscore, plotkmerhist, plot_frequency_rank,
     plot_seq_nbrs, plot_nbrs_condensed, export_nbrs_condensed,
@@ -236,10 +239,176 @@ def _load_fasta_or_text(file_path):
     if is_rna:
         txt = re.sub(r"[^A-Za-z]+", "", txt).lower().replace("u", "t")
     result = {'file_path': file_path, 'txt': txt,
-              'is_rna': is_rna, 'txtb': txtb, 'dir': dirname(file_path)}
+              'is_rna': is_rna, 'txtb': txtb, 'dir': dirname(file_path), 'raw': raw}
     if gene_name:
         result['gene_name'] = gene_name
     return result
+
+
+# ---------------------------------------------------------------------------
+# Reading the text over an alphabet
+# ---------------------------------------------------------------------------
+# A session either has no alphabet (nucleotide text, read as it always was) or
+# an Alphabet: the text is then an internal string, one character per unit
+# (codon, letter, syllable), and everything shown is decoded from it.
+
+def _read_text_as(text, alphabet, frame=0, on_unknown='skip'):
+    """Read ``text`` into ``alphabet`` and report what was skipped or dropped.
+
+    Returns:
+        ``(internal_text, reading)`` where ``reading`` is a small dict to store
+        in the session (alphabet name, mode, frame, units read, symbols
+        skipped, characters dropped), or ``(None, None)`` if nothing could be
+        read.
+    """
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always')
+        tok = tokenize(text, alphabet, frame=frame, on_unknown=on_unknown)
+    for w in caught:
+        print(fmttxt([str(w.message)], [''], ['yellow']))
+    if tok.n_units == 0:
+        print(fmttxt([f"No {alphabet.units_label} could be read with the alphabet "
+                      f"'{alphabet.name}'."], ['bold'], ['red']))
+        return None, None
+    reading = {
+        'alphabet': alphabet.name, 'mode': alphabet.mode, 'frame': frame,
+        'units': tok.n_units, 'skipped': len(tok.skipped),
+        'dropped': sum(len(d.text) for d in tok.dropped),
+    }
+    return tok.text, reading
+
+
+def _alphabet_of(data):
+    """The Alphabet of a session dict (stored as a dict in the JSON), or None for nucleotide text."""
+    a = data.get('alphabet')
+    return Alphabet.from_dict(a) if isinstance(a, dict) else a
+
+
+def _query_to_internal(raw, alphabet, wildcard=False):
+    """Turn something the user typed into an internal string.
+
+    Without an alphabet (nucleotide text) the query is returned as it is.  With
+    one, it is read like the text itself: for codons the user types nucleotides
+    (``atgaaa`` is two units), for letters the letters.  ``wildcard=True`` keeps
+    ``.`` as "any one unit" (the regular-expression wildcard).  Symbols that
+    are not in the alphabet are dropped with a warning, as when loading.
+    """
+    if alphabet is None:
+        return raw
+    pieces = raw.split('.') if wildcard else [raw]
+    out = []
+    for piece in pieces:
+        if piece.strip() == '':
+            out.append('')
+            continue
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter('always')
+            out.append(tokenize(piece, alphabet).text)
+        for w in caught:
+            print(fmttxt([str(w.message)], [''], ['yellow']))
+    return '.'.join(out)
+
+
+def _show(internal, alphabet):
+    """An internal string as text for the screen (unchanged without an alphabet)."""
+    return internal if alphabet is None else alphabet.show(internal)
+
+
+def _unit(alphabet):
+    """The plural unit noun for messages: 'nt' for nucleotide text."""
+    return 'nt' if alphabet is None else alphabet.units_label
+
+
+def _slug(internal, alphabet):
+    """A short, file-name-safe version of an internal string, for default file names."""
+    return re.sub(r'[^a-zA-Z0-9_-]', '_', _show(internal, alphabet))[:40]
+
+
+def _highlight(seq, matched, alphabet, on, off):
+    """``matched`` with the units that differ from ``seq`` in red upper case."""
+    if alphabet is None:
+        return ''.join(f'{on}{mark_case(mc, True)}{off}' if mc != sc else mc
+                       for sc, mc in zip(seq, matched))
+    return alphabet.sep.join(
+        f'{on}{alphabet.show(mc, [True])}{off}' if mc != sc else alphabet.show(mc)
+        for sc, mc in zip(seq, matched))
+
+
+def _nucleotide_ok(alphabet, is_rna, feature):
+    """True if the text is nucleotide text; otherwise say why ``feature`` is unavailable."""
+    if alphabet is None and is_rna:
+        return True
+    name = 'text that is not a nucleotide sequence' if alphabet is None else f"the alphabet '{alphabet.name}'"
+    print(fmttxt([f"{feature} needs a nucleotide sequence, but this session reads {name}.",
+                  "Load the sequence again and choose automatic or nucleotide reading to use it."],
+                 ['bold', ''], ['red', 'yellow']))
+    safe_input(fmttxt(["Press Enter to continue"], [''], ['white']))
+    return False
+
+
+def _choose_reading(data):
+    """Ask how a newly loaded text is to be read, and read it.
+
+    Sessions loaded from a file already carry their alphabet and are returned
+    as they are.  Otherwise the user chooses between automatic (nucleotides if
+    the text is only A, C, G, T or U, otherwise Latin letters), codons (with a
+    reading frame), Latin letters, and an alphabet file (for example Greek
+    letters, or syllables with a codebook).
+
+    Returns:
+        ``data`` with ``txt`` replaced by the internal string and ``alphabet``
+        and ``reading`` added when an alphabet is used; ``data`` unchanged for
+        nucleotide text; None if the user cancels or nothing can be read.
+    """
+    if data is None or data == -1 or data.get('corelist'):
+        return data
+    options = ["Automatic (nucleotides if only A, C, G, T or U; otherwise Latin letters)",
+               "Codons (read 3 nucleotides at a time)",
+               "Latin letters (a-z)",
+               "An alphabet from a file (e.g. Greek letters, syllables)",
+               "Cancel"]
+    choice = show_menu("How to read the text", "Choose how the text is read", options, clr=False)
+    if choice in (0, len(options)):
+        return None
+    base = data['txt']
+    if choice == 1:
+        if data.get('is_rna') or contains_only_rna(base):
+            return data
+        alphabet, frame, text = latin(), 0, base
+    elif choice == 2:
+        alphabet, text = codon(), base
+        if not (data.get('is_rna') or contains_only_rna(base)):
+            print(fmttxt(["This text has letters other than A, C, G, T, U; codons "
+                          "that contain them will be skipped."], [''], ['yellow']))
+        fr = safe_input(fmttxt(["Reading frame (characters to skip at the start)", "[0, 1 or 2; default 0]: "],
+                               ['bold', ''], ['yellow', 'cyan']) + ' ').strip()
+        frame = int(fr) if fr in ('0', '1', '2') else 0
+    elif choice == 3:
+        alphabet, frame, text = latin(), 0, base
+    else:
+        path = openFile(initial_dir=data.get('dir') or None)
+        if not path or not os.path.isfile(path):
+            return None
+        try:
+            alphabet = get_alphabet(path)
+        except Exception as exc:
+            print(fmttxt([f"Could not read the alphabet file: {exc}"], ['bold'], ['red']))
+            return None
+        text, frame = data.get('raw', base), 0
+        if alphabet.mode == 'fixed':
+            fr = safe_input(fmttxt(["Reading frame (characters to skip at the start)",
+                                    f"[0 to {alphabet.width - 1}; default 0]: "],
+                                   ['bold', ''], ['yellow', 'cyan']) + ' ').strip()
+            frame = int(fr) if fr.isdigit() and int(fr) < alphabet.width else 0
+    internal, reading = _read_text_as(text, alphabet, frame=frame)
+    if internal is None:
+        return None
+    print(fmttxt([f"Read {reading['units']:,} {alphabet.units_label} over the alphabet '{alphabet.name}' "
+                  f"({alphabet.size} symbols)."], ['bold'], ['green']))
+    data = dict(data)
+    data.update({'txt': internal, 'txtb': '', 'is_rna': False,
+                 'alphabet': alphabet, 'reading': reading})
+    return data
 
 
 def choose_file(datadir=''):
@@ -553,7 +722,35 @@ def _choose_encode_ccre():
     return {'label': accession, 'txt': txt}
 
 
-def choose_comparison_sequence(datadir=''):
+def _comparison_in_alphabet(data, alphabet, reading):
+    """Read a comparison sequence over the same alphabet as the session.
+
+    A session that was already read over an alphabet must have the same one;
+    anything else is read from its text with the session's alphabet and frame.
+    Returns the updated data dict, or None if it cannot be used.
+    """
+    other = _alphabet_of(data)
+    if data.get('corelist') is not None or data.get('alphabet') is not None:
+        if other is None or other.to_dict() != alphabet.to_dict():
+            print(fmttxt([f"That session was read over "
+                          f"{'nucleotides' if other is None else repr(other.name)}, not over "
+                          f"'{alphabet.name}', so the two cannot be compared."],
+                         ['bold'], ['red']))
+            return None
+        return data
+    frame = (reading or {}).get('frame', 0)
+    # built-in alphabets read the letters-only text; an alphabet from a file needs the full text
+    builtin = alphabet.name in ('codon', 'Latin letters', 'nucleotide')
+    text = data['txt'] if builtin else data.get('raw', data['txt'])
+    internal, comp_reading = _read_text_as(text, alphabet, frame=frame)
+    if internal is None:
+        return None
+    data = dict(data)
+    data.update({'txt': internal, 'txtb': '', 'is_rna': False, 'alphabet': alphabet, 'reading': comp_reading})
+    return data
+
+
+def choose_comparison_sequence(datadir='', alphabet=None, reading=None):
     """Prompt for a second ("comparison") sequence to plot or compare
     against the current one.
 
@@ -572,6 +769,11 @@ def choose_comparison_sequence(datadir=''):
 
     Args:
         datadir: Initial directory for file-picker/save dialogs.
+        alphabet: The current session's Alphabet (None for nucleotide text).
+            The comparison text is read with the same alphabet (and reading
+            frame, from ``reading``), so the two sequences are in the same
+            units; a saved session read with a different alphabet is refused.
+        reading: The current session's ``reading`` dict (for the frame).
 
     Returns:
         Dict with keys 'label' (str), 'txt' (str), 'corelist' (list or
@@ -606,6 +808,10 @@ def choose_comparison_sequence(datadir=''):
 
     if data is None:
         return None
+    if alphabet is not None:
+        data = _comparison_in_alphabet(data, alphabet, reading)
+        if data is None:
+            return None
 
     # Paste/ENST already prompted for (and got) a save directory in `dir` --
     # honor it by actually writing the session, so it's re-loadable later
@@ -621,6 +827,8 @@ def choose_comparison_sequence(datadir=''):
             'txtb': data.get('txtb', data['txt']),
             'is_rna': data.get('is_rna', False),
             'dir': data['dir'],
+            'alphabet': alphabet.to_dict() if alphabet else None,
+            'reading': data.get('reading'),
         })
         print(fmttxt([f'Comparison sequence saved to: {save_path}.json'], [''], ['cyan']))
         data['file_path'] = save_path
@@ -754,7 +962,7 @@ def show_menu(fn, ttl, submenu, clr: True, split=None, splits=None, labels=None)
             print(fmttxt(["\nInvalid input! Please use numeric digits.\n"],['bold'], ['red']))
 
 
-def _collect_neighbors_params(fn, txt, strs):
+def _collect_neighbors_params(fn, txt, strs, alphabet=None):
     """Collect user inputs shared by both Core neighbours plot handlers.
 
     Returns a dict with keys seq, wds, ttl, fn, scale, xrange, hairpins, wd,
@@ -762,6 +970,7 @@ def _collect_neighbors_params(fn, txt, strs):
     """
     file_path = fn
     seq = safe_input(fmttxt(["Enter the sequence to analyze: "], ['bold'], ['yellow']))
+    seq = _query_to_internal(seq, alphabet)
     if len(find_all_matches(seq, txt)) < 1:
         print(fmttxt(["\nSequence not found."], ['bold'], ['red']))
         safe_input(fmttxt(["Press any key to continue"], [''], ['white']))
@@ -780,7 +989,7 @@ def _collect_neighbors_params(fn, txt, strs):
     wds = safe_input(wds_prompt + " ")
     wds = strs["corelist"] if wds == '1' else strs["xmotifs"]
 
-    default_ttl = f"{os.path.basename(fn)} {seq}"
+    default_ttl = f"{os.path.basename(fn)} {_show(seq, alphabet)}"
     ttl = safe_input(fmttxt(["Enter a title for the plot ", f"[Default: '{default_ttl}']"],
                              ['bold', ''], ['yellow', 'cyan']) + " ")
     if ttl == '':
@@ -823,7 +1032,7 @@ def _collect_neighbors_params(fn, txt, strs):
                 xrange=xrange, hairpins=hairpins, wd=wd, min_occ=min_occ)
 
 
-def neighbors_input(fn, txt, strs):
+def neighbors_input(fn, txt, strs, alphabet=None):
     """Interactive handler for the 'Core neighbors (detailed)' plot.
 
     Prompts for all parameters and delegates to plot_seq_nbrs().
@@ -834,16 +1043,16 @@ def neighbors_input(fn, txt, strs):
         txt:  Full source sequence.
         strs: Session strings dict with keys ``'corelist'`` and ``'xmotifs'``.
     """
-    p = _collect_neighbors_params(fn, txt, strs)
+    p = _collect_neighbors_params(fn, txt, strs, alphabet)
     if p is None:
         return
     plot_seq_nbrs(p['seq'], p['wds'], txt, sortby='CP', wd=p['wd'],
                   title=p['ttl'], file=p['fn'],
                   xrange=p['xrange'], scale=p['scale'], hairpins=p['hairpins'],
-                  min_occ=p['min_occ'])
+                  min_occ=p['min_occ'], alphabet=alphabet)
 
 
-def neighbors_condensed_input(fn, txt, strs):
+def neighbors_condensed_input(fn, txt, strs, alphabet=None):
     """Interactive handler for the 'Core neighbors (condensed)' plot.
 
     Prompts for all parameters and delegates to plot_nbrs_condensed().
@@ -854,16 +1063,16 @@ def neighbors_condensed_input(fn, txt, strs):
         txt:  Full source sequence.
         strs: Session strings dict with keys ``'corelist'`` and ``'xmotifs'``.
     """
-    p = _collect_neighbors_params(fn, txt, strs)
+    p = _collect_neighbors_params(fn, txt, strs, alphabet)
     if p is None:
         return
     plot_nbrs_condensed(p['seq'], p['wds'], txt, sortby='CP', wd=p['wd'],
                         title=p['ttl'], file=p['fn'],
                         xrange=p['xrange'], scale=p['scale'], hairpins=p['hairpins'],
-                        min_occ=p['min_occ'])
+                        min_occ=p['min_occ'], alphabet=alphabet)
 
 
-def neighbors_condensed_export_input(fn, txt, strs):
+def neighbors_condensed_export_input(fn, txt, strs, alphabet=None):
     """Interactive handler for 'Core neighbors (text export)'.
 
     Prompts for sequence, window, candidate list, and optional range, then
@@ -875,6 +1084,7 @@ def neighbors_condensed_export_input(fn, txt, strs):
         strs: Session strings dict with keys 'corelist' and 'xmotifs'.
     """
     seq = safe_input(fmttxt(["Enter the sequence to analyze: "], ['bold'], ['yellow']))
+    seq = _query_to_internal(seq, alphabet)
     if len(find_all_matches(seq, txt)) < 1:
         print(fmttxt(["\nSequence not found."], ['bold'], ['red']))
         safe_input(fmttxt(["Press any key to continue"], [''], ['white']))
@@ -902,7 +1112,7 @@ def neighbors_condensed_export_input(fn, txt, strs):
         except ValueError:
             xrange = []
 
-    default_out = os.path.splitext(fn)[0] + f'_{seq}_regions.csv'
+    default_out = os.path.splitext(fn)[0] + f'_{_slug(seq, alphabet)}_regions.csv'
     fn_out = safe_input(fmttxt(['Output CSV file',
                                  f"[default: {os.path.basename(default_out)}]: "],
                                 ['bold', ''], ['yellow', 'cyan']) + ' ').strip()
@@ -911,10 +1121,10 @@ def neighbors_condensed_export_input(fn, txt, strs):
     elif not os.path.isabs(fn_out):
         fn_out = os.path.join(os.path.dirname(os.path.abspath(fn)), fn_out)
 
-    export_nbrs_condensed(seq, wds, txt, sortby='CP', wd=wd, xrange=xrange, file=fn_out)
+    export_nbrs_condensed(seq, wds, txt, sortby='CP', wd=wd, xrange=xrange, file=fn_out, alphabet=alphabet)
 
 
-def kmers_input(fn, txt, defvals):
+def kmers_input(fn, txt, defvals, alphabet=None):
     """Interactive handler for k-mer analysis plots.
 
     Prompts for a k-mer length and presents a sub-menu with four plot types:
@@ -957,9 +1167,9 @@ def kmers_input(fn, txt, defvals):
             zmin = 1.96
         fn_out, scale = _prompt_save(session_dir=os.path.dirname(os.path.abspath(fn)))
         if val == 1:
-            _spawn_plot(plotzscore, kmers, float(zmin), robust=False, file=fn_out, scale=scale)
+            _spawn_plot(plotzscore, kmers, float(zmin), robust=False, file=fn_out, scale=scale, alphabet=alphabet)
         else:
-            _spawn_plot(plotzscore, kmers, float(zmin), robust=True, file=fn_out, scale=scale)
+            _spawn_plot(plotzscore, kmers, float(zmin), robust=True, file=fn_out, scale=scale, alphabet=alphabet)
         return None
     if val == 3:
         fn_out, scale = _prompt_save(session_dir=os.path.dirname(os.path.abspath(fn)))
@@ -1039,7 +1249,7 @@ def logo_input(txt, strs, file_path=''):
     plot_logo(s0, k, txt, muts=nmut, outfile=fn, fmt=fmt)
 
 
-def coverage_input(txt, strs, file_path=''):
+def coverage_input(txt, strs, file_path='', alphabet=None):
     """Interactive handler for the weighted-coverage bar chart.
 
     Prompts for which string list to use (cores or xmotifs), the length
@@ -1067,10 +1277,10 @@ def coverage_input(txt, strs, file_path=''):
     for i in range(len(wds)):
         cvrs[wds[i]] = cover(wds[i], txt, pwr=pwr)
     fn_out, scale = _prompt_save(session_dir=os.path.dirname(os.path.abspath(file_path)) if file_path else '')
-    _spawn_plot(plot_coverage, txt, cvrs, pwr, file=fn_out, scale=scale)
+    _spawn_plot(plot_coverage, txt, cvrs, pwr, file=fn_out, scale=scale, alphabet=alphabet)
 
 
-def find_match_input(txt, strs, minlen=4):
+def find_match_input(txt, strs, minlen=4, alphabet=None):
     """Interactive handler for regex-based sequence search.
 
     Prompts for a query string (supports ``.`` as a single-character wildcard),
@@ -1085,7 +1295,8 @@ def find_match_input(txt, strs, minlen=4):
     while True:
         s0 = safe_input(fmttxt(["Enter the sequence to analyze (use . as a single letter wild card): "],
                       ['bold'], ["yellow"]) + " ")
-        s0 = s0.lower()
+        raw0 = s0
+        s0 = _query_to_internal(s0.lower(), alphabet, wildcard=True)
         if len(s0) >= minlen:
             break
         else:
@@ -1093,14 +1304,14 @@ def find_match_input(txt, strs, minlen=4):
             safe_input("Press any key to continue.")
     ret = find_all_matches(s0, txt)
     retstr = find_all_matches(s0, txt, ret="str")
-    print(f"\nFound {len(ret)} matches for {s0}:\n")
+    print(f"\nFound {len(ret)} matches for {raw0.lower() if alphabet is not None else s0}:\n")
     for i in range(len(ret)):
-        print(f"Match {i+1} at position {ret[i]}, match: {retstr[i]}")
+        print(f"Match {i+1} at position {ret[i]}, match: {_show(retstr[i], alphabet)}")
     print('\n')
     safe_input("Press Enter to continue...")
 
 
-def txt_coverage_input(txt, strs, minlen=4):
+def txt_coverage_input(txt, strs, minlen=4, alphabet=None):
     """Interactive handler for displaying the weighted coverage of a single sequence.
 
     Prompts for a query string and a length exponent, then prints the
@@ -1114,7 +1325,8 @@ def txt_coverage_input(txt, strs, minlen=4):
     while True:
         s0 = safe_input(fmttxt(["Enter the sequence to analyze (use . as a single letter wild card): "],
                       ['bold'], ["yellow"]) + " ")
-        s0 = s0.lower()
+        raw0 = s0
+        s0 = _query_to_internal(s0.lower(), alphabet, wildcard=True)
         if len(s0) >= minlen:
             break
         else:
@@ -1126,11 +1338,12 @@ def txt_coverage_input(txt, strs, minlen=4):
         pwr = 1
     else:
         pwr = float(pwr)
-    print(f"{s0}, length {len(s0)}, coverage {cover(s0, txt, pwr=pwr)}, out of {len(txt)}")
+    print(f"{raw0.lower() if alphabet is not None else s0}, length {len(s0)}, "
+          f"coverage {cover(s0, txt, pwr=pwr)}, out of {len(txt)}")
     safe_input("Press Enter to continue...")
  
 
-def print_core_input(txt, strs, minlen=4):
+def print_core_input(txt, strs, minlen=4, alphabet=None):
     """Interactive handler for aligned xmotif display around a core.
 
     Prompts for a core sequence and prints all xmotifs that contain it,
@@ -1145,19 +1358,19 @@ def print_core_input(txt, strs, minlen=4):
     while True:
         s0 = safe_input(fmttxt(["Enter the sequence to analyze: "],
                       ['bold'], ["yellow"]))
-        s0 = s0.lower()
+        s0 = _query_to_internal(s0.lower(), alphabet)
         if len(s0) >= minlen:
             break
         else:
             print(fmttxt(["Sequence too short"], ['bold'], ['red']))
             safe_input("Press any key to continue.")
-    commoncore = print_core(txt, s0, strs["xmotifs"])
+    commoncore = print_core(txt, s0, strs["xmotifs"], alphabet=alphabet)
     if len(commoncore) > 1:
         print('\n'.join(commoncore) + '\n')
     safe_input("Press Enter to continue...")
 
 
-def print_alignment_score(txt):
+def print_alignment_score(txt, alphabet=None):
     """Interactive handler for pairwise sequence alignment and scoring.
 
     Prompts for two start positions and a common length within txt, then
@@ -1224,7 +1437,7 @@ def print_alignment_score(txt):
             break
         print(fmttxt(["Please enter 1 or 2."], ['bold'], ['red']))
 
-    print_alignment(res)
+    print_alignment(res, alphabet=alphabet)
 
     # ── Normalised score (self-alignment) ────────────────────────────────
     # For local alignment use the actual aligned length, not the requested window.
@@ -1241,7 +1454,10 @@ def print_alignment_score(txt):
     # Constants for nucleotide scoring (λ=1.28, K=0.46; Altschul et al. 1990)
     # E-value uses the full transcript as the reference "database".
     _LAM, _K = 1.28, 0.46
-    if res.score > 0:
+    if alphabet is not None:
+        print(fmttxt(["Bit score / E-value: not computed (the BLAST constants are for nucleotide scoring)"],
+                     [''], ['cyan']))
+    elif res.score > 0:
         bit = (_LAM * res.score - log(_K)) / log(2)
         eval = _K * score_len * len(txt) * exp(-_LAM * res.score)
         print(fmttxt([f"Bit score:                          {bit:.1f} bits"], [''], ['cyan']))
@@ -1252,7 +1468,7 @@ def print_alignment_score(txt):
     safe_input(fmttxt(["Press Enter to return to the menu"], [''], ['white']))
 
 
-def search_input(txt, mutr=1/6, M=4):
+def search_input(txt, mutr=1/6, M=4, alphabet=None):
     """Prompt for a query string and find exact + approximate matches in txt.
 
     Mismatched characters are highlighted in red in the terminal output.
@@ -1262,7 +1478,7 @@ def search_input(txt, mutr=1/6, M=4):
 
     prompt = fmttxt(['Enter query string', '[blank to cancel]: '],
                     ['bold', ''], ['yellow', 'cyan'])
-    seq = safe_input(prompt + ' ').strip().lower()
+    seq = _query_to_internal(safe_input(prompt + ' ').strip().lower(), alphabet)
     if not seq:
         return
 
@@ -1278,7 +1494,7 @@ def search_input(txt, mutr=1/6, M=4):
     # ── header ──────────────────────────────────────────────────────────
     mut_note = (f'max {maxmut} mutation{"s" if maxmut != 1 else ""}'
                 if maxmut else 'too short for mutation search')
-    print(fmttxt([f'\n"{seq}"', f'L={L}, {mut_note}'], ['bold', ''], ['white', 'cyan']))
+    print(fmttxt([f'\n"{_show(seq, alphabet)}"', f'L={L}, {mut_note}'], ['bold', ''], ['white', 'cyan']))
 
     # ── exact matches ────────────────────────────────────────────────────
     if exact_pos:
@@ -1292,10 +1508,7 @@ def search_input(txt, mutr=1/6, M=4):
         if approx:
             print(fmttxt([f'  Approximate ≤{maxmut} mut ({len(approx)}):'], ['bold'], ['yellow']))
             for pos, matched, d in approx:
-                highlighted = ''.join(
-                    f'{RED}{mark_case(mc, True)}{RESET}' if mc != sc else mc
-                    for sc, mc in zip(seq, matched)
-                )
+                highlighted = _highlight(seq, matched, alphabet, RED, RESET)
                 print(f'    pos {pos:5d}  "{highlighted}"  dist={d}')
         else:
             print(fmttxt([f'  No approximate matches (≤{maxmut} mutations)'], [''], ['cyan']))
@@ -1304,7 +1517,7 @@ def search_input(txt, mutr=1/6, M=4):
     safe_input(fmttxt(['Press Enter to continue'], [''], ['white']))
 
 
-def motif_extensions_input(txt, file_path=''):
+def motif_extensions_input(txt, file_path='', alphabet=None):
     """Prompt for a motif, find matches (exact or with mutations), then extend
     each pair of exact occurrences and display lengths, Hamming distances, and
     colour-coded alignments."""
@@ -1316,8 +1529,8 @@ def motif_extensions_input(txt, file_path=''):
     GREEN = '\033[32m'
 
     # ── motif ───────────────────────────────────────────────────────────────
-    motif = safe_input(fmttxt(['Enter motif', '[blank to cancel]: '],
-                               ['bold', ''], ['yellow', 'cyan']) + ' ').strip().lower()
+    motif = _query_to_internal(safe_input(fmttxt(['Enter motif', '[blank to cancel]: '],
+                               ['bold', ''], ['yellow', 'cyan']) + ' ').strip().lower(), alphabet)
     if not motif:
         return
 
@@ -1339,9 +1552,9 @@ def motif_extensions_input(txt, file_path=''):
                      ['bold'], ['white']))
         MAX_LIST = 20
         for pos in exact_pos[:MAX_LIST]:
-            print(f"  {GREEN}exact{RESET}   pos={CYAN}{pos}{RESET}  {txt[pos:pos+len(motif)]}")
+            print(f"  {GREEN}exact{RESET}   pos={CYAN}{pos}{RESET}  {_show(txt[pos:pos+len(motif)], alphabet)}")
         for pos, matched, dist in approx[:MAX_LIST]:
-            print(f"  {RED}~dist={dist}{RESET}  pos={CYAN}{pos}{RESET}  {matched}")
+            print(f"  {RED}~dist={dist}{RESET}  pos={CYAN}{pos}{RESET}  {_show(matched, alphabet)}")
         total_shown = min(MAX_LIST, n_exact + n_approx)
         if n_exact + n_approx > total_shown:
             print(f"  {DIM}... and {n_exact + n_approx - total_shown} more{RESET}")
@@ -1351,7 +1564,7 @@ def motif_extensions_input(txt, file_path=''):
         print(fmttxt([f'\nFound {n_exact} exact match(es).'], ['bold'], ['white']))
         MAX_LIST = 20
         for pos in exact_pos[:MAX_LIST]:
-            print(f"  pos={CYAN}{pos}{RESET}  {txt[pos:pos+len(motif)]}")
+            print(f"  pos={CYAN}{pos}{RESET}  {_show(txt[pos:pos+len(motif)], alphabet)}")
         if n_exact > MAX_LIST:
             print(f"  {DIM}... and {n_exact - MAX_LIST} more{RESET}")
 
@@ -1417,13 +1630,14 @@ def motif_extensions_input(txt, file_path=''):
         for i, (rc, qc) in enumerate(zip(ref, qry)):
             in_seed  = (left <= i < left + sl)
             mismatch = (rc != qc)
-            ch = mark_case(qc, in_seed or mismatch)
+            ch = (mark_case(qc, in_seed or mismatch) if alphabet is None
+                  else alphabet.show(qc, [in_seed or mismatch]))
             if mismatch:
                 ch = f"{RED}{ch}{RESET}"
             elif in_seed:
                 ch = f"{BOLD}{ch}{RESET}"
             out.append(ch)
-        return ''.join(out)
+        return ('' if alphabet is None else alphabet.sep).join(out)
 
     for idx, res in enumerate(results[:max_N]):
         p1      = res['pos1']
@@ -1452,7 +1666,7 @@ def motif_extensions_input(txt, file_path=''):
             half = MAX_SHOW // 2
             head1 = _fmt_ext(e1[:half], e1[:half], left_e, L)
             head2 = _fmt_ext(e1[:half], e2[:half], left_e, L)
-            print(f"    [{DIM}{p1}{RESET}] {head1}… ({tlen} nt total)")
+            print(f"    [{DIM}{p1}{RESET}] {head1}… ({tlen} {_unit(alphabet)} total)")
             print(f"    [{DIM}{p2}{RESET}] {head2}…")
         print()
 
@@ -1479,9 +1693,9 @@ def motif_extensions_input(txt, file_path=''):
                 d1 = _fmt_ext(e1, e1, left_e, L)
                 d2 = _fmt_ext(e1, e2, left_e, L)
                 print(f"  {DIM}pos1={p1}{RESET}")
-                print(f"  {e1}\n")
+                print(f"  {_show(e1, alphabet)}\n")
                 print(f"  {DIM}pos2={p2}{RESET}")
-                print(f"  {e2}\n")
+                print(f"  {_show(e2, alphabet)}\n")
                 print(f"  {DIM}(colour-coded, pos1 as reference){RESET}")
                 print(f"  {d1}")
                 print(f"  {d2}\n")
@@ -1489,7 +1703,7 @@ def motif_extensions_input(txt, file_path=''):
     # ── save all results to CSV ───────────────────────────────────────────────
     if results:
         import csv, re as _re
-        slug = _re.sub(r'[^a-zA-Z0-9_-]', '_', motif)[:40]
+        slug = _slug(motif, alphabet)
         session_dir = os.path.dirname(os.path.abspath(file_path)) if file_path else os.getcwd()
         _default_csv = f'extensions_{slug}.csv'
         default_fn = os.path.join(session_dir, _default_csv)
@@ -1513,7 +1727,7 @@ def motif_extensions_input(txt, file_path=''):
                     w.writerow([rank, res['pos1'], res['pos2'],
                                 res['left_ext'], res['right_ext'],
                                 res['total_len'], res['hamming'],
-                                res['ext1'], res['ext2']])
+                                _show(res['ext1'], alphabet), _show(res['ext2'], alphabet)])
             print(fmttxt([f'Saved {len(results)} pair(s) to:', fn_csv],
                          ['bold', ''], ['green', 'cyan']))
             open_file_with_default_software(fn_csv)
@@ -1521,19 +1735,19 @@ def motif_extensions_input(txt, file_path=''):
     safe_input(fmttxt(['Press Enter to continue'], [''], ['white']))
 
 
-def self_similarity_arcs_input(txt, file_path=''):
+def self_similarity_arcs_input(txt, file_path='', alphabet=None):
     """Prompt for a seed sequence, then plot pairwise Hamming-bounded
     extensions among all its exact occurrences as a semicircular arc
     diagram (self-similarity within one sequence — e.g. a tandem-repeat
     region)."""
-    seq = safe_input(fmttxt(['Enter seed sequence', '[blank to cancel]: '],
-                             ['bold', ''], ['yellow', 'cyan']) + ' ').strip().lower()
+    seq = _query_to_internal(safe_input(fmttxt(['Enter seed sequence', '[blank to cancel]: '],
+                             ['bold', ''], ['yellow', 'cyan']) + ' ').strip().lower(), alphabet)
     if not seq:
         return
 
     positions_all = find_all_matches(seq, txt, ret='pos')
     if len(positions_all) < 3:
-        print(fmttxt([f'Seed "{seq}" found {len(positions_all)} time(s) — need ≥ 3.',
+        print(fmttxt([f'Seed "{_show(seq, alphabet)}" found {len(positions_all)} time(s) — need ≥ 3.',
                       'Fewer than 3 occurrences give at most one gap, which the '
                       'spacing-significance test below cannot evaluate.'],
                      ['bold', ''], ['red', 'yellow']))
@@ -1568,22 +1782,24 @@ def self_similarity_arcs_input(txt, file_path=''):
     fn_out, scale = _prompt_save(plotly=False,
                                   session_dir=os.path.dirname(os.path.abspath(file_path)) if file_path else '')
     _spawn_plot(plot_self_similarity_arcs, seq, results, positions,
-                spacing_stats=spacing_stats, arcs=arcs, file=fn_out, scale=scale)
+                spacing_stats=spacing_stats, arcs=arcs, file=fn_out, scale=scale, alphabet=alphabet)
 
 
-def shared_motif_diagram_input(txt, strs, defvals, file_path=''):
+def shared_motif_diagram_input(txt, strs, defvals, file_path='', alphabet=None, reading=None):
     """Prompt for a second (comparison) sequence, find motifs shared by
     exact match with the current sequence, and plot the connections as a
     two-row arc diagram (e.g. a transcript vs. a candidate regulatory
     element)."""
     session_dir = os.path.dirname(os.path.abspath(file_path)) if file_path else ''
-    comp = choose_comparison_sequence(defvals.get('datadir') or session_dir)
+    comp = choose_comparison_sequence(defvals.get('datadir') or session_dir, alphabet, reading)
     if comp is None:
         return
 
-    strand = safe_input(fmttxt(['Compare against forward strand or reverse complement?',
-                                 '[F]orward (default) / [R]everse complement: '],
-                                ['bold', ''], ['yellow', 'cyan']) + ' ').strip().lower()
+    strand = ''
+    if alphabet is None:       # reverse complement only means something for nucleotides
+        strand = safe_input(fmttxt(['Compare against forward strand or reverse complement?',
+                                     '[F]orward (default) / [R]everse complement: '],
+                                    ['bold', ''], ['yellow', 'cyan']) + ' ').strip().lower()
     comp_txt = comp['txt']
     comp_label = comp['label']
     if strand.startswith('r'):
@@ -1601,18 +1817,18 @@ def shared_motif_diagram_input(txt, strs, defvals, file_path=''):
     shared = shared_exact_motifs(
         txt, comp_txt, cores_a=strs['corelist'], min_len=min_len, n_top=n_top,
         minxmlen=defvals['minxmlen'], maxxmlen=defvals['maxxmlen'],
-        mincorelen=defvals['mincorelen'], mincount=defvals['mincount'])
+        mincorelen=defvals['mincorelen'], mincount=defvals['mincount'], alphabet=alphabet)
     if not shared:
         print(fmttxt(['No shared motifs (exact hits in both sequences) found.'],
                      ['bold'], ['red']))
         safe_input(fmttxt(['Press Enter to continue'], [''], ['white']))
         return
-    print(fmttxt([f'{len(shared)} shared motif(s): ' + ', '.join(shared)], [''], ['white']))
+    print(fmttxt([f'{len(shared)} shared motif(s): ' + ', '.join(_show(m, alphabet) for m in shared)], [''], ['white']))
 
     gene_label = os.path.splitext(os.path.basename(file_path))[0] if file_path else 'sequence'
     fn_out, scale = _prompt_save(plotly=False, session_dir=session_dir)
     _spawn_plot(plot_shared_motif_diagram, txt, comp_txt, gene_label, comp_label,
-                shared, file=fn_out, scale=scale)
+                shared, file=fn_out, scale=scale, alphabet=alphabet)
 
 
 def _confirm_coverage_warnings(len_a, len_b, window):
@@ -1631,8 +1847,8 @@ def _confirm_coverage_warnings(len_a, len_b, window):
     return ans.startswith('y')
 
 
-def _prompt_window(default=200):
-    s = safe_input(fmttxt(['Sliding window size (nt)', f'[default: {default}]: '],
+def _prompt_window(default=200, alphabet=None):
+    s = safe_input(fmttxt([f'Sliding window size ({_unit(alphabet)})', f'[default: {default}]: '],
                            ['bold', ''], ['yellow', 'cyan']) + ' ').strip()
     if not s:
         return default
@@ -1654,12 +1870,12 @@ def _prompt_dual_axis():
     return ans.startswith('d')
 
 
-def transcript_coverage_comparison_input(txt, strs, defvals, file_path=''):
+def transcript_coverage_comparison_input(txt, strs, defvals, file_path='', alphabet=None, reading=None):
     """Prompt for a second transcript and plot both sequences' motif-coverage
     sliding-window curves overlaid, for comparing where each is enriched
     (e.g. human vs. mouse orthologs)."""
     session_dir = os.path.dirname(os.path.abspath(file_path)) if file_path else ''
-    comp = choose_comparison_sequence(defvals.get('datadir') or session_dir)
+    comp = choose_comparison_sequence(defvals.get('datadir') or session_dir, alphabet, reading)
     if comp is None:
         return
 
@@ -1670,10 +1886,10 @@ def transcript_coverage_comparison_input(txt, strs, defvals, file_path=''):
     comp_cores = comp['corelist']
     if comp_cores is None:
         print(fmttxt([f"Discovering motifs in {comp['label']}..."], [''], ['cyan']))
-        comp_strs = parsedata(comp['txt'], dict(defvals))
+        comp_strs = parsedata(comp['txt'], dict(defvals), alphabet)
         comp_cores = comp_strs['corelist']
 
-    window = _prompt_window()
+    window = _prompt_window(alphabet=alphabet)
     cov_a = binary_coverage(txt, strs['corelist'])
     cov_b = binary_coverage(comp['txt'], comp_cores)
     curve_a = sliding_coverage_fraction(cov_a, window=window)
@@ -1707,7 +1923,7 @@ def gc_coverage_comparison_input(txt, strs, file_path=''):
                 dual_axis=dual_axis, file=fn_out, scale=scale)
 
 
-def homopolymer_coverage_comparison_input(txt, strs, file_path=''):
+def homopolymer_coverage_comparison_input(txt, strs, file_path='', alphabet=None):
     """Plot the loaded sequence's motif-coverage sliding-window curve
     against its homopolymer/low-complexity-run density curve, to see
     whether motif hotspots coincide with (or diverge from) simple
@@ -1724,7 +1940,7 @@ def homopolymer_coverage_comparison_input(txt, strs, file_path=''):
         print(fmttxt(['Invalid value, using default.'], [''], ['red']))
         min_run = 4
 
-    window = _prompt_window()
+    window = _prompt_window(alphabet=alphabet)
     curve_motif = sliding_coverage_fraction(binary_coverage(txt, strs['corelist']), window=window)
     curve_hp = sliding_coverage_fraction(homopolymer_indicator(txt, min_run=min_run), window=window)
 
@@ -1733,7 +1949,7 @@ def homopolymer_coverage_comparison_input(txt, strs, file_path=''):
         plotly=False,
         session_dir=os.path.dirname(os.path.abspath(file_path)) if file_path else '')
     _spawn_plot(plot_coverage_comparison, curve_motif, 'Motif coverage', curve_hp,
-                f'Homopolymer runs (>= {min_run} nt)', dual_axis=dual_axis, file=fn_out, scale=scale)
+                f'Homopolymer runs (>= {min_run} {_unit(alphabet)[:-1] if alphabet is not None else "nt"})', dual_axis=dual_axis, file=fn_out, scale=scale)
 
 
 def hairpins_input(txt, file_path, minSL=8, minLL=3, maxLL=40):
@@ -1802,7 +2018,7 @@ def hairpins_input(txt, file_path, minSL=8, minLL=3, maxLL=40):
     safe_input(fmttxt(['Press Enter to continue'], [''], ['white']))
 
 
-def markov_kmer_input(txt, file_path=''):
+def markov_kmer_input(txt, file_path='', alphabet=None):
     """Prompt for k-mer length and Markov order, then write a CSV of all
     observed k-mers with analytical Markov-model p-values (no shuffling).
 
@@ -1850,7 +2066,7 @@ def markov_kmer_input(txt, file_path=''):
             ])
             for row in results:
                 w.writerow([
-                    row['kmer'], row['real_count'],
+                    _show(row['kmer'], alphabet), row['real_count'],
                     f"{row['expected_count']:.3f}",
                     f"{row['pvalue_over']:.8f}",  f"{row['evalue_over']:.4f}",  f"{row['pvalue_over_bh']:.8f}",
                     f"{row['pvalue_under']:.8f}", f"{row['evalue_under']:.4f}", f"{row['pvalue_under_bh']:.8f}",
@@ -1865,7 +2081,7 @@ def markov_kmer_input(txt, file_path=''):
     safe_input(fmttxt(['Press Enter to continue'], [''], ['white']))
 
 
-def statistical_core_input(file_path, txt, strs):
+def statistical_core_input(file_path, txt, strs, alphabet=None):
     """Interactive Markov/FDR core-candidate ranking."""
     min_len = safe_input(fmttxt(['Candidate minimum core length', '[default: 5]: '],
                                 ['bold', ''], ['yellow', 'cyan']) + ' ').strip()
@@ -1903,15 +2119,17 @@ def statistical_core_input(file_path, txt, strs):
         min_xmotif_type_support=support,
         enrichment_threshold=enrich,
         alpha=alpha,
+        alphabet=alphabet,
     )
-    write_rows_csv(out_csv, rows)
+    write_rows_csv(out_csv, rows, alphabet=alphabet)
 
     supported = [r for r in rows if r.get('statistically_supported')]
     print(fmttxt([f'Candidates tested: {len(rows)}',
                   f'Statistically supported: {len(supported)}'],
                  ['bold', ''], ['white', 'green']))
     for row in supported[:15]:
-        print(f"  {row['rank_statistical']:>3}. {row['motif']:<18} "
+        print(f"  {row['rank_statistical']:>3}. "
+              f"{row['motif'] if alphabet is None else alphabet.show(row['motif'], upper=True):<18} "
               f"count={row['exact_count']:<3} enrich={row['enrichment_markov']:.2f} "
               f"q={row['q_markov']:.2e} coverage={row['coverage_bp']}")
     print(fmttxt([f'Results saved to: {out_csv}'], [''], ['green']))
@@ -1920,7 +2138,7 @@ def statistical_core_input(file_path, txt, strs):
     safe_input(fmttxt(['Press Enter to continue'], [''], ['white']))
 
 
-def mutation_family_input(file_path, txt, strs):
+def mutation_family_input(file_path, txt, strs, alphabet=None):
     """Interactive mutation-aware motif-family scoring."""
     source = safe_input(fmttxt(['Motif source',
                                 '[1: enter motif, 2: current cores, 3: current xmotifs; default: 1]: '],
@@ -1934,7 +2152,7 @@ def mutation_family_input(file_path, txt, strs):
                                   ['bold', ''], ['yellow', 'cyan']) + ' ').strip()
         if not motif:
             return
-        motifs = [motif]
+        motifs = [_query_to_internal(motif.lower(), alphabet) if alphabet is not None else motif]
 
     mutr_str = safe_input(fmttxt(['Mutation search cap: 1 per N letters', '[default: 6]: '],
                                  ['bold', ''], ['yellow', 'cyan']) + ' ').strip()
@@ -1969,10 +2187,11 @@ def mutation_family_input(file_path, txt, strs):
         enrichment_threshold=enrich,
         expected_max=expected,
         alpha=alpha,
+        alphabet=alphabet,
     )
     best = best_mutation_family_per_motif(rows)
-    write_rows_csv(out_csv, rows)
-    write_rows_csv(best_csv, best)
+    write_rows_csv(out_csv, rows, alphabet=alphabet)
+    write_rows_csv(best_csv, best, alphabet=alphabet)
 
     decisions = {}
     for row in best:
@@ -1981,7 +2200,7 @@ def mutation_family_input(file_path, txt, strs):
                   ', '.join(f'{k}: {v}' for k, v in sorted(decisions.items()))],
                  ['bold', ''], ['white', 'green']))
     for row in best[:15]:
-        print(f"  {row['motif']:<18} radius={row['radius']} "
+        print(f"  {row['motif'] if alphabet is None else alphabet.show(row['motif'], upper=True):<18} radius={row['radius']} "
               f"family={row['family_count']:<3} enrich={row['enrichment_family']:.2f} "
               f"q={row['q_family']:.2e} {row['decision']}")
     print(fmttxt([f'Full tests saved to: {out_csv}',
@@ -1991,16 +2210,18 @@ def mutation_family_input(file_path, txt, strs):
     safe_input(fmttxt(['Press Enter to continue'], [''], ['white']))
 
 
-def gapped_motif_input(file_path, txt):
+def gapped_motif_input(file_path, txt, alphabet=None):
     """Interactive anchor-gap-anchor motif search and scoring."""
     left = safe_input(fmttxt(['Left anchor sequence', '[blank to cancel]: '],
                              ['bold', ''], ['yellow', 'cyan']) + ' ').strip()
     if not left:
         return
+    left = _query_to_internal(left.lower(), alphabet)
     right = safe_input(fmttxt(['Right anchor sequence', '[blank to cancel]: '],
                               ['bold', ''], ['yellow', 'cyan']) + ' ').strip()
     if not right:
         return
+    right = _query_to_internal(right.lower(), alphabet)
     min_gap_s = safe_input(fmttxt(['Minimum gap length', '[default: 0]: '],
                                   ['bold', ''], ['yellow', 'cyan']) + ' ').strip()
     max_gap_s = safe_input(fmttxt(['Maximum gap length', '[default: 30]: '],
@@ -2017,17 +2238,17 @@ def gapped_motif_input(file_path, txt):
     elif not os.path.isabs(out_csv):
         out_csv = os.path.join(os.path.dirname(_abs_fp), out_csv)
 
-    score = score_gapped_motif(txt, left, right, min_gap=min_gap, max_gap=max_gap)
-    hits = find_gapped_motif_hits(txt, left, right, min_gap=min_gap, max_gap=max_gap)
+    score = score_gapped_motif(txt, left, right, min_gap=min_gap, max_gap=max_gap, alphabet=alphabet)
+    hits = find_gapped_motif_hits(txt, left, right, min_gap=min_gap, max_gap=max_gap, alphabet=alphabet)
     rows = [{**score, **hit} for hit in hits] if hits else [score]
-    write_rows_csv(out_csv, rows)
+    write_rows_csv(out_csv, rows, alphabet=alphabet)
 
-    print(fmttxt([score['pattern'],
+    print(fmttxt([score['pattern'] if alphabet is None else f"{_show(left, alphabet).upper()}[gap:{min_gap}-{max_gap}]{_show(right, alphabet).upper()}",
                   f"observed={score['observed_count']}, expected={score['expected_markov']:.3g}, "
                   f"enrichment={score['enrichment_markov']:.2f}, p={score['p_markov']:.2e}"],
                  ['bold', ''], ['white', 'cyan']))
     for hit in hits[:20]:
-        print(f"  pos={hit['start']:<6} gap={hit['gap_length']:<3} {hit['matched_sequence']}")
+        print(f"  pos={hit['start']:<6} gap={hit['gap_length']:<3} {_show(hit['matched_sequence'], alphabet).upper() if alphabet is not None else hit['matched_sequence']}")
     if len(hits) > 20:
         print(f"  ... and {len(hits) - 20} more")
     print(fmttxt([f'Results saved to: {out_csv}'], [''], ['green']))
@@ -2035,7 +2256,7 @@ def gapped_motif_input(file_path, txt):
     safe_input(fmttxt(['Press Enter to continue'], [''], ['white']))
 
 
-def sequence_hits_input(fn, txt):
+def sequence_hits_input(fn, txt, alphabet=None):
     """Prompt for up to 3 sequences + mutation rate and plot their occurrences.
 
     For each sequence, finds all same-length exact and approximate (Hamming)
@@ -2045,7 +2266,7 @@ def sequence_hits_input(fn, txt):
     for i in range(3):
         prompt = fmttxt([f'Enter sequence {i+1}/3', '[blank to stop]: '],
                         ['bold', ''], ['yellow', 'cyan'])
-        seq = safe_input(prompt + ' ').strip().lower()
+        seq = _query_to_internal(safe_input(prompt + ' ').strip().lower(), alphabet)
         if not seq:
             break
         seqs.append(seq)
@@ -2094,10 +2315,10 @@ def sequence_hits_input(fn, txt):
 
     title = os.path.basename(fn)
     plot_sequence_hits(seq_data, len(txt), title=title, file=fn_out, scale=scale,
-                       condense=condense, min_gap=min_gap, hairpins=hairpins)
+                       condense=condense, min_gap=min_gap, hairpins=hairpins, alphabet=alphabet)
 
     # ── Optional detailed text plot ───────────────────────────────────────
-    det = safe_input(fmttxt(['Create detailed nucleotide-level plot?', '[y/N]: '],
+    det = safe_input(fmttxt([f"Create detailed {'nucleotide' if alphabet is None else alphabet.unit_name}-level plot?", '[y/N]: '],
                              ['bold', ''], ['yellow', 'cyan']) + ' ')
     if det.strip().lower() in ('y', 'yes'):
         rng_str = safe_input(fmttxt(['Position range',
@@ -2113,7 +2334,7 @@ def sequence_hits_input(fn, txt):
         else:
             det_start, det_end = 0, len(txt)
         if det_end - det_start > 500:
-            print(fmttxt([f'Note: range {det_end - det_start} nt — '
+            print(fmttxt([f'Note: range {det_end - det_start} {_unit(alphabet)} — '
                            'large ranges may render slowly in a browser.'],
                          [''], ['yellow']))
         det_file = safe_input(fmttxt(['Output HTML file',
@@ -2128,17 +2349,17 @@ def sequence_hits_input(fn, txt):
             if not os.path.isabs(det_file) and _session_dir:
                 det_file = os.path.join(_session_dir, det_file)
         plot_sequence_hits_detailed(seq_data, txt, det_start, det_end,
-                                    title=title, file=det_file)
+                                    title=title, file=det_file, alphabet=alphabet)
 
 
 
-def print_stats(txt, strs):
+def print_stats(txt, strs, alphabet=None):
     '''Print summary statistics for the loaded text and wait for the user to press Enter.'''
     xmotifs  = strs['xmotifs']
     corelist = strs['corelist']
     print(fmttxt(["\n--- Summary Statistics ---"], ['bold'], ['cyan']))
     rows = [
-        ('Text length',              len(txt)),
+        ('Text length' + ('' if alphabet is None else f' ({alphabet.units_label})'), len(txt)),
         ('Number of xmotifs',        len(xmotifs)),
         ('Longest xmotif',           max((len(x) for x in xmotifs),  default=0)),
         ('Shortest xmotif',          min((len(x) for x in xmotifs),  default=0)),
@@ -2152,9 +2373,15 @@ def print_stats(txt, strs):
     safe_input(fmttxt(["Press Enter to return to the menu"], [''], ['white']))
 
 
-def print_settings(defvals, prefs=None):
+def print_settings(defvals, prefs=None, reading=None):
     '''Print current default values and wait for the user to press Enter.'''
     print(fmttxt(["\n--- Current Settings ---"], ['bold'], ['cyan']))
+    if reading:
+        print(fmttxt(["  Reading:",
+                      f"{reading['alphabet']} ({reading['mode']}, frame {reading['frame']}; "
+                      f"{reading['units']:,} units, {reading['skipped']} skipped, "
+                      f"{reading['dropped']} dropped)"],
+                     ['bold', ''], ['white', 'cyan']))
     labels = {
         'minxmlen':   'Min xmotif length',
         'maxxmlen':   'Max xmotif length',
@@ -2252,7 +2479,7 @@ def get_choices(defvals, prefs=None):
             'datadir': datadir, 'reload': reload, 'default_data_dir': default_data_dir})
 
 
-def parsedata(txt, defvals):
+def parsedata(txt, defvals, alphabet=None):
     """Discover xmotifs and cores from a sequence using the current default settings.
 
     Runs find_boundary() to collect boundary-delimited recurring substrings,
@@ -2285,7 +2512,7 @@ def parsedata(txt, defvals):
             break
         # The longest xmotif hits the ceiling — expand and re-run.
         defvals['maxxmlen'] += 20
-        print(fmttxt([f"Longest xmotif ({longest} nt) equals the maximum length allowed.",
+        print(fmttxt([f"Longest xmotif ({longest} {_unit(alphabet)}) equals the maximum length allowed.",
                       f" Increasing maximum to {defvals['maxxmlen']} and re-analysing…"],
                      ['bold', ''], ['yellow', 'cyan']))
     xmotifs.sort(key=lambda s: cover(s, txt), reverse=True)
@@ -2313,13 +2540,15 @@ def parsedata(txt, defvals):
     return({'corelist': core_xm, 'xmotifs': xmotifs})
 
 
-def spacing_test_input(txt):
+def spacing_test_input(txt, alphabet=None):
     """Test whether occurrences of a motif are more regularly spaced than chance."""
-    seq = safe_input(fmttxt(
+    seq = _query_to_internal(safe_input(fmttxt(
         ["Enter the sequence to test for periodic spacing: "], ['bold'], ['yellow']
-    )).strip().lower()
+    )).strip().lower(), alphabet)
     if not seq:
         return
+    shown = _show(seq, alphabet)
+    unit = _unit(alphabet)
 
     mutr_str = safe_input(fmttxt(
         ["Mutations: 0 = exact only, or enter N for 1-per-N-nt (max 6) [default: 0]: "],
@@ -2350,19 +2579,19 @@ def spacing_test_input(txt):
     L = len(txt)
 
     if m == 0:
-        print(fmttxt([f"\n'{seq}' not found in the sequence."], ['bold'], ['red']))
+        print(fmttxt([f"\n'{shown}' not found in the sequence."], ['bold'], ['red']))
         safe_input(fmttxt(["Press Enter to continue"], [''], ['white']))
         return
     if m == 1:
-        print(fmttxt([f"\n'{seq}' occurs only once — no gaps to analyse."], ['bold'], ['red']))
+        print(fmttxt([f"\n'{shown}' occurs only once — no gaps to analyse."], ['bold'], ['red']))
         safe_input(fmttxt(["Press Enter to continue"], [''], ['white']))
         return
     if m == 2:
         gap = positions[1] - positions[0]
-        print(fmttxt([f"\n'{seq}' occurs exactly 2 times — only 1 gap, no statistical test possible."],
+        print(fmttxt([f"\n'{shown}' occurs exactly 2 times — only 1 gap, no statistical test possible."],
                      ['bold'], ['yellow']))
         print(f"  Positions : {positions[0]}, {positions[1]}")
-        print(f"  Gap       : {gap} nt")
+        print(f"  Gap       : {gap} {unit}")
         safe_input(fmttxt(["Press Enter to continue"], [''], ['white']))
         return
 
@@ -2384,14 +2613,14 @@ def spacing_test_input(txt):
                    f"first 5: {', '.join(str(g) for g in gaps[:5])}, …")
 
     W = 54
-    print(fmttxt([f"\nSpacing analysis for '{seq}'"], ['bold'], ['cyan']))
+    print(fmttxt([f"\nSpacing analysis for '{shown}'"], ['bold'], ['cyan']))
     print('-' * W)
     print(f"  Match mode             : {match_mode}")
     print(f"  Occurrences (m)        : {m}")
-    print(f"  Sequence length (L)    : {L} nt")
+    print(f"  Sequence length (L)    : {L} {unit}")
     print(f"  Positions              : {pos_str}")
     print(f"  Consecutive gaps       : {gap_str}")
-    print(f"  Mean gap / SD          : {result['mean_gap']:.1f} / {result['std_gap']:.1f} nt")
+    print(f"  Mean gap / SD          : {result['mean_gap']:.1f} / {result['std_gap']:.1f} {unit}")
     print()
 
     T   = result['period']
@@ -2404,8 +2633,8 @@ def spacing_test_input(txt):
     p_ray_str = f"{result['p_rayleigh']:.4f}" if result['p_rayleigh'] >= 0.0001 else "<0.0001"
 
     print(fmttxt(["  Gap cluster test  (gaps near T)"], ['bold'], ['white']))
-    print(f"    Candidate period (T) : {T} nt  (median gap)")
-    print(f"    Tolerance (δ)        : ±{dlt} nt  (5 % of T)")
+    print(f"    Candidate period (T) : {T} {unit}  (median gap)")
+    print(f"    Tolerance (δ)        : ±{dlt} {unit}  (5 % of T)")
     print(f"    Gaps in [T-δ, T+δ]  : {result['k_near_T']} of {len(gaps)}  ({near_str})")
     print(f"    Expected under H0    : {exp_near:.2f}  [Bin({len(gaps)}, {2*dlt}/{L})]")
     print(f"    p-value (Bonferroni) : {p_cl_str}")
@@ -2428,7 +2657,7 @@ def spacing_test_input(txt):
         if sig_ray:
             evidence.append(f"Rayleigh p = {p_ray_str}")
         print(fmttxt(
-            [f"  *** Significant periodic spacing at T = {T} nt"
+            [f"  *** Significant periodic spacing at T = {T} {unit}"
              f"  ({', '.join(evidence)}) ***"],
             ['bold'], ['green']
         ))
@@ -2456,7 +2685,7 @@ def spacing_test_input(txt):
     safe_input(fmttxt(["\nPress Enter to continue"], [''], ['white']))
 
 
-def batch_spacing_test_input(file_path, txt, strs):
+def batch_spacing_test_input(file_path, txt, strs, alphabet=None):
     """Run the spacing/periodicity test on all cores and xmotifs and save a ranked CSV."""
     mutr_str = safe_input(fmttxt(
         ["Mutations: 0 = exact only, or enter N for 1-per-N-nt (max 6) [default: 0]: "],
@@ -2525,7 +2754,7 @@ def batch_spacing_test_input(file_path, txt, strs):
         return
 
     rows.sort(key=lambda x: x['p_cluster'])
-    write_rows_csv(out_csv, rows)
+    write_rows_csv(out_csv, rows, alphabet=alphabet)
 
     n_sig = sum(1 for x in rows if x['significant'])
     W = 68
@@ -2542,7 +2771,8 @@ def batch_spacing_test_input(file_path, txt, strs):
         p_cl  = f"{row['p_cluster']:.4f}"  if row['p_cluster']  >= 0.0001 else "<0.0001"
         p_ray = f"{row['p_rayleigh']:.4f}" if row['p_rayleigh'] >= 0.0001 else "<0.0001"
         flag  = "***" if row['significant'] else ""
-        motif = row['motif'] if len(row['motif']) <= 20 else row['motif'][:17] + "…"
+        motif = _show(row['motif'], alphabet)
+        motif = motif if len(motif) <= 20 else motif[:17] + "…"
         print(f"  {motif:<20} {row['type']:<7} {row['m']:>3} {row['period']:>6} "
               f"{p_cl:>10} {p_ray:>10} {flag:>3}")
     print(fmttxt([f"\n  Results saved to: {out_csv}"], [''], ['green']))
@@ -2729,10 +2959,12 @@ def menus():
                         txt = data['txt']
                         txtb = data['txtb']
                         is_rna = data['is_rna']
+                        alphabet = _alphabet_of(data)
+                        reading = data.get('reading')
                         if data.get("corelist"):
                             strs = {'corelist': data["corelist"], 'xmotifs': data["xmotifs"]}
                         else:
-                            strs = parsedata(txt, defvals)
+                            strs = parsedata(txt, defvals, alphabet)
                     # If no text file was loaded, prompt the user to select a file
                     else:
                         data = choose_input_source(defvals['datadir'])
@@ -2740,14 +2972,19 @@ def menus():
                             return None
                         if data is None:
                             continue  # dialog cancelled – show the menu again
+                        data = _choose_reading(data)
+                        if data is None:
+                            continue  # reading cancelled – show the menu again
                         file_path = data['file_path']
                         txt = data['txt']
                         txtb = data['txtb']
                         is_rna = data['is_rna']
+                        alphabet = _alphabet_of(data)
+                        reading = data.get('reading')
                         if data.get("corelist"):
                             strs = {'corelist': data["corelist"], 'xmotifs': data["xmotifs"]}
                         else:
-                            strs = parsedata(txt, defvals)
+                            strs = parsedata(txt, defvals, alphabet)
                     workdir = (data.get('dir') or
                                os.path.dirname(globals().get('fn', '')) or '')
                     if workdir and os.path.isdir(workdir):
@@ -2780,8 +3017,10 @@ def menus():
                                                   'corelist': strs['corelist'],
                                                   'xmotifs': strs['xmotifs'],
                                                   'dir': workdir,
-                                                  'stats': stats})
-                    init_summary(file_path, strs['xmotifs'], strs['corelist'], txt)
+                                                  'stats': stats,
+                                                  'alphabet': alphabet.to_dict() if alphabet else None,
+                                                  'reading': reading})
+                    init_summary(file_path, strs['xmotifs'], strs['corelist'], txt, alphabet=alphabet)
                 else:
                     # Sequence ops and Plots menus use multi-block coloring; the
                     # main menu uses a single split.
@@ -2789,7 +3028,8 @@ def menus():
                     _seq_labels = ["single-sequence analysis", "statistical analysis", "other"]
                     _plots_splits = [(7, 'yellow')]
                     _plots_labels = ["single-sequence plots", "comparative plots"]
-                    val = show_menu(file_path, menu_ttl[menu_level], submenu[menu_level],
+                    val = show_menu(file_path + (f"  [{alphabet.name}]" if alphabet else ''),
+                                    menu_ttl[menu_level], submenu[menu_level],
                                     clr=defvals['clr'],
                                     split={0: 4}.get(menu_level),
                                     splits=(_plots_splits if menu_level == 1 else
@@ -2809,12 +3049,12 @@ def menus():
                             continue
                         # show the core file (CSV)
                         if val == 3:
-                            init_summary(file_path, strs['xmotifs'], strs['corelist'], txt)
+                            init_summary(file_path, strs['xmotifs'], strs['corelist'], txt, alphabet=alphabet)
                         if val == 4:
-                            print_stats(txt, strs)
+                            print_stats(txt, strs, alphabet)
                             continue
                         if val == 5:
-                            print_settings(defvals, prefs)
+                            print_settings(defvals, prefs, reading)
                             continue
                         if val == 6:
                             defvals = get_choices(defvals, prefs)
@@ -2824,7 +3064,7 @@ def menus():
                                 save_prefs(prefs)
                             if defvals['reload']:
                                 # recalculate xmotifs, cores, update JSON and CSV
-                                strs = parsedata(txt, defvals)
+                                strs = parsedata(txt, defvals, alphabet)
                                 stats = {
                                     'txt_len':      len(txt),
                                     'xm_count':     len(strs['xmotifs']),
@@ -2839,8 +3079,11 @@ def menus():
                                                               'corelist': strs['corelist'],
                                                               'xmotifs': strs['xmotifs'],
                                                               'dir': workdir,
-                                                              'stats': stats})
-                                init_summary(file_path, strs['xmotifs'], strs['corelist'], txt, force=True)
+                                                              'stats': stats,
+                                                              'alphabet': alphabet.to_dict() if alphabet else None,
+                                                              'reading': reading})
+                                init_summary(file_path, strs['xmotifs'], strs['corelist'], txt, force=True,
+                                             alphabet=alphabet)
                             continue
                         # Open the user guide in the default browser:
                         if val == 7:
@@ -2866,27 +3109,29 @@ def menus():
                             case 0:
                                 menu_level = 0
                             case 1:
-                                neighbors_input(file_path, txt, strs)
+                                neighbors_input(file_path, txt, strs, alphabet)
                             case 2:
-                                neighbors_condensed_input(file_path, txt, strs)
+                                neighbors_condensed_input(file_path, txt, strs, alphabet)
                             case 3:
-                                kmers_input(file_path, txt, defvals)
+                                kmers_input(file_path, txt, defvals, alphabet)
                             case 4:
-                                logo_input(txt, strs, file_path)
+                                if _nucleotide_ok(alphabet, is_rna, 'The sequence logo'):
+                                    logo_input(txt, strs, file_path)
                             case 5:
-                                coverage_input(txt, strs, file_path)
+                                coverage_input(txt, strs, file_path, alphabet)
                             case 6:
-                                sequence_hits_input(file_path, txt)
+                                sequence_hits_input(file_path, txt, alphabet)
                             case 7:
-                                self_similarity_arcs_input(txt, file_path)
+                                self_similarity_arcs_input(txt, file_path, alphabet)
                             case 8:
-                                shared_motif_diagram_input(txt, strs, defvals, file_path)
+                                shared_motif_diagram_input(txt, strs, defvals, file_path, alphabet, reading)
                             case 9:
-                                transcript_coverage_comparison_input(txt, strs, defvals, file_path)
+                                transcript_coverage_comparison_input(txt, strs, defvals, file_path, alphabet, reading)
                             case 10:
-                                gc_coverage_comparison_input(txt, strs, file_path)
+                                if _nucleotide_ok(alphabet, is_rna, 'GC content'):
+                                    gc_coverage_comparison_input(txt, strs, file_path)
                             case 11:
-                                homopolymer_coverage_comparison_input(txt, strs, file_path)
+                                homopolymer_coverage_comparison_input(txt, strs, file_path, alphabet=alphabet)
                             case 12:
                                 menu_level = 0 # Go to the main menu
 
@@ -2897,35 +3142,36 @@ def menus():
                                 menu_level = 0
                             # Block 1 — single-sequence search & analysis
                             case 1:
-                                find_match_input(txt, strs)
+                                find_match_input(txt, strs, alphabet=alphabet)
                             case 2:
-                                search_input(txt)
+                                search_input(txt, alphabet=alphabet)
                             case 3:
-                                motif_extensions_input(txt, file_path)
+                                motif_extensions_input(txt, file_path, alphabet)
                             case 4:
-                                print_core_input(txt, strs)
+                                print_core_input(txt, strs, alphabet=alphabet)
                             case 5:
-                                spacing_test_input(txt)
+                                spacing_test_input(txt, alphabet)
                             case 6:
-                                gapped_motif_input(file_path, txt)
+                                gapped_motif_input(file_path, txt, alphabet)
                             case 7:
-                                txt_coverage_input(txt, strs)
+                                txt_coverage_input(txt, strs, alphabet=alphabet)
                             case 8:
-                                neighbors_condensed_export_input(file_path, txt, strs)
+                                neighbors_condensed_export_input(file_path, txt, strs, alphabet)
                             # Block 2 — statistical analysis
                             case 9:
-                                statistical_core_input(file_path, txt, strs)
+                                statistical_core_input(file_path, txt, strs, alphabet)
                             case 10:
-                                mutation_family_input(file_path, txt, strs)
+                                mutation_family_input(file_path, txt, strs, alphabet)
                             case 11:
-                                print_alignment_score(txt)
+                                print_alignment_score(txt, alphabet)
                             case 12:
-                                markov_kmer_input(txt, file_path)
+                                markov_kmer_input(txt, file_path, alphabet)
                             case 13:
-                                batch_spacing_test_input(file_path, txt, strs)
+                                batch_spacing_test_input(file_path, txt, strs, alphabet)
                             # Block 3 — other
                             case 14:
-                                hairpins_input(txt, file_path)
+                                if _nucleotide_ok(alphabet, is_rna, 'Hairpin search'):
+                                    hairpins_input(txt, file_path)
                             case 15:
                                 menu_level = 0 # Go to the main menu
         

@@ -130,6 +130,8 @@ class SessionData:
     dir: str
     stats: dict
     txtb: str = ''
+    alphabet: Optional[dict] = None
+    reading: Optional[dict] = None
 
     @classmethod
     def from_dict(cls, d: dict) -> 'SessionData':
@@ -143,6 +145,8 @@ class SessionData:
             dir=d['dir'],
             stats=d['stats'],
             txtb=d.get('txtb', ''),
+            alphabet=d.get('alphabet'),
+            reading=d.get('reading'),
         )
 
 
@@ -216,12 +220,12 @@ def _try_raise_libreoffice_window(filepath):
     return False
 
 
-def _summary_inputs_hash(xm, cores, txt, mutr, M):
+def _summary_inputs_hash(xm, cores, txt, mutr, M, alphabet=None):
     """Stable hash of the parameters that determine the content of the summary CSV."""
-    payload = json.dumps(
-        [sorted(xm), sorted(set(cores) - set(xm)), txt, mutr, M],
-        sort_keys=True, default=str,
-    )
+    items = [sorted(xm), sorted(set(cores) - set(xm)), txt, mutr, M]
+    if alphabet is not None:
+        items.append(alphabet.to_dict())     # a different alphabet changes the file
+    payload = json.dumps(items, sort_keys=True, default=str)
     return hashlib.sha256(payload.encode()).hexdigest()[:20]
 
 
@@ -508,11 +512,16 @@ def fetch_encode_ccre(accession: str, genome: str = "hg38", hint_chrom: str = No
     return annotation, seq
 
 
-def init_summary(fn, xm, cores, txt, mutr=1/6, M = 4, force=False):
+def init_summary(fn, xm, cores, txt, mutr=1/6, M = 4, force=False, alphabet=None):
     '''Input: xmotifs, cores, and the gene sequence. Output: a
-    report summarizing the properties of the sequences.'''
+    report summarizing the properties of the sequences.
+
+    With an :class:`rna_lexis.alphabet.Alphabet`, ``xm``, ``cores`` and ``txt``
+    are internal strings: the statistical columns are computed over the declared
+    alphabet (default Markov order and multiple-testing family for it), and the
+    ``seq`` column shows each motif as the alphabet's labels.'''
     out_csv = init_summary_path(fn)
-    current_hash = _summary_inputs_hash(xm, cores, txt, mutr, M)
+    current_hash = _summary_inputs_hash(xm, cores, txt, mutr, M, alphabet)
     if os.path.isfile(out_csv) and not force:
         try:
             with open(out_csv, 'r', encoding='utf-8', errors='ignore') as handle:
@@ -581,16 +590,18 @@ def init_summary(fn, xm, cores, txt, mutr=1/6, M = 4, force=False):
     # Create DataFrame once from all records (not row-by-row append)
     df = pd.DataFrame(records)
 
-    # Statistical layer: Markov enrichment/FDR columns for RNA/DNA sequences only.
-    if set(txt_lower).issubset(set('acgtu')):
+    # Statistical layer: Markov enrichment/FDR columns, for nucleotide text or
+    # for text read over an alphabet.
+    if alphabet is not None or set(txt_lower).issubset(set('acgtu')):
         try:
             score_rows = score_exact_motifs(
-                txt_lower,
+                txt if alphabet is not None else txt_lower,
                 xm_cores,
                 xmotifs=xm,
-                markov_order=1,
+                markov_order=1 if alphabet is None else None,
                 enrichment_threshold=10.0,
                 min_xmotif_type_support=1,
+                alphabet=alphabet,
             )
             score_map = {row['motif'].lower(): row for row in score_rows}
             mapped_columns = {
@@ -616,6 +627,8 @@ def init_summary(fn, xm, cores, txt, mutr=1/6, M = 4, force=False):
         except Exception as exc:
             df['statistical_support_error'] = str(exc)
 
+    if alphabet is not None:
+        df['seq'] = df['seq'].map(lambda s: alphabet.show(s))
     if 'q_markov' in df.columns:
         df = df.sort_values(
             by=['statistically_supported', 'q_markov', 'p_stable'],
