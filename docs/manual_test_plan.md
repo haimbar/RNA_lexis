@@ -117,14 +117,15 @@ gggcgagaaattagtattctgcac
 Read as **codons** it contains no repeated word (the longest shared stretch is 2 codons). Read as **amino
 acids** it contains `MKVLAGI` four times. If both readings agree, something is wrong.
 
-**Controls I suggest** (say the word and I will generate them into a folder):
-- *Shuffled copies* of Mark Antony, a gene and a song: same composition, no order. Expect few or no
-  statistically supported cores. Many would be a false-positive problem.
-- *Planted copies*: a shuffled text with one 12-unit phrase inserted five times. Expect it found, with its
-  count right.
-- *Hard cases*: an empty file; a binary file; a Latin-1 (non-UTF-8) text; Windows line endings; a text with
-  digits and punctuation; a CDS with `N`s; a protein FASTA; RNA with `U`; mixed upper and lower case; a
-  1-line file; a very long file (a chromosome) for timing; a hand-damaged session `.json`; a malformed alphabet file.
+**The controls pack** is in `~/lexis-testing/controls/` (made from your own Antony, whale, finch and gene files;
+its `README.md` lists every file with what to expect, as observed on this branch). In short:
+- `shuffled/`: the same material with the order destroyed. Expect almost no supported cores (Antony letters 0
+  against 482 in the original; the whale shuffle gave 2; human genes 0).
+- `planted/`: repeats whose number and place are known (`TRUTH.json`), a core split across two FASTA records,
+  the synonymous-codon case as a file, and syllable files for an alphabet in words mode.
+- `alphabets/`, `sessions/`, `hard_cases/`: good and deliberately bad alphabet files, session files and inputs
+  (empty, binary, Latin-1, a `;` comment before the header, CRLF, `N` codons, a protein, 300 kb and 3 Mb of
+  random nucleotides for timing).
 
 ## 5. The checks
 
@@ -142,7 +143,7 @@ Menu names are as on screen. "Expect" is what the branch is meant to do.
 - [ ] **T13** *Amino acids* on a protein FASTA; a letter such as `X` is skipped with a warning.
 - [ ] **T14** *An alphabet from a file*: Greek letters (Homer); a `"words"` alphabet for syllables; one with `"extras": [" "]`. Expect: the declared size is used even for symbols that never occur.
 - [ ] **T15** *Cancel* returns to the input menu.
-- [ ] **T16** Synonymous-codon case (section 4): codons find nothing, amino acids find `MKVLAGI` four times (use *Show settings*, *Summary statistics*, or *Print core* to see it).
+- [ ] **T16** Synonymous-codon case (`controls/planted/synonymous_demo.fa`, or the pasted text above). As codons: no xmotif and no core, and *Find all matches* with the nucleotides `atgaaagttcttgccggtatt` finds 1. As amino acids: one xmotif and core, `MKVLAGI`, and *Find all matches* with `mkvlagi` finds 4.
 
 ### C. Wrong alphabet, unknown symbols, odd input
 - [ ] **T20** Read English as *Codons*, and DNA as *Latin letters* or *Amino acids*. Expect a yellow warning that the alphabet may be wrong (the DNA one says it "looks like DNA or RNA"); the reading still goes ahead.
@@ -191,8 +192,8 @@ Put each line in `commands.sh`. Use `--input`, `--output`, and for codons `--alp
 - [ ] **T84** Nucleotide mode on English text: a warning on stderr that most letters were dropped; on a file with no nucleotides, an error.
 
 ### I. Does it find real structure and not invent it? (the part that matters most)
-- [ ] **T90** *Shuffled* Mark Antony, a gene and a song: how many cores are "statistically supported"? Expect few or none.
-- [ ] **T91** *Planted* phrase (five copies): found, with the right count.
+- [ ] **T90** The files in `controls/shuffled/` (Antony, whale, finch, genes): how many cores are "statistically supported"? Expect few or none; the README gives what I got, for the originals and the shuffles.
+- [ ] **T91** `controls/planted/planted_letters.txt` and `planted_codons.fasta`: the planted core is found, with the right count (5; and 3 exact plus 2 one-codon variants). `planted_split_across_records.fasta` must give 3, not 4.
 - [ ] **T92** Mark Antony as letters: are the repeated phrases real phrases? Compare with what you know of the speech.
 - [ ] **T93** A gene family or a gene with repeated domains, as codons and as amino acids: the amino-acid reading should find at least what the codon reading finds, and more when synonymous codons differ.
 - [ ] **T94** Whales and finches: do the repeated units look like known phrase structure? Do any repeats span two bouts (put each bout in its own record and compare)?
@@ -200,7 +201,7 @@ Put each line in `commands.sh`. Use `--input`, `--output`, and for codons `--alp
 
 ### J. Speed and size
 - [ ] **T100** `calibration/data/human_cds.fasta` as codons: *Load*, discovery, *Rank core motifs*. Expect seconds, not minutes. Note times.
-- [ ] **T101** A chromosome-size nucleotide file: note load time, memory, and where it becomes impractical.
+- [ ] **T101** `controls/hard_cases/big_nt_300kb.fasta`, then `big_nt_3mb.fasta`: note load time, memory, and where it becomes impractical. Discovery on random nucleotides took 34 s at 300 kb and over 4 minutes at 3 Mb; real sequence repeats less than random text, so it should be faster.
 - [ ] **T102** Ctrl+C during a long computation: returns cleanly or exits cleanly, no corrupted session file.
 
 ### K. Known gaps (do not report these as bugs)
