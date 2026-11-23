@@ -17,6 +17,21 @@ from rna_lexis.plots import (
     plot_self_similarity_arcs, plot_shared_motif_diagram, plot_coverage_comparison,
 )
 from rna_lexis.statistical import spacing_periodicity_test
+import rna_lexis.plots as _plots
+
+
+# The plot functions open each saved figure in the system viewer; the tests
+# write to temporary directories that vanish at once, so stub the openers out
+# (conftest.py does the same under pytest; this covers `python -m unittest`).
+def setUpModule():
+    global _saved_openers
+    _saved_openers = (_plots.open_file_with_default_software, _plots.open_pdf)
+    _plots.open_file_with_default_software = lambda *a, **k: None
+    _plots.open_pdf = lambda *a, **k: None
+
+
+def tearDownModule():
+    _plots.open_file_with_default_software, _plots.open_pdf = _saved_openers
 
 
 class PlotSelfSimilarityArcsTests(unittest.TestCase):
