@@ -1,5 +1,29 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- **`algorithms.cores` no longer leaves fragments of a core.** A k-mer shared
+  by two non-nested xmotifs was accepted correctly but then extended over
+  *every* occurrence in the whole text, so one stray occurrence outside all
+  xmotifs (e.g. `rut` in `...ruttera`) stopped the extension and left `rut`
+  beside `brutus`. A core is now extended only over its placements inside the
+  xmotifs, left and right, while all placements agree on the neighboring
+  symbol. The set of k-mers accepted is unchanged; `txt` is now unused. With
+  default settings the bundled human NORAD transcript gives 155 cores (was
+  235) and mouse 81 (was 109); the xmotifs are unchanged (163 and 92), and the
+  PRE motif `tgtatata` is now inside the core `ctgtgtatata` for human.
+- **Core counts no longer match the published paper.** The paper's 235 cores
+  for the human NORAD transcript is the old behavior; the same data now gives
+  155. The drop is entirely fragments: pieces of a core (e.g. `tttcta` beside
+  `atctagtctttctag`) that were kept only because they also occur by chance
+  outside every xmotif, and so never extended. Every xmotif containing such a
+  piece also contains the full core, so no information is lost: each old core
+  is still a substring of a new core. The xmotif counts (163 / 92) and the
+  extra cores for xmotifs that contain no core (48 / 45) are unchanged.
+- New test `test_cores_extension_ignores_occurrences_outside_xmotifs`.
+
 ## [0.2.6] - 2026-10-16
 
 ### Changed

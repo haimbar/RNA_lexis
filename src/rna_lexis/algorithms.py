@@ -281,6 +281,42 @@ def extend_core_maximally(txt: str, core: str) -> str:
     return current
 
 
+def _extend_core_in_xmotifs(xmotifs, core):
+    """Extend core left and right while every placement of it inside the
+    xmotifs has the same neighboring symbol (and none is at an xmotif end).
+
+    Unlike extend_core_maximally(), this looks only at the occurrences of the
+    core inside the xmotifs, not at every occurrence in the whole text.  An
+    occurrence outside all xmotifs would otherwise block the extension and
+    leave a fragment of the core (e.g. 'rut' instead of 'brutus').
+
+    Args:
+        xmotifs: List of extended motif strings.
+        core:    Starting core string (a substring of at least two xmotifs).
+
+    Returns:
+        The extended core string.
+    """
+    cur = core
+    while True:
+        placed = []
+        for xm in xmotifs:
+            i = xm.find(cur)
+            while i >= 0:
+                placed.append((xm, i))
+                i = xm.find(cur, i + 1)
+        right = {xm[i + len(cur)] if i + len(cur) < len(xm) else None
+                 for xm, i in placed}
+        if len(right) == 1 and None not in right:
+            cur += right.pop()
+            continue
+        left = {xm[i - 1] if i > 0 else None for xm, i in placed}
+        if len(left) == 1 and None not in left:
+            cur = left.pop() + cur
+            continue
+        return cur
+
+
 def cores(txt, xmotifs, minclen=6):
     """Find core sequences as k-mers shared across non-containment xmotifs.
 
@@ -293,6 +329,10 @@ def cores(txt, xmotifs, minclen=6):
     Skipping intermediate values (as was done previously) can miss cores whose
     length does not coincide with any xmotif length — most critically when the
     minimum xmotif length is raised above minclen.
+
+    Each accepted k-mer is then extended left and right, but only over its
+    placements inside the xmotifs (not every occurrence in txt), so a stray
+    occurrence outside the xmotifs cannot leave a fragment of the core.
 
     Args:
         txt:      Source text (unused; kept for API compatibility).
@@ -340,11 +380,10 @@ def cores(txt, xmotifs, minclen=6):
                 if kmer in cores_found:
                     break
 
-    # Extend each core maximally in txt, then deduplicate.
-    # Multiple short cores often collapse to the same maximal string.
-    if txt:
-        return list({extend_core_maximally(txt, c) for c in cores_found})
-    return list(cores_found)
+    # Extend each core maximally within the xmotifs that share it, then
+    # deduplicate.  Multiple short cores often collapse to the same maximal
+    # string.
+    return list({_extend_core_in_xmotifs(xmotifs, c) for c in cores_found})
 
 
 def print_core(txt, core, xm):

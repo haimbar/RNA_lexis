@@ -69,6 +69,15 @@ class BoundaryAndCoresTests(unittest.TestCase):
         found = cores(txt, xmotifs, minclen=6)
         self.assertTrue(any("tgtatata" in c for c in found))
 
+    def test_cores_extension_ignores_occurrences_outside_xmotifs(self):
+        # "rut" is shared by the two xmotifs and always flanked by "b" and "us"
+        # inside them, but it also occurs once in the text outside every
+        # xmotif ("zzrutzz").  The core must still extend to "brutus" rather
+        # than stopping at the fragment.
+        xmotifs = ["abrutusc", "dbrutuse"]
+        txt = "abrutusc" + "dbrutuse" + "zzrutzz"
+        self.assertEqual(cores(txt, xmotifs, minclen=3), ["brutus"])
+
     def test_cores_empty_without_shared_substring(self):
         self.assertEqual(cores("", [], minclen=6), [])
 

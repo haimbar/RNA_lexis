@@ -58,10 +58,11 @@ class NoradDiscoveryPipelineTests(unittest.TestCase):
     """Runs the real parsedata() pipeline end to end and checks that the
     known PRE motif is (a) discovered and (b) discovery finds a
     biologically-plausible number of xmotifs/cores. Bounds are loose by
-    design -- exact counts (163 xmotifs / 235 cores for human, with default
-    settings, matching the published RNA-Lexis paper's validation numbers
-    for this exact transcript) would make this test brittle against
-    unrelated future tuning of find_boundary()/cores().
+    design -- exact counts (163 xmotifs for human with default settings,
+    matching the published RNA-Lexis paper's validation number for this
+    exact transcript; 155 cores since cores are extended only inside their
+    xmotifs, 235 before) would make this test brittle against unrelated
+    future tuning of find_boundary()/cores().
     """
 
     @staticmethod
@@ -71,7 +72,9 @@ class NoradDiscoveryPipelineTests(unittest.TestCase):
 
     def test_human_norad_discovers_the_pre_motif_among_cores(self):
         parsed = self._discover("NORAD_human")
-        self.assertIn("tgtatata", parsed["corelist"])
+        # Cores are extended only inside the xmotifs that share them, so the
+        # PRE motif may appear as part of a longer core (e.g. ctgtgtatata).
+        self.assertTrue(any("tgtatata" in c for c in parsed["corelist"]))
         self.assertGreater(len(parsed["xmotifs"]), 50)
         self.assertGreater(len(parsed["corelist"]), 50)
 
