@@ -73,11 +73,19 @@ MAX_INPUT_BYTES = 500 * 2**20
 def _read_file(path: str) -> str:
     """A text file's content, or an error that names the file and says what is wrong with it."""
     p = Path(path)
-    if not p.is_file():
+    if not p.exists() or p.is_dir():
         sys.exit(f"error: {path} is not a file")
-    if p.stat().st_size > MAX_INPUT_BYTES:
+    # A pipe or /dev/stdin (shell process substitution, `-` style input) is not a regular file and has no size;
+    # only a regular file can be checked against the limit up front, so read the others with a cap.
+    if p.is_file():
+        if p.stat().st_size > MAX_INPUT_BYTES:
+            sys.exit(f"error: {path} is larger than {MAX_INPUT_BYTES // 2**20} MB")
+        return p.read_text(encoding="utf-8", errors="ignore")
+    with open(p, "rb") as fh:
+        data = fh.read(MAX_INPUT_BYTES + 1)
+    if len(data) > MAX_INPUT_BYTES:
         sys.exit(f"error: {path} is larger than {MAX_INPUT_BYTES // 2**20} MB")
-    return p.read_text(encoding="utf-8", errors="ignore")
+    return data.decode("utf-8", errors="ignore")
 
 
 def _read_sequence(path: str, alphabet=None, args=None) -> str:

@@ -578,6 +578,24 @@ class CommandLineInputTests(unittest.TestCase):
         self.assertIn("Is this nucleotide text", err)
         self.assertTrue(os.path.getsize(self.p("o.csv")) > 0)
 
+    @unittest.skipUnless(hasattr(os, "mkfifo"), "needs named pipes")
+    def test_a_pipe_is_read_like_a_file(self):
+        import threading
+        fifo = self.p("motifs.fifo")
+        os.mkfifo(fifo)
+        fa = self.w("s.fa", ">x\n" + "gattaca" * 4 + "\n")
+        writer = threading.Thread(target=lambda: open(fifo, "w").write("gattaca\n"))
+        writer.start()
+        self.run_cli(["score-exact", "--input", fa, "--motifs", fifo, "--output", self.p("o.csv"),
+                      "--enrichment-threshold", "1"])
+        writer.join()
+        self.assertIn("4", open(self.p("o.csv")).read().splitlines()[1])
+
+    def test_a_directory_is_not_a_file(self):
+        fa = self.w("s.fa", ">x\n" + "gattaca" * 4 + "\n")
+        self.expect_error(["score-exact", "--input", fa, "--motifs", self.tmp.name, "--output", self.p("o.csv")],
+                          "is not a file")
+
     def test_a_fasta_file_that_begins_with_a_comment_is_read_without_its_headers(self):
         fa = self.w("c.fa", "; comment acgtacgtacgt\n>ENST header acgt\n" + "gattaca" * 6 + "\n")
         motifs = self.w("m.txt", "gattaca\n")
