@@ -2,6 +2,31 @@
 
 ## [Unreleased]
 
+### Added
+
+- **Alphabets and units (phase 1 of the codon-level work; not yet used by the
+  analysis code).** `rna_lexis.alphabet.Alphabet` is a *declared* set of symbols:
+  every symbol counts whether or not a text uses it, so an English text with no
+  `z` is still a 26-letter text. Built-ins: `nucleotide()`, `codon()` (the 64
+  codons, read three characters at a time) and `latin()`; further symbols such
+  as a space or digits are added with `with_extras()`. Each symbol gets one
+  internal character (its own letter for `a`-`z`, otherwise a character from the
+  Unicode private use area, which has no case), so analysis can later run on
+  one-character-per-unit strings. Alphabets save and load as JSON.
+- `rna_lexis.tokenizers.tokenize` reads text into an alphabet in `chars`,
+  `fixed` (codons, with a reading frame) or `words` mode, from one string or a
+  list of segments. Unknown symbols are skipped with a warning by default
+  (`on_unknown="error"` stops instead). In codon mode an ambiguity code such as
+  `n` makes the whole codon unknown, so the frame never shifts; a partial codon
+  at the end is dropped with a warning. The result records where each unit came
+  from, what was skipped or dropped, and where a removal made two units
+  adjacent (`Tokenized.removal_points`, `spans_removal`).
+- `rna_lexis.codec`: `make_codebook` (seeded permutation), `read_codebook_csv`
+  / `write_codebook_csv`, `encode_nt` / `decode_nt` (units ↔ nucleotide text,
+  including a motif found at an offset), for any symbol set and code width. On
+  Mark Antony's oration it reproduces GeneDB's `eng2rna` encoding exactly, and
+  on the finch songs it reproduces the stored encoding of all 299 bouts.
+
 ### Changed
 
 - **Mutation positions are no longer marked by letter case.**

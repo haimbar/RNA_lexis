@@ -9,7 +9,7 @@ API reference) — this file is about *working on* the repo, not using it.
 
 - Tests: `python3 -m pytest -q` (plain `python` may resolve to a Python
   without pytest installed in some environments — use `python3` explicitly).
-  122 tests: `test_statistical.py`, `test_algorithms.py`, `test_io.py`,
+  185 tests: `test_statistical.py`, `test_algorithms.py`, `test_io.py`,
   `test_alignment.py`, `test_batch_cli.py` (all synthetic-data
   unit/end-to-end, no real biological data or network calls), plus
   `test_norad_integration.py` (8 tests — real biology, no network calls
@@ -88,6 +88,14 @@ each spawned in an isolated subprocess) → `menu.py` (interactive TUI,
 imports from all of the above) → `test_cli.py` (headless batch CLI) →
 `RNAlang.py` (backward-compat shim re-exporting everything). New code should
 import from the specific sub-module, not `RNAlang`.
+
+Whole-unit (codon-level) analysis is being added on the
+`codon-units-alphabet` branch; the plan is `docs/scoping_codon_units.md`.
+Three self-contained modules sit beside the engine and import nothing from it:
+`alphabet.py` (the declared symbol set and its internal one-character-per-unit
+mapping), `tokenizers.py` (text → internal string, with unknown-symbol and
+frame handling) and `codec.py` (units ↔ nucleotide text, codebook files). The
+analysis code does not use them yet (phase 2 onward).
 
 ## Known gotchas / established conventions
 

@@ -415,6 +415,33 @@ Each phase should be shippable and leave nucleotide behavior unchanged.
    logo.
 6. Wishlist items (section 12), starting with the synonymous-codon test.
 
+### Phase 1 status
+
+Phase 1 is implemented in `alphabet.py`, `tokenizers.py` and `codec.py`, with
+tests, and checked against GeneDB: the codec reproduces `eng2rna`'s encoding of
+Mark Antony's oration exactly, and the codebook plus finch songs reproduce the
+stored encoding of all 299 bouts. Choices made while implementing, where the
+text above left room or was refined:
+
+- **Internal characters.** A symbol that is a single lower-case ASCII letter
+  is its own character, so nucleotide and Latin text read exactly as before.
+  Every other symbol (codons, digits, spaces, syllable names) gets a private
+  use character. Section 3.3 said private use for everything.
+- **The boundary is always `"_"`** and never an alphabet symbol, so an extra
+  symbol `_` in the text cannot collide with it.
+- **Aliases** (`u` to `t`) are one character for another in codon mode, applied
+  before characters are grouped. In the other modes the target must be a symbol.
+- **Codebook assignment.** Explicit mappings and a seeded permutation ship; a
+  base-frequency-balanced assignment is not included (section 9, question 3).
+- **Segments** are joined by `gap` boundary characters (default 1) and the
+  result records the segment spans. The analysis code does not use the spans
+  yet, so keeping motifs from spanning a boundary is phase 2 work.
+
+Found for phase 2: `_allowed_pattern_chars` in `statistical.py` treats `n . ? *`
+as wildcards, and `n` is also a Latin letter. The wildcard must become a
+character that cannot be an alphabet symbol before Latin text can go through
+the gapped-motif code.
+
 ## 11. Risks
 
 - The statistical defaults (section 7) are the largest unknown. A wrong

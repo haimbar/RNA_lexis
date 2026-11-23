@@ -261,6 +261,40 @@ descending, then `q_markov` ascending. Otherwise sorted by `p_stable` ascending.
 
 ---
 
+## Module: `rna_lexis.alphabet`, `rna_lexis.tokenizers`, `rna_lexis.codec`
+
+Whole-unit analysis: read text as units (codons, letters, syllables) instead of
+single nucleotides. Not yet used by the analysis functions below; they still
+take plain strings.
+
+```python
+from rna_lexis.alphabet import Alphabet, nucleotide, codon, latin, get_alphabet
+from rna_lexis.tokenizers import tokenize
+from rna_lexis.codec import (make_codebook, read_codebook_csv, write_codebook_csv,
+                             encode_nt, decode_nt, frame_for_position)
+
+a = codon().with_extras(" 0123456789")   # 64 codons + a space + digits; size == 75
+a.size                                    # declared symbols, used or not
+t = tokenize("ATGAAAUUU", codon())        # t.text: one internal character per codon
+t.decode(sep=" ")                         # "atg aaa ttt"
+tokenize(["bout one", "bout two"], latin())   # segments joined by "_" boundaries
+```
+
+`tokenize(text, alphabet, mode=None, width=None, frame=0, on_unknown="skip", gap=1)`
+- `text`: a string, or a list of segments (motifs must not span two).
+- Unknown symbols: removed with an `UnknownSymbolWarning` by default;
+  `on_unknown="error"` raises `UnknownSymbolError`. In codon mode a whole codon
+  containing an ambiguity code (`n`) is the unknown unit, so the frame is kept.
+- Result `Tokenized`: `.text`, `.segments`, `.offsets` (index in the original
+  text of each unit), `.skipped`, `.dropped`, `.removal_points`,
+  `.spans_removal(start, length)`, `.decode(...)`.
+
+A codebook maps each symbol to a fixed-width nucleotide code:
+`Alphabet.from_codebook(name, make_codebook(symbols, width=3, seed=1))`;
+`encode_nt(t, alphabet)` and `decode_nt(nt, alphabet, frame=0)` convert between
+units and nucleotide text. Alphabets save with `alphabet.save(path)` and load
+with `Alphabet.load(path)` or `get_alphabet(name_or_path)`.
+
 ## Module: `rna_lexis.algorithms`
 
 ### `contains_only_rna(s, allowed_chars='atucg') -> bool`

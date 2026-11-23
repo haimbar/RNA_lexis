@@ -1,4 +1,7 @@
 from . import algorithms
+from . import alphabet
+from . import tokenizers
+from . import codec
 from . import alignment
 from . import plots
 from . import io
