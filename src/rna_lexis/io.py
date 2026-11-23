@@ -22,7 +22,7 @@ from platformdirs import user_config_dir
 from scipy.stats import binom as _binom
 
 from rna_lexis.algorithms import find_with_mutations
-from rna_lexis.statistical import score_exact_motifs
+from rna_lexis.statistical import csv_safe, score_exact_motifs
 
 TEST_SUMMARY_SUFFIX = "_test_init.csv"
 
@@ -166,6 +166,10 @@ def save_session(filename, data, debug=False):
         json.dump(data, json_file, indent=4)
 
 
+MAX_SESSION_BYTES = 200 * 2**20
+"""A session file larger than this is refused (a 200 MB sequence is already far beyond what the analysis can handle)."""
+
+
 def load_session(filename):
     """Load a session dict from a JSON file.
 
@@ -173,16 +177,62 @@ def load_session(filename):
         filename: Full path to the JSON file (including the .json extension).
 
     Returns:
-        The parsed session dict on success, or None if the file is not found
-        or cannot be decoded as valid JSON.
+        The parsed session dict on success, or None (with a message printed) if the file is not found,
+        is too large, cannot be read or decoded as JSON, or is JSON that is not a session (not an object).
     """
     try:
+        if os.path.getsize(filename) > MAX_SESSION_BYTES:
+            print(f"Error: '{filename}' is too large to be a session file.")
+            return None
         with open(filename, 'r', encoding='utf-8') as file:
-            return(json.load(file))
+            data = json.load(file)
     except FileNotFoundError:
-        print(f"Error: The file '{filename}.json' was not found.")
-    except json.JSONDecodeError:
-        print(f"Error: Failed to decode JSON from the file (invalid format).")
+        print(f"Error: The file '{filename}' was not found.")
+        return None
+    except (json.JSONDecodeError, UnicodeDecodeError, RecursionError):
+        print(f"Error: Failed to decode JSON from the file '{filename}' (invalid format).")
+        return None
+    except OSError as exc:
+        print(f"Error: Could not read '{filename}': {exc}")
+        return None
+    if not isinstance(data, dict):
+        print(f"Error: '{filename}' is not a session file (expected a JSON object, got {type(data).__name__}).")
+        return None
+    return data
+
+
+def session_problem(data) -> Optional[str]:
+    """What is wrong with a loaded session dict, or None if it is usable.
+
+    Checks what the analysis relies on and a corrupt or hand-edited file would break: the text is
+    a string; any alphabet is a valid description; and the text, motifs and core list contain only
+    characters of that alphabet (and the segment boundary).  A session without an alphabet is nucleotide text,
+    and then the lists must be lists of strings.
+    """
+    from rna_lexis.alphabet import Alphabet, BOUNDARY
+    if not isinstance(data, dict):
+        return "the session is not a JSON object"
+    for key in ("txt", "file_path"):
+        if not isinstance(data.get(key), str):
+            return f"the session has no {key!r} (a string)"
+    for key in ("corelist", "xmotifs"):
+        v = data.get(key, [])
+        if not isinstance(v, list) or not all(isinstance(x, str) for x in v):
+            return f"{key!r} must be a list of strings"
+    alphabet = data.get("alphabet")
+    if alphabet is None:
+        return None
+    try:
+        a = alphabet if isinstance(alphabet, Alphabet) else Alphabet.from_dict(alphabet)
+    except ValueError as exc:
+        return f"the session's alphabet is not valid: {exc}"
+    allowed = set(a.chars) | {BOUNDARY}
+    for what, text in (("text", data["txt"]), *((k, "".join(data.get(k, []))) for k in ("corelist", "xmotifs"))):
+        bad = sorted(set(text) - allowed)
+        if bad:
+            return (f"the session's {what} has characters that are not in its alphabet "
+                    f"{a.name!r} (first: {bad[:3]!r}); the file may be damaged or edited by hand")
+    return None
 
 
 def is_valid_session(filepath: str) -> Optional[SessionData]:
@@ -288,6 +338,28 @@ def _close_in_excel(filepath):
     return False
 
 
+def split_fasta(text: str):
+    """Split FASTA text into ``(headers, records)``, or return None if the text is not FASTA.
+
+    Text is FASTA when its first line that is not blank and not a ``;`` comment starts with ``>``.  Lines before
+    that, and any ``;`` comment line inside, are dropped; each record is the lines under one header, joined.
+    (Testing only whether the whole text starts with ``>`` took a file that begins with a comment line to be
+    plain text, and its header lines were then read as sequence.)
+    """
+    lines = text.splitlines()
+    first = next((i for i, ln in enumerate(lines) if ln.strip() and not ln.lstrip().startswith(";")), None)
+    if first is None or not lines[first].startswith(">"):
+        return None
+    headers, records = [], []
+    for ln in lines[first:]:
+        if ln.startswith(">"):
+            headers.append(ln[1:].strip())
+            records.append([])
+        elif not ln.lstrip().startswith(";"):
+            records[-1].append(ln)
+    return headers, ["\n".join(r) for r in records]
+
+
 def read_text(filename: str, keepspacing=False) -> str:
     """Read a text file and return its contents as a lower-case alphabetic string.
 
@@ -343,6 +415,17 @@ def _find_valid_sessions(directory: str) -> list:
     return result
 
 
+MAX_RESPONSE_BYTES = 100 * 2**20
+
+
+def _read_capped(response) -> bytes:
+    """The body of a response, refusing one larger than MAX_RESPONSE_BYTES instead of filling memory with it."""
+    body = response.read(MAX_RESPONSE_BYTES + 1)
+    if len(body) > MAX_RESPONSE_BYTES:
+        raise ValueError(f"the response is larger than {MAX_RESPONSE_BYTES // 2**20} MB")
+    return body
+
+
 def _fetch_ensembl_json(url: str):
     """Fetch a JSON response from the Ensembl REST API.
 
@@ -358,7 +441,7 @@ def _fetch_ensembl_json(url: str):
     """
     req = urllib.request.Request(url, headers={"Content-Type": "application/json"})
     with urllib.request.urlopen(req, timeout=45) as response:
-        return json.loads(response.read().decode("utf-8"))
+        return json.loads(_read_capped(response).decode("utf-8"))
 
 
 def fetch_enst_cdna(enst: str):
@@ -380,9 +463,15 @@ def fetch_enst_cdna(enst: str):
         ValueError: If enst does not start with ``'ENST'``.
         RuntimeError: If the transcript cannot be fetched from the API.
     """
+    if not isinstance(enst, str):
+        raise ValueError("Transcript ID must be a string")
     enst = enst.strip()
     if not enst.upper().startswith("ENST"):
         raise ValueError("Transcript ID must start with ENST")
+    # Letters, digits and one version suffix only: the ID is placed into a URL, so anything else
+    # (a slash, '?', '#', a space) would change which address is requested.
+    if not re.fullmatch(r"ENST[0-9]+(\.[0-9]+)?", enst, flags=re.I):
+        raise ValueError("Transcript ID must look like ENST00000526704 or ENST00000526704.3")
 
     candidates = [enst]
     if "." in enst:
@@ -433,7 +522,16 @@ def _fetch_ucsc_json(url: str):
     """
     req = urllib.request.Request(url, headers={"Accept": "application/json"})
     with urllib.request.urlopen(req, timeout=30) as response:
-        return json.loads(response.read().decode("utf-8"))
+        return json.loads(_read_capped(response).decode("utf-8"))
+
+
+MAX_RANGE = 10_000_000
+
+
+def _check_genome(genome):
+    """A UCSC assembly name (hg38, mm10, ...) is letters and digits; it is placed into a URL."""
+    if not isinstance(genome, str) or not re.fullmatch(r"[A-Za-z0-9]{2,20}", genome):
+        raise ValueError(f"genome must be an assembly name such as hg38, got {genome!r}")
 
 
 def fetch_genomic_range(chrom: str, start: int, end: int, genome: str = "hg38"):
@@ -451,6 +549,14 @@ def fetch_genomic_range(chrom: str, start: int, end: int, genome: str = "hg38"):
     Raises:
         ValueError: If the API returns no sequence for the given range.
     """
+    _check_genome(genome)
+    if not isinstance(chrom, str) or not re.fullmatch(r"chr[0-9A-Za-z_]{1,40}", chrom):
+        raise ValueError(f"chromosome must look like chr10 or chrX, got {chrom!r}")
+    if isinstance(start, bool) or isinstance(end, bool) or not isinstance(start, int) \
+            or not isinstance(end, int) or start < 0 or end <= start:
+        raise ValueError(f"start and end must be whole numbers with 0 <= start < end, got {start!r}, {end!r}")
+    if end - start > MAX_RANGE:
+        raise ValueError(f"the range is {end - start:,} bases; the most that can be fetched is {MAX_RANGE:,}")
     seq_url = (f"https://api.genome.ucsc.edu/getData/sequence"
                f"?genome={genome};chrom={chrom};start={start};end={end}")
     seq = _fetch_ucsc_json(seq_url).get("dna", "")
@@ -480,6 +586,10 @@ def fetch_encode_ccre(accession: str, genome: str = "hg38", hint_chrom: str = No
     Raises:
         ValueError: If the accession is not found, or has no sequence.
     """
+    _check_genome(genome)
+    if not isinstance(accession, str) or not re.fullmatch(r"[A-Za-z0-9]{4,30}", accession.strip()):
+        raise ValueError(f"an ENCODE accession is letters and digits, like EH38E1482203, got {accession!r}")
+    accession = accession.strip()
     chroms = list(_HG38_SIZES)
     if hint_chrom and hint_chrom in _HG38_SIZES:
         chroms = [hint_chrom] + [c for c in chroms if c != hint_chrom]
@@ -637,6 +747,8 @@ def init_summary(fn, xm, cores, txt, mutr=1/6, M = 4, force=False, alphabet=None
         )
     else:
         df = df.sort_values(by='p_stable', ascending=True)
+    for col in df.select_dtypes(include="object").columns:      # a symbol label must not start a spreadsheet formula
+        df[col] = df[col].map(csv_safe)
     out_csv = init_summary_path(fn)
     tried = []
     for candidate in [

@@ -1,5 +1,6 @@
 # A simple menu for selecting RNAlang functions
 import os
+import math
 import re
 import sys
 import glob
@@ -39,7 +40,7 @@ from rna_lexis.plots import (
     plot_coverage_comparison, plot_unit_profile,
 )
 from rna_lexis.io import (
-    read_text, save_session, load_session, init_summary, is_valid_session,
+    read_text, save_session, load_session, session_problem, init_summary, is_valid_session,
     open_file_with_default_software, _find_valid_sessions, fetch_enst_cdna,
     fetch_genomic_range, fetch_encode_ccre,
     load_prefs, save_prefs, example_dataset_path, EXAMPLE_DATASETS,
@@ -52,7 +53,7 @@ from rna_lexis.statistical import (
     score_gapped_motif,
     shared_exact_motifs,
     spacing_periodicity_test,
-    unit_profile,
+    unit_profile, MAX_FLANK,
     write_unit_profile_csv,
     write_rows_csv,
 )
@@ -224,9 +225,12 @@ def _load_fasta_or_text(file_path):
     gene_name = None
     with open(file_path, "r", encoding="utf-8", errors="ignore") as fh:
         raw_lines = fh.readlines()
-    if raw_lines and raw_lines[0].startswith(">"):
-        gene_name = raw_lines[0][1:].split()[0]
-        raw_lines = [ln for ln in raw_lines if not ln.startswith(">")]
+    # FASTA, possibly after blank lines or ';' comment lines; those, the header lines and any ';' comments are not sequence
+    first = next((i for i, ln in enumerate(raw_lines) if ln.strip() and not ln.lstrip().startswith(";")), None)
+    if first is not None and raw_lines[first].startswith(">"):
+        header = raw_lines[first][1:].split()
+        gene_name = header[0] if header else None
+        raw_lines = [ln for ln in raw_lines[first:] if not ln.startswith(">") and not ln.lstrip().startswith(";")]
     raw = "".join(raw_lines)
 
     # Build txtb (spacing preserved) and txt (compact) from sequence only.
@@ -288,6 +292,63 @@ def _alphabet_of(data):
     return Alphabet.from_dict(a) if isinstance(a, dict) else a
 
 
+def _number(raw, default, kind=float, low=None, high=None, low_open=False, what='value'):
+    """A number typed at a prompt.
+
+    Blank gives ``default``.  Anything else that is not a finite number of the right kind in range
+    (a word, ``nan``, ``1e999``, a fraction where a whole number is wanted, a value out of range)
+    prints what was wrong and also gives ``default``, so a typing mistake does not stop the analysis
+    or throw the user back to the main menu.
+    """
+    text = str(raw).strip()
+    if text == '':
+        return default
+    try:
+        value = float(text)
+        if not math.isfinite(value):
+            raise ValueError
+        if kind is int:
+            if value != int(value):
+                raise ValueError
+            value = int(value)
+        if low is not None and (value <= low if low_open else value < low):
+            raise ValueError
+        if high is not None and value > high:
+            raise ValueError
+    except (ValueError, OverflowError):
+        need = 'a whole number' if kind is int else 'a number'
+        if low is not None:
+            need += f" {'above' if low_open else 'of at least'} {low}"
+            if high is not None:
+                need += f" and at most {high}"
+        elif high is not None:
+            need += f" of at most {high}"
+        shown = text if len(text) <= 30 else text[:30] + '...'
+        print(fmttxt([f"'{shown}' is not {need}; using the default, {default}."], ['bold'], ['red']))
+        return default
+    return value
+
+
+PAIR_WARNING = 300_000
+"""Pairs of occurrences above which a handler that extends every pair asks before it starts."""
+
+
+def _confirm_many_pairs(n_positions, what='occurrences'):
+    """Ask before an all-pairs computation that will take a long time; True to go on.
+
+    Every pair of occurrences is extended and compared, so the work grows with the square of how often
+    the motif occurs: a single common letter in a long text is millions of pairs.
+    """
+    pairs = n_positions * (n_positions - 1) // 2
+    if pairs <= PAIR_WARNING:
+        return True
+    print(fmttxt([f"There are {n_positions:,} {what}, which makes {pairs:,} pairs to extend and compare. "
+                  "That can take many minutes; a longer, more specific motif has fewer."],
+                 ['bold'], ['yellow']))
+    ans = safe_input(fmttxt(["Continue?", "[y/N]: "], ['bold', ''], ['yellow', 'cyan']) + ' ')
+    return ans.strip().lower() in ('y', 'yes')
+
+
 def _query_to_internal(raw, alphabet, wildcard=False):
     """Turn something the user typed into an internal string.
 
@@ -298,6 +359,12 @@ def _query_to_internal(raw, alphabet, wildcard=False):
     are not in the alphabet are dropped with a warning, as when loading.
     """
     if alphabet is None:
+        try:
+            re.compile(raw.lower())          # nucleotide queries are regular expressions: say so if one is not valid
+        except re.error as exc:
+            print(fmttxt([f"'{raw[:40]}' is not a valid pattern ({exc}). Letters and . (any one letter) are "
+                          "the usual pattern; ( [ { * + ? | \\ have a special meaning."], ['bold'], ['red']))
+            return ''
         return raw
     pieces = raw.split('.') if wildcard else [raw]
     out = []
@@ -444,6 +511,16 @@ def _choose_reading(data):
     return data
 
 
+def _load_session_checked(path):
+    """Load a session file; None, with the reason printed, if it is missing, damaged or unusable."""
+    data = load_session(path)
+    problem = session_problem(data) if data is not None else None
+    if problem:
+        print(fmttxt([f"Cannot use the session '{path}': {problem}."], ['bold'], ['red']))
+        return None
+    return data
+
+
 def choose_file(datadir=''):
     """Open a file-picker dialog and load the chosen file as a session dict.
 
@@ -461,7 +538,7 @@ def choose_file(datadir=''):
     if not file_path or not os.path.isfile(file_path):
         return None
     if file_path.endswith(".json"):
-        return(load_session(file_path))
+        return _load_session_checked(file_path)
     return _load_fasta_or_text(file_path)
 
 
@@ -560,7 +637,7 @@ def choose_enst(datadir='', save_at_parent=True):
             if matches:
                 cached_path = matches[0]
                 print(fmttxt([f"Loading cached session:", cached_path], ['bold', ''], ['green', 'cyan']))
-                return load_session(cached_path)
+                return _load_session_checked(cached_path)
         try:
             tid, label, seq = fetch_enst_cdna(enst)
             txt = sub('[^a-z]+', '', seq.lower())
@@ -841,7 +918,7 @@ def choose_comparison_sequence(datadir='', alphabet=None, reading=None):
         data = _choose_encode_ccre()
     else:  # idx == 6
         path = openFile(initial_dir=datadir or None)
-        data = load_session(path) if path and path.endswith('.json') else None
+        data = _load_session_checked(path) if path and path.endswith('.json') else None
 
     if data is None:
         return None
@@ -1018,7 +1095,7 @@ def _collect_neighbors_params(fn, txt, strs, alphabet=None):
     wd_prompt = fmttxt(['Enter neighborhood width:', f'[default: {default_wd}]'],
                        ['bold', ''], ['yellow', 'cyan'])
     wd = safe_input(wd_prompt + " ")
-    wd = default_wd if wd == '' else int(wd)
+    wd = _number(wd, default_wd, int, low=1)
 
     wds_prompt = fmttxt(['Enter the strings to include in calculation ',
                          '[1: cores, or 2: xmotifs (default)]'],
@@ -1046,7 +1123,7 @@ def _collect_neighbors_params(fn, txt, strs, alphabet=None):
 
     min_occ_raw = safe_input(fmttxt(['Minimum occurrences to include a neighbour:', '[default: 2]'],
                                     ['bold', ''], ['yellow', 'cyan']) + ' ')
-    min_occ = 2 if min_occ_raw.strip() == '' else max(1, int(min_occ_raw.strip()))
+    min_occ = _number(min_occ_raw, 2, int, low=1)
 
     hairpins = []
     hairpins_csv = os.path.splitext(file_path)[0] + '_hairpins.csv'
@@ -1131,7 +1208,7 @@ def neighbors_condensed_export_input(fn, txt, strs, alphabet=None):
     default_wd = compute_default_wd(txt, strs["corelist"])
     wd = safe_input(fmttxt(['Enter neighborhood width:', f'[default: {default_wd}]'],
                             ['bold', ''], ['yellow', 'cyan']) + " ")
-    wd = default_wd if wd == '' else int(wd)
+    wd = _number(wd, default_wd, int, low=1)
 
     wds_prompt = fmttxt(['Enter the strings to include ',
                          '[1: cores, or 2: xmotifs (default)]'],
@@ -1197,16 +1274,19 @@ def kmers_input(fn, txt, defvals, alphabet=None):
     if val == len(kmers_menu):
         return None
     kmers = count_kgrams(txt, k)
+    if not kmers:
+        print(fmttxt([f"No {k}-mer occurs more than once in this text, so there is nothing to plot; "
+                      "try a smaller k."], ['bold'], ['red']))
+        return None
     if val == 1 or val == 2:
         zmin = safe_input(fmttxt(["Enter the z-score threshold", "[Default: 1.96]"],
                             ['bold',''], ["yellow", "cyan"]) + " ")
-        if zmin == '':
-            zmin = 1.96
+        zmin = _number(zmin, 1.96, float, low=0)
         fn_out, scale = _prompt_save(session_dir=os.path.dirname(os.path.abspath(fn)))
         if val == 1:
-            _spawn_plot(plotzscore, kmers, float(zmin), robust=False, file=fn_out, scale=scale, alphabet=alphabet)
+            _spawn_plot(plotzscore, kmers, zmin, robust=False, file=fn_out, scale=scale, alphabet=alphabet)
         else:
-            _spawn_plot(plotzscore, kmers, float(zmin), robust=True, file=fn_out, scale=scale, alphabet=alphabet)
+            _spawn_plot(plotzscore, kmers, zmin, robust=True, file=fn_out, scale=scale, alphabet=alphabet)
         return None
     if val == 3:
         fn_out, scale = _prompt_save(session_dir=os.path.dirname(os.path.abspath(fn)))
@@ -1309,23 +1389,30 @@ def profile_input(txt, strs, file_path='', alphabet=None):
         safe_input(fmttxt(["Press any key to continue"], [''], ['white']))
         return None
 
-    def ask_int(prompt, default, low):
+    def ask_int(prompt, default, low, high=None):
         while True:
             value = safe_input(fmttxt([prompt, f"[Default: {default}]"], ['bold', ''], ['yellow', 'cyan']) + " ")
             if value == '':
                 return default
             try:
-                if int(value) >= low:
-                    return int(value)
-            except ValueError:
+                number = float(value)
+                if number == int(number) and number >= low and (high is None or number <= high):
+                    return int(number)
+            except (ValueError, OverflowError):
                 pass
-            print(fmttxt([f"\nPlease enter an integer greater than or equal to {low}.\n"], ['bold'], ['red']))
+            print(fmttxt([f"\nPlease enter an integer from {low}" + (f" to {high}" if high is not None else " up")
+                          + ".\n"], ['bold'], ['red']))
 
-    flank = ask_int(f"Enter the number of {_unit(alphabet)} on both sides", 5, 0)
-    mismatches = ask_int("Enter the maximum number of mismatches in the motif", 0, 0)
+    flank = ask_int(f"Enter the number of {_unit(alphabet)} on both sides", 5, 0, MAX_FLANK)
+    mismatches = ask_int("Enter the maximum number of mismatches in the motif", 0, 0, len(motif))
     group_by = codon_to_amino_acid() if alphabet is not None and alphabet.name == 'codon' else None
-    profile = unit_profile(txt, motif, flank=flank, mismatches=mismatches,
-                           alphabet=alphabet, group_by=group_by)
+    try:
+        profile = unit_profile(txt, motif, flank=flank, mismatches=mismatches,
+                               alphabet=alphabet, group_by=group_by)
+    except ValueError as exc:
+        print(fmttxt([f"That motif cannot be profiled: {exc}"], ['bold'], ['red']))
+        safe_input(fmttxt(["Press any key to continue"], [''], ['white']))
+        return None
     if profile['n'] == 0:
         print(fmttxt(["\nNo occurrence has a complete window of that size inside the text."],
                      ['bold'], ['red']))
@@ -1366,10 +1453,7 @@ def coverage_input(txt, strs, file_path='', alphabet=None):
         wds = strs["corelist"]
     pwr = safe_input(fmttxt(["Enter the exponent a in length^a * occurrences", "[Default: 1.2]"],
                         ['bold',''], ["yellow", "cyan"]) + " ")
-    if pwr == '':
-        pwr = 1.2
-    else:
-        pwr = float(pwr)
+    pwr = _number(pwr, 1.2, float, low=0, high=20)
     cvrs = dict()
     for i in range(len(wds)):
         cvrs[wds[i]] = cover(wds[i], txt, pwr=pwr)
@@ -1399,8 +1483,14 @@ def find_match_input(txt, strs, minlen=4, alphabet=None):
         else:
             print(fmttxt(["Sequence too short"], ['bold'], ['red']))
             safe_input("Press any key to continue.")
-    ret = find_all_matches(s0, txt)
-    retstr = find_all_matches(s0, txt, ret="str")
+    try:
+        ret = find_all_matches(s0, txt)
+        retstr = find_all_matches(s0, txt, ret="str")
+    except re.error as exc:
+        print(fmttxt([f"'{raw0}' is not a valid pattern ({exc}). Letters and . (any one letter) are the "
+                      "usual pattern; (, [, {, * and + have a special meaning."], ['bold'], ['red']))
+        safe_input("Press Enter to continue...")
+        return
     print(f"\nFound {len(ret)} matches for {raw0.lower() if alphabet is not None else s0}:\n")
     for i in range(len(ret)):
         print(f"Match {i+1} at position {ret[i]}, match: {_show(retstr[i], alphabet)}")
@@ -1431,10 +1521,7 @@ def txt_coverage_input(txt, strs, minlen=4, alphabet=None):
             safe_input("Press any key to continue.")
     pwr = safe_input(fmttxt(["Enter the exponent a in length^a * occurrences", "[Default: 1]"],
                        ['bold',''], ["yellow", "cyan"]))
-    if pwr == '':
-        pwr = 1
-    else:
-        pwr = float(pwr)
+    pwr = _number(pwr, 1, float, low=0, high=20)
     print(f"{raw0.lower() if alphabet is not None else s0}, length {len(s0)}, "
           f"coverage {cover(s0, txt, pwr=pwr)}, out of {len(txt)}")
     safe_input("Press Enter to continue...")
@@ -1582,8 +1669,7 @@ def search_input(txt, mutr=1/6, M=4, alphabet=None):
     mutr_str = safe_input(fmttxt(['Mutation rate: 1 per N letters', f'[default: {1/mutr:.1f}]: '],
                                    ['bold', ''], ['yellow', 'cyan']) + ' ').strip()
     if mutr_str:
-        val = float(mutr_str)
-        mutr = 1 / val if val > 0 else mutr
+        mutr = 1 / _number(mutr_str, 1 / mutr, float, low=0, low_open=True)
 
     exact_pos, approx, maxmut = find_with_mutations(seq, txt, mutr=mutr, M=M)
     L = len(seq)
@@ -1681,11 +1767,13 @@ def motif_extensions_input(txt, file_path='', alphabet=None):
         safe_input(fmttxt(['Press Enter to continue'], [''], ['white']))
         return
 
+    if not _confirm_many_pairs(len(all_positions)):
+        return
+
     # ── extension mutation rate ───────────────────────────────────────────────
     mutr_e_str = safe_input(fmttxt(['Extension mutation rate: 1 per N letters', '[default: 6]: '],
                                     ['bold', ''], ['yellow', 'cyan']) + ' ').strip()
-    val_e = float(mutr_e_str) if mutr_e_str else 6
-    mutr_ext = 1 / val_e if val_e > 0 else 1 / 6
+    mutr_ext = 1 / _number(mutr_e_str, 6, float, low=0, low_open=True)
 
     # ── compute extensions ────────────────────────────────────────────────────
     # Extend every pair of positions.  For approximate matches, seed mismatches
@@ -1850,11 +1938,12 @@ def self_similarity_arcs_input(txt, file_path='', alphabet=None):
                      ['bold', ''], ['red', 'yellow']))
         safe_input(fmttxt(['Press Enter to continue'], [''], ['white']))
         return
+    if not _confirm_many_pairs(len(positions_all)):
+        return
 
     mutr_str = safe_input(fmttxt(['Mutation rate: 1 per N letters', '[default: 6]: '],
                                   ['bold', ''], ['yellow', 'cyan']) + ' ').strip()
-    val = float(mutr_str) if mutr_str else 6
-    mutr = 1 / val if val > 0 else 1 / 6
+    mutr = 1 / _number(mutr_str, 6, float, low=0, low_open=True)
 
     print(fmttxt([f'Computing extensions for {len(positions_all)} occurrence(s)...'],
                  [''], ['cyan']))
@@ -2192,11 +2281,15 @@ def statistical_core_input(file_path, txt, strs, alphabet=None):
     alpha = safe_input(fmttxt(['FDR q-value threshold', '[default: 0.05]: '],
                               ['bold', ''], ['yellow', 'cyan']) + ' ').strip()
 
-    min_len = int(min_len) if min_len else default_min
-    max_len = int(max_len) if max_len else 18
-    support = int(support) if support else 2
-    enrich = float(enrich) if enrich else 10.0
-    alpha = float(alpha) if alpha else 0.05
+    min_len = _number(min_len, default_min, int, low=1)
+    max_len = _number(max_len, 18, int, low=1)
+    if max_len < min_len:
+        print(fmttxt([f"The maximum core length ({max_len}) is below the minimum ({min_len}); using "
+                      f"{default_min} to 18."], ['bold'], ['red']))
+        min_len, max_len = default_min, 18
+    support = _number(support, 2, int, low=0)
+    enrich = _number(enrich, 10.0, float, low=0)
+    alpha = _number(alpha, 0.05, float, low=0, high=1, low_open=True)
 
     _abs_fp = os.path.abspath(file_path)
     default_out = f'{os.path.splitext(_abs_fp)[0]}_ranked_cores_markov.csv'
@@ -2261,10 +2354,10 @@ def mutation_family_input(file_path, txt, strs, alphabet=None):
     alpha = safe_input(fmttxt(['FDR q-value threshold', '[default: 0.05]: '],
                               ['bold', ''], ['yellow', 'cyan']) + ' ').strip()
 
-    mutr = 1 / float(mutr_str) if mutr_str and float(mutr_str) > 0 else 1 / 6
-    enrich = float(enrich) if enrich else 5.0
-    expected = float(expected) if expected else 5.0
-    alpha = float(alpha) if alpha else 0.05
+    mutr = 1 / _number(mutr_str, 6, float, low=0, low_open=True)
+    enrich = _number(enrich, 5.0, float, low=0)
+    expected = _number(expected, 5.0, float, low=0, low_open=True)
+    alpha = _number(alpha, 0.05, float, low=0, high=1, low_open=True)
 
     _abs_fp = os.path.abspath(file_path)
     default_out = f'{os.path.splitext(_abs_fp)[0]}_mutation_family_tests.csv'
@@ -2324,8 +2417,12 @@ def gapped_motif_input(file_path, txt, alphabet=None):
                                   ['bold', ''], ['yellow', 'cyan']) + ' ').strip()
     max_gap_s = safe_input(fmttxt(['Maximum gap length', '[default: 30]: '],
                                   ['bold', ''], ['yellow', 'cyan']) + ' ').strip()
-    min_gap = int(min_gap_s) if min_gap_s else 0
-    max_gap = int(max_gap_s) if max_gap_s else 30
+    min_gap = _number(min_gap_s, 0, int, low=0)
+    max_gap = _number(max_gap_s, 30, int, low=0)
+    if min_gap > max_gap:
+        print(fmttxt([f"The minimum gap ({min_gap}) is above the maximum ({max_gap}); using 0 to 30."],
+                     ['bold'], ['red']))
+        min_gap, max_gap = 0, 30
 
     _abs_fp = os.path.abspath(file_path)
     default_out = f'{os.path.splitext(_abs_fp)[0]}_gapped_motif.csv'
@@ -2374,7 +2471,7 @@ def sequence_hits_input(fn, txt, alphabet=None):
 
     mutr_str = safe_input(fmttxt(['Mutation rate: 1 per N letters', '[default: 6]: '],
                                    ['bold', ''], ['yellow', 'cyan']) + ' ').strip()
-    mutr = 1 / (float(mutr_str) if mutr_str else 6)
+    mutr = 1 / _number(mutr_str, 6, float, low=0, low_open=True)
 
     fn_out, scale = _prompt_save(plotly=True, session_dir=os.path.dirname(os.path.abspath(fn)))
 
@@ -3048,7 +3145,7 @@ def menus():
                     txt
                 except NameError:
                     if 'fn' in globals().keys():
-                        data = load_session(globals()['fn'])
+                        data = _load_session_checked(globals()['fn'])
                         if data is None:
                             # Session file missing or corrupt — clear fn and
                             # fall through to the input-source menu.
@@ -3285,8 +3382,13 @@ def menus():
         except EOFSignal:
             # Ctrl+D pressed: reset to main menu
             menu_level = 0
+        except (OSError, ValueError) as _exc:
+            # something typed or a file that cannot be used (a bad value, a missing folder, ...): not a bug
+            print(fmttxt([f"That could not be done: {_exc}"], ['bold'], ['red']))
+            print(fmttxt(["Returning to main menu..."], [''], ['yellow']))
+            menu_level = 0
         except Exception as _exc:
-            print(fmttxt([f"Unexpected error: {_exc}"], ['bold'], ['red']))
+            print(fmttxt([f"Unexpected error ({type(_exc).__name__}): {_exc}"], ['bold'], ['red']))
             print(fmttxt(["Returning to main menu..."], [''], ['yellow']))
             menu_level = 0
 

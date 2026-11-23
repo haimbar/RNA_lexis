@@ -21,7 +21,11 @@ when none is given):
 ``"words"``  whitespace-separated labels (syllable names).
 
 Whitespace is formatting and is removed unless the alphabet declares it as an
-extra symbol.
+extra symbol.  When a space is declared, a line break or tab between two words
+is read as a space too (a run of such whitespace is one space), so line-wrapped
+prose keeps its word gaps; in ``"fixed"`` mode a line break stays formatting,
+because a wrapped line of codons is not a gap.  In ``"words"`` mode whitespace is the
+separator between symbols and cannot itself be one.
 
 Unknown symbols
 ---------------
@@ -54,6 +58,16 @@ class UnknownSymbolWarning(UserWarning):
 
 class PartialUnitWarning(UserWarning):
     """A stretch of text did not divide into whole units and a partial unit was dropped."""
+
+
+class AlphabetMismatchWarning(UserWarning):
+    """The text does not look like it belongs to the alphabet it was read with.
+
+    Raised when half or more of the text is not in the alphabet (English read as nucleotides,
+    a protein read as codons, text read with the wrong separator), or when text that is only
+    ``a``, ``c``, ``g``, ``t`` and ``u`` is read with an alphabet of 20 or more letters, where
+    most symbols can never occur.
+    """
 
 
 @dataclass
@@ -176,14 +190,30 @@ class _SegmentReader:
 
     # -- modes ----------------------------------------------------------
     def read_chars(self, seg: str):
-        for i, ch in enumerate(seg):
+        gap = " " in self.a                   # a declared space: a line break between words is a gap
+        n, i = len(seg), 0
+        while i < n:
+            ch = seg[i]
+            if gap and ch.isspace():
+                j = i
+                while j < n and seg[j].isspace():
+                    j += 1
+                run = seg[i:j]
+                if all(self.fold(c) in self.a for c in run):
+                    for k, c in enumerate(run):      # every character of it is declared: read as written
+                        self.emit(self.fold(c), i + k)
+                else:
+                    self.emit(" ", i)                # a line break or tab among them: one gap
+                i = j
+                continue
             f = self.fold(ch)
             if f in self.a:
                 self.emit(f, i)
             elif ch.isspace():
-                continue                      # formatting
+                pass                          # formatting
             else:
                 self.unknown(i, ch)
+            i += 1
 
     def read_words(self, seg: str):
         for m in re.finditer(r"\S+", seg):
@@ -260,18 +290,36 @@ def tokenize(text: Union[str, Sequence[str]], alphabet: Alphabet, mode: Optional
     Returns:
         A :class:`Tokenized` result.
     """
+    if not isinstance(alphabet, Alphabet):
+        raise TypeError(f"alphabet must be an Alphabet, got {type(alphabet).__name__}")
     if on_unknown not in ("skip", "error"):
         raise ValueError("on_unknown must be 'skip' or 'error'")
     mode = mode or alphabet.mode
-    width = width or alphabet.width
-    if gap < 1:
-        raise ValueError("gap must be at least 1")
+    if mode not in ("chars", "fixed", "words"):
+        raise ValueError(f"unknown mode {mode!r}")
+    width = alphabet.width if width is None else width
+    for name, value, low in (("width", width, 1), ("frame", frame, 0), ("gap", gap, 1)):
+        if isinstance(value, bool) or not isinstance(value, int) or value < low:
+            raise ValueError(f"{name} must be a whole number, at least {low}, got {value!r}")
     if mode == "fixed" and not 0 <= frame < width:
         raise ValueError(f"frame must be between 0 and {width - 1}, got {frame}")
     if mode != "fixed" and frame:
         raise ValueError("frame applies only to 'fixed' mode")
+    if mode == "fixed" and any(len(x) != width for x in alphabet.symbols):
+        lengths = sorted({len(x) for x in alphabet.symbols})
+        raise ValueError(f"alphabet {alphabet.name!r} has symbols that are {'/'.join(map(str, lengths))} "
+                         f"characters long, so reading {width} characters at a time can never match them")
 
-    segments_in = [text] if isinstance(text, str) else list(text)
+    if isinstance(text, str):
+        segments_in = [text]
+    elif isinstance(text, (bytes, bytearray)) or not hasattr(text, "__iter__"):
+        raise TypeError(f"text must be a string or a list of strings, got {type(text).__name__}")
+    else:
+        segments_in = list(text)
+        for k, seg in enumerate(segments_in):
+            if not isinstance(seg, str):
+                raise TypeError(f"every segment of the text must be a string; segment {k} is "
+                                f"{type(seg).__name__}")
     out_text: List[str] = []
     offsets: List[int] = []
     segments: List[Segment] = []
@@ -290,10 +338,8 @@ def tokenize(text: Union[str, Sequence[str]], alphabet: Alphabet, mode: Optional
             rd.read_chars(seg)
         elif mode == "words":
             rd.read_words(seg)
-        elif mode == "fixed":
-            rd.read_fixed(seg, width, frame)
         else:
-            raise ValueError(f"unknown mode {mode!r}")
+            rd.read_fixed(seg, width, frame)
         out_text.append("".join(rd.units))
         offsets.extend(rd.offsets)
         segments.append(Segment(k, pos, pos + len(rd.units), len(seg)))
@@ -305,12 +351,46 @@ def tokenize(text: Union[str, Sequence[str]], alphabet: Alphabet, mode: Optional
     result = Tokenized(alphabet=alphabet, text="".join(out_text), segments=segments,
                        offsets=offsets, skipped=skipped, dropped=dropped,
                        removal_points=removal_points)
-    _warn(result)
+    _warn(result, mode)
     return result
 
 
-def _warn(result: Tokenized):
+_DNA_LETTERS = frozenset("acgtun")
+
+
+def _fit_messages(result: Tokenized, mode: str) -> List[str]:
+    """Reasons to think the text was read with the wrong alphabet (empty if it looks right)."""
+    a = result.alphabet
+    n_known = result.n_units
+    n_unknown = len(result.skipped)
+    total = n_known + n_unknown
+    out = []
+    if total and n_unknown * 2 >= total and (n_unknown >= 5 or n_known == 0):
+        counts = Counter(sk.text for sk in result.skipped)
+        common = ", ".join(repr(t) for t, _ in counts.most_common(5))
+        hint = {"chars": "Is this the right alphabet for this text?",
+                "fixed": "Is this the right alphabet, reading frame and width for this text?",
+                "words": "Is this the right alphabet, and are the symbols separated by whitespace in the text?"}[mode]
+        out.append(
+            f"{100 * n_unknown / total:.0f}% of the text ({n_unknown:,} of {total:,} units) is not in "
+            f"alphabet {a.name!r}; the most common symbols not in it are {common}. {hint} "
+            "The built-in alphabets are nucleotide, codon, latin and amino-acid.")
+    if mode == "chars" and a.size >= 20 and n_known >= 30:
+        in_dna = sum(1 for c in result.text if c != BOUNDARY and a.label(c) in _DNA_LETTERS)
+        if in_dna >= 0.95 * n_known:
+            out.append(
+                f"{100 * in_dna / n_known:.0f}% of the text is the letters a, c, g, t, u or n, so it looks like "
+                f"DNA or RNA, but alphabet {a.name!r} has {a.size} symbols and most of them can never "
+                "occur here. For nucleotides use the 'nucleotide' alphabet (or 'codon' to read three "
+                "at a time)" + ("." if a.name == "amino acid" else "; a protein is written with the "
+                                "'amino-acid' alphabet."))
+    return out
+
+
+def _warn(result: Tokenized, mode: str = "chars"):
     name = result.alphabet.name
+    for message in _fit_messages(result, mode):
+        warnings.warn(message, AlphabetMismatchWarning, stacklevel=3)
     if result.skipped:
         counts = Counter(s.text for s in result.skipped)
         shown = ", ".join(f"{t!r} x{n}" for t, n in counts.most_common(5))

@@ -2,6 +2,80 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **A FASTA file that begins with a `;` comment line had its header lines read as sequence.** The
+  test was whether the whole file starts with `>`. Headers such as `>ENST00000...` then contributed
+  their letters (the `t` of `ENST`, the `c`, `g`, `a` of a description) to the analysis, in the menu and
+  the batch CLI, nucleotide mode included. `io.split_fasta` accepts leading blank and `;` lines, drops
+  `;` comments anywhere, and the menu and CLI both use it. A bare `>` line no longer crashes the menu loader.
+- **A session file with a damaged alphabet or text sent the menu into an endless loop of "Unexpected
+  error".** Every session the menu loads is now checked (`io.session_problem`) and refused with the reason.
+- **Typing something that is not a number at a prompt stopped the action** and returned to the main menu with
+  "Unexpected error" (21 prompts in 12 handlers). A blank answer was already the default; now a value that is not a
+  finite number of the right kind in range is replaced by the default with a message. A flank of
+  999999999999 in the unit profile used all the memory and killed the process; the width is now capped
+  (`statistical.MAX_FLANK`, 500).
+- **An invalid regular expression typed as a nucleotide query** (`[a`, `a{2,1}`, `(`) raised in the
+  search handlers; it is now reported and asked again.
+- **`--motif-column` naming a column that is not there silently used the first column.** It is an error.
+- **A line break between words was glued** when the alphabet declares a space (`"to be\nor"` read as
+  `"to beor"`); it is now one space.
+
+### Added (robustness)
+
+- **A warning when the alphabet does not fit the text** (`tokenizers.AlphabetMismatchWarning`): half or more of
+  the text is not in the alphabet, or the text is only `a c g t u n` but the alphabet has 20 or more symbols
+  (DNA read as Latin letters or amino acids). In the menu and the batch CLI. The batch CLI in nucleotide mode also
+  warns on stderr when most letters are not nucleotides, and stops when there are none; its result files are
+  unchanged.
+- **Wrong input is named.** `tokenize` raises `TypeError` for text that is not a string or list of strings and
+  `ValueError` for a bad `gap`, `frame`, `width` or `mode`, or a width the alphabet's symbols do not have.
+  `Alphabet` checks the type of every field and the range of its `defaults`; an alphabet file that is not JSON,
+  is the wrong shape, or is over 5 MB raises `ValueError` naming the file; `get_alphabet` also takes display names
+  (`"Latin letters"`) and refuses anything that is neither a name nor a file. In `"words"` mode a whitespace
+  symbol is refused, since whitespace is the separator.
+- **Parameters of the statistics are checked**: `alpha` in (0, 1], `mutr` in [0, 1], whole numbers where counts are
+  meant, the Markov order a whole number of at least 0 (with a warning when `K**order` exceeds the text length),
+  a positive pseudocount.
+- **The batch CLI reports a bad option or file as one line starting `error:`** (missing file, JSON that is not valid,
+  a motif list of the wrong shape, an unknown column) instead of a traceback.
+
+### Security
+
+- Reviewed for code execution and unsafe input: no `eval`, `exec`, `pickle`, `shell=True` or YAML anywhere, every
+  subprocess call takes a list, and the only network calls are HTTPS to fixed hosts with timeouts. Fixed:
+  - identifiers placed into web addresses are validated (`ENST` IDs, chromosome, range, genome and cCRE
+    accession), and a response larger than 100 MB is refused;
+  - a text cell in a results table that starts with `=`, `+`, `-` or `@` gets a leading apostrophe
+    (`statistical.csv_safe`), so a symbol label from an alphabet file cannot become a spreadsheet formula;
+  - alphabet files over 5 MB and sessions over 200 MB are refused before they are read, and a JSON file nested deeply enough to
+    exhaust the stack is reported, not raised.
+  The remaining risks are in `docs/robustness_and_security_review.md`.
+
+### Performance
+
+Same results, byte for byte (the golden outputs of the nucleotide mode, the codon and Latin discovery and
+statistics, and the batch CLI files are identical to the previous commit under a fixed hash seed).
+Measured on the same machine and data before and after (196,000 codons from 177 human coding sequences, and the
+U.S. Constitution twice, 41,000 letters):
+
+| | before | after |
+|---|--:|--:|
+| `find_boundary`, 196,000 codons | 35 s | 0.8 s |
+| `rank_core_candidates`, 196,000 codons, 300 xmotifs | 47 s | 1.1 s |
+| `rank_core_candidates`, 41,000 letters, 889 xmotifs | 17 s | 0.7 s |
+| `score_exact_motifs`, 20 motifs, 196,000 codons | 1.9 s | 0.08 s |
+| `mutation_family_tests`, 588,000 nt, 2 motifs | 0.9 s | 0.18 s |
+| `unit_profile` with 1 mismatch, 196,000 codons | 0.11 s | 0.03 s |
+
+- `find_boundary` looks only where the shorter word already recurred, and no longer lower-cases the text for each of
+  tens of thousands of words.
+- `score_exact_motifs` finds "inside an xmotif" by binary search instead of comparing with every interval.
+- `normalize_sequence` remembers the last few long texts it has checked, and checks with set operations.
+- `hamming_family_positions` counts mismatches for all windows at once (NumPy).
+- `find_all_matches` lower-cases the text once, not once per match.
+
 ### Changed
 
 - **Non-nucleotide text loaded in the menu is now read as Latin letters.** Previously

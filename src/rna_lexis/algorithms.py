@@ -80,9 +80,10 @@ def find_all_matches(pattern: str, txt: str, ret='pos', group=0) -> list:
     if not pattern or not txt:
         return []
     pat = re.compile(pattern.lower())
+    low = txt.lower()          # once: lower-casing inside the loop made a long text with many matches quadratic
     pos = 0
     out = []
-    while m := pat.search(txt.lower(), pos):
+    while m := pat.search(low, pos):
         pos = m.start() + 1
         if ret == 'pos':
             out.append(m.start())
@@ -456,9 +457,15 @@ def is_bounded(s, txt, positions=None):
     Returns:
         True when s is bounded on both sides, False otherwise.
     """
-    s = s.lower()
-    txt = txt.lower()
+    return _is_bounded_lower(s.lower(), txt.lower(), positions)
 
+
+def _is_bounded_lower(s, txt, positions=None, inner_positions=None):
+    """:func:`is_bounded` for a ``s`` and ``txt`` that are already lower case.
+
+    ``find_boundary`` asks about tens of thousands of words in the same long text; lower-casing the text
+    again for each one took nearly all of its time on a long codon text.
+    """
     # Get (or reuse) positions of s — str.find is faster than regex for literal strings
     if positions is None:
         positions = []
@@ -478,11 +485,14 @@ def is_bounded(s, txt, positions=None):
     # S1: set of positions one-before each occurrence of s1 (equivalent to '.{s1}.' match starts)
     # str.find replaces regex since s1 is a literal string
     S1 = set()
-    start = 0
-    while (idx := txt.find(s1, start)) != -1:
-        if idx > 0 and idx + s1len < n:
-            S1.add(idx - 1)
-        start = idx + 1
+    if inner_positions is not None:        # the caller already knows where s1 occurs
+        S1 = {idx - 1 for idx in inner_positions if idx > 0 and idx + s1len < n}
+    else:
+        start = 0
+        while (idx := txt.find(s1, start)) != -1:
+            if idx > 0 and idx + s1len < n:
+                S1.add(idx - 1)
+            start = idx + 1
     if S0 != S1:
         return False
 
@@ -518,10 +528,19 @@ def find_boundary(txt, minlen=7, maxlen=40, at_least=3):
     txt_lower = txt.lower()
     n = len(txt_lower)
     words = []
+    # A word of length j can recur only if its first j-1 characters recur at least as often, so each
+    # length is searched only from the starts whose shorter prefix qualified.  Every start is a
+    # candidate at the shortest length.  The result is the same as scanning the whole text at every
+    # length, which costs n steps per length however few words are left.
+    # The inner word s[1:-1] has two fewer characters, so where it occurs was found two lengths ago
+    # (every occurrence of it is there: its own prefixes recur at least as often as s does).
+    starts = None
+    prev, prev2 = None, None      # {word: start positions} one and two lengths ago
     for j in range(minlen, maxlen+1):
-        # Single pass: collect positions per k-gram (replaces count_kgrams + find_all_matches)
         pos_dict = {}
-        for i in range(n - j + 1):
+        for i in (range(n - j + 1) if starts is None else starts):
+            if i + j > n:
+                continue
             sg = txt_lower[i:i+j]
             if '_' in sg:
                 continue
@@ -533,8 +552,11 @@ def find_boundary(txt, minlen=7, maxlen=40, at_least=3):
             print('Maximum word length', j-1)
             break
         for wd, positions in qualifying.items():
-            if is_bounded(wd, txt_lower, positions=positions):
+            ip = prev2.get(wd[1:-1]) if prev2 is not None and j > 2 else None
+            if _is_bounded_lower(wd, txt_lower, positions=positions, inner_positions=ip):
                 words.append(wd)
+        prev, prev2 = pos_dict, prev
+        starts = sorted(i for pos in qualifying.values() for i in pos)
     return(words)
 
 

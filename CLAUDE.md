@@ -9,8 +9,10 @@ API reference) — this file is about *working on* the repo, not using it.
 
 - Tests: `python3 -m pytest -q` (plain `python` may resolve to a Python
   without pytest installed in some environments — use `python3` explicitly).
-  271 tests: `test_statistical.py`, `test_algorithms.py`, `test_io.py`,
-  `test_alignment.py`, `test_batch_cli.py` (all synthetic-data
+  391 tests: `test_statistical.py`, `test_algorithms.py`, `test_io.py`,
+  `test_alignment.py`, `test_batch_cli.py`, `test_robustness.py` (bad input,
+  wrong alphabet, damaged files), `test_performance_paths.py` (the fast paths
+  against the plain definitions they replace) and the alphabet tests (all synthetic-data
   unit/end-to-end, no real biological data or network calls), plus
   `test_norad_integration.py` (8 tests — real biology, no network calls
   either, since it reads the bundled NORAD data rather than fetching it).

@@ -13,6 +13,7 @@ from pathlib import Path
 from rna_lexis.algorithms import cores, find_boundary
 from rna_lexis.alphabet import codon, default_settings, get_alphabet
 from rna_lexis.genetic_code import amino_acid, codon_to_amino_acid
+from rna_lexis.io import split_fasta
 from rna_lexis.tokenizers import UnknownSymbolError, tokenize
 from rna_lexis.statistical import (
     best_mutation_family_per_motif,
@@ -66,17 +67,38 @@ def _tokenize(text, alphabet, args, frame=0):
     return tok
 
 
+MAX_INPUT_BYTES = 500 * 2**20
+
+
+def _read_file(path: str) -> str:
+    """A text file's content, or an error that names the file and says what is wrong with it."""
+    p = Path(path)
+    if not p.is_file():
+        sys.exit(f"error: {path} is not a file")
+    if p.stat().st_size > MAX_INPUT_BYTES:
+        sys.exit(f"error: {path} is larger than {MAX_INPUT_BYTES // 2**20} MB")
+    return p.read_text(encoding="utf-8", errors="ignore")
+
+
 def _read_sequence(path: str, alphabet=None, args=None) -> str:
-    text = Path(path).read_text(encoding="utf-8", errors="ignore")
+    text = _read_file(path)
+    fasta = split_fasta(text)
     if alphabet is None:
-        if text.lstrip().startswith(">"):
-            text = "".join(line.strip() for line in text.splitlines() if not line.startswith(">"))
-        return normalize_sequence(text)
+        if fasta is not None:
+            text = "".join(line.strip() for rec in fasta[1] for line in rec.splitlines())
+        seq = normalize_sequence(text)
+        letters = len(re.sub(r"[^A-Za-z]+", "", text))
+        if not seq:
+            sys.exit(f"error: no nucleotides (a, c, g, t or u) found in {path}"
+                     + ("; the file has letters, so it may be text or a protein: try --alphabet latin or "
+                        "amino-acid" if letters else ""))
+        if len(seq) < 0.5 * letters:          # the result files are unchanged; this only says so on stderr
+            print(f"warning: only {100 * len(seq) / letters:.0f}% of the letters in {path} are a, c, g, t or u; "
+                  "the rest were dropped. Is this nucleotide text? For other text use --alphabet latin, "
+                  "codon or amino-acid.", file=sys.stderr)
+        return seq
     # Over an alphabet each FASTA record is a segment, so no motif spans two records.
-    if text.lstrip().startswith(">"):
-        records = [r for r in re.split(r"^>.*$", text, flags=re.M) if r.strip()]
-    else:
-        records = [text]
+    records = [r for r in fasta[1] if r.strip()] if fasta is not None else [text]
     reading = codon() if getattr(args, "translate", False) else alphabet   # translated text is read as codons
     if reading.name in _BUILTIN_ALPHABETS:         # letters only, as when the menu loads text
         records = [re.sub(r"[^A-Za-z]+", "", r).lower() for r in records]
@@ -102,15 +124,29 @@ def _to_internal(values, alphabet, args):
 
 
 def _read_list(path: str, column: str | None = None, alphabet=None, args=None) -> list[str]:
-    text = Path(path).read_text(encoding="utf-8", errors="ignore")
+    text = _read_file(path)
     if path.lower().endswith(".json"):
-        data = json.loads(text)
-        if column:
-            values = data[column]
+        try:
+            data = json.loads(text)
+        except json.JSONDecodeError as exc:
+            sys.exit(f"error: {path} is not valid JSON ({exc})")
+        if isinstance(data, list):
+            values = data
+        elif isinstance(data, dict):
+            if column:
+                if column not in data:
+                    sys.exit(f"error: {path} has no field {column!r} (it has {', '.join(map(repr, list(data)[:8]))})")
+                values = data[column]
+            else:
+                values = data.get("corelist") or data.get("xmotifs") or []
         else:
-            values = data.get("corelist") or data.get("xmotifs") or []
+            sys.exit(f"error: {path} should hold a list of motifs or a session, not {type(data).__name__}")
+        if not isinstance(values, list):
+            sys.exit(f"error: the motifs in {path} should be a list, not {type(values).__name__}")
         if alphabet is not None:
             stored = data.get("alphabet") if isinstance(data, dict) else None
+            if stored is not None and not isinstance(stored, dict):
+                sys.exit(f"error: the alphabet stored in {path} is not valid")
             if stored is not None:
                 # a saved session: its motifs are already internal strings of its own alphabet
                 if stored.get("name") != alphabet.name:
@@ -125,8 +161,11 @@ def _read_list(path: str, column: str | None = None, alphabet=None, args=None) -
     if "\t" in lines[0] or "," in lines[0]:
         sep = "\t" if "\t" in lines[0] else ","
         header = [h.strip() for h in lines[0].split(sep)]
-        idx = header.index(column) if column and column in header else 0
-        values = [row.split(sep)[idx] for row in lines[1:] if row.split(sep)[idx].strip()]
+        if column and column not in header:
+            sys.exit(f"error: {path} has no column {column!r} (it has {', '.join(map(repr, header[:8]))})")
+        idx = header.index(column) if column else 0
+        values = [row.split(sep)[idx] for row in lines[1:]
+                  if idx < len(row.split(sep)) and row.split(sep)[idx].strip()]
     else:
         values = [line.split()[0] for line in lines]
     if alphabet is not None:
@@ -349,10 +388,8 @@ def main(argv: list[str] | None = None) -> None:
         args.func(args)
     except UnknownSymbolError as exc:
         sys.exit(f"error: {exc}")
-    except ValueError as exc:
-        if getattr(args, "alphabet", None):
-            sys.exit(f"error: {exc}")
-        raise
+    except (ValueError, OSError) as exc:      # a bad option, a missing or unreadable file: say so, no traceback
+        sys.exit(f"error: {exc}")
 
 
 if __name__ == "__main__":

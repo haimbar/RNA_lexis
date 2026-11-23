@@ -48,6 +48,9 @@ _PRIVATE_USE_END = 0xF8FE            # U+F8FF is the wildcard
 
 TOKENIZATION_MODES = ("chars", "fixed", "words")
 
+MAX_ALPHABET_FILE_BYTES = 5 * 2**20
+"""An alphabet file larger than this is refused: no real alphabet is, and a huge JSON file would only use up memory."""
+
 
 def _is_identity_label(label: str) -> bool:
     """True for a single lower-case ASCII letter, which is its own character."""
@@ -114,14 +117,29 @@ class Alphabet:
     # construction helpers
     # ------------------------------------------------------------------
     def _validate(self):
-        if not self.name:
-            raise ValueError("an alphabet needs a name")
+        if not isinstance(self.name, str) or not self.name.strip():
+            raise ValueError("an alphabet needs a name (a non-empty string)")
         if self.mode not in TOKENIZATION_MODES:
             raise ValueError(f"mode must be one of {TOKENIZATION_MODES}, got {self.mode!r}")
-        if self.width < 1:
-            raise ValueError("width must be at least 1")
+        if isinstance(self.width, bool) or not isinstance(self.width, int) or self.width < 1:
+            raise ValueError(f"width must be a whole number, at least 1, got {self.width!r}")
+        if not isinstance(self.case_sensitive, bool):
+            raise ValueError(f"case_sensitive must be true or false, got {self.case_sensitive!r}")
         if not self.symbols:
             raise ValueError("an alphabet needs at least one symbol")
+        for key, value in self.aliases.items():
+            if not isinstance(key, str) or not isinstance(value, str) or not key:
+                raise ValueError(f"an alias maps one string to another, got {key!r}: {value!r}")
+        for key, value in self.defaults.items():
+            if key in _SETTING_KEYS and (isinstance(value, bool) or not isinstance(value, int) or value < 1):
+                raise ValueError(f"default {key!r} must be a whole number, at least 1, got {value!r}")
+        if not isinstance(self.unit_name, str):
+            raise ValueError(f"unit_name must be a string, got {self.unit_name!r}")
+        if self.display_sep is not None and not isinstance(self.display_sep, str):
+            raise ValueError(f"display_sep must be a string or null, got {self.display_sep!r}")
+        for label, code in self.codes.items():
+            if not isinstance(code, str) or not code:
+                raise ValueError(f"the nucleotide code of {label!r} must be a non-empty string, got {code!r}")
 
         everything = list(self.symbols) + list(self.extras)
         for label in everything:
@@ -151,6 +169,12 @@ class Alphabet:
             bad = [x for x in self.symbols if any(c.isspace() for c in x)]
             if bad:
                 raise ValueError(f"mode 'words' needs symbols without whitespace, got {bad[:3]}")
+            bad = [x for x in self.extras if x.isspace()]
+            if bad:
+                raise ValueError(
+                    "mode 'words' reads whitespace as the separator between symbols, so whitespace "
+                    f"cannot also be a symbol (got {bad[:3]}); write the separator into the text as a symbol "
+                    "such as '|' instead")
 
         unknown_codes = [x for x in self.codes if x not in self.symbols]
         if unknown_codes:
@@ -337,14 +361,31 @@ class Alphabet:
 
     @classmethod
     def from_dict(cls, d: Mapping) -> "Alphabet":
+        """Build an alphabet from the dict that :meth:`to_dict` writes.
+
+        A description that is not valid (a missing field, a field of the wrong kind) raises ``ValueError``
+        saying what is wrong, whatever the file contained.
+        """
+        if not isinstance(d, Mapping):
+            raise ValueError(f"an alphabet description must be a JSON object, got {type(d).__name__}")
+        for key in ("name", "symbols"):
+            if key not in d:
+                raise ValueError(f"the alphabet description has no {key!r}")
+        if not isinstance(d["symbols"], (list, tuple)):
+            raise ValueError("'symbols' must be a list")
+        for key, kind in (("extras", (list, tuple, str)), ("aliases", Mapping), ("defaults", Mapping)):
+            if d.get(key) is not None and not isinstance(d[key], kind):
+                raise ValueError(f"{key!r} must be a {'list' if kind != Mapping else 'JSON object'}")
         symbols, codes = [], {}
         for item in d["symbols"]:
             if isinstance(item, str):
                 symbols.append(item)
-            else:
+            elif isinstance(item, Mapping) and isinstance(item.get("label"), str):
                 symbols.append(item["label"])
                 if item.get("code"):
                     codes[item["label"]] = item["code"]
+            else:
+                raise ValueError(f"each symbol must be a string or an object with a 'label', got {item!r}")
         defaults = d.get("defaults") or {}
         unit_name = d.get("unit_name", "unit")
         if not defaults:
@@ -352,15 +393,18 @@ class Alphabet:
             builtin = _BUILTIN_BY_NAME.get(d["name"])
             if builtin is not None:
                 built = builtin()
-                if [s if isinstance(s, str) else s["label"] for s in d["symbols"]] == list(built.symbols):
+                if symbols == list(built.symbols):
                     defaults = dict(built.defaults)
                     if unit_name == "unit":
                         unit_name = built.unit_name
-        return cls(name=d["name"], symbols=symbols, extras=d.get("extras", ()),
-                   codes=codes, mode=d.get("mode", "chars"), width=d.get("width", 1),
-                   case_sensitive=d.get("case_sensitive", False),
-                   aliases=d.get("aliases", {}), defaults=defaults,
-                   unit_name=unit_name, display_sep=d.get("display_sep"))
+        try:
+            return cls(name=d["name"], symbols=symbols, extras=d.get("extras") or (),
+                       codes=codes, mode=d.get("mode", "chars"), width=d.get("width", 1),
+                       case_sensitive=d.get("case_sensitive", False),
+                       aliases=d.get("aliases") or {}, defaults=defaults,
+                       unit_name=unit_name, display_sep=d.get("display_sep"))
+        except (TypeError, AttributeError) as exc:           # a field of the wrong kind that no check above names
+            raise ValueError(f"the alphabet description is not valid: {exc}") from exc
 
     def same_symbols(self, other: "Alphabet") -> bool:
         """True if ``other`` reads text the same way: same name, symbols, extras, mode, width, case
@@ -380,9 +424,23 @@ class Alphabet:
 
     @classmethod
     def load(cls, path: str) -> "Alphabet":
-        """Read an alphabet written by :meth:`save`."""
-        with open(path, "r", encoding="utf-8") as fh:
-            return cls.from_dict(json.load(fh))
+        """Read an alphabet written by :meth:`save`.
+
+        Raises ``ValueError`` for a file that is too large to be an alphabet (over 5 MB), is not JSON, or
+        does not describe an alphabet; the message names the file.
+        """
+        try:
+            if os.path.getsize(path) > MAX_ALPHABET_FILE_BYTES:
+                raise ValueError(f"{path}: too large to be an alphabet file "
+                                 f"(over {MAX_ALPHABET_FILE_BYTES // 2**20} MB)")
+            with open(path, "r", encoding="utf-8") as fh:
+                data = json.load(fh)
+        except (json.JSONDecodeError, UnicodeDecodeError, RecursionError) as exc:
+            raise ValueError(f"{path}: not a JSON file ({exc})") from exc
+        try:
+            return cls.from_dict(data)
+        except ValueError as exc:
+            raise ValueError(f"{path}: {exc}") from exc
 
     @classmethod
     def from_codebook(cls, name: str, codebook: Mapping, extras: Iterable[str] = (),
@@ -524,13 +582,23 @@ BUILTIN_ALPHABETS = {
 }
 
 
+_NAME_ALIASES = {"latin letters": "latin", "letters": "latin", "amino acid": "amino-acid",
+                 "amino acids": "amino-acid", "aminoacid": "amino-acid", "amino_acid": "amino-acid",
+                 "nucleotides": "nucleotide", "codons": "codon"}
+
+
 def get_alphabet(name_or_path: str) -> Alphabet:
-    """A built-in alphabet by name, or an alphabet file by path."""
-    key = name_or_path.strip().lower()
+    """A built-in alphabet by name (also by its display name, e.g. ``"Latin letters"``), or an alphabet file by path."""
+    if not isinstance(name_or_path, (str, os.PathLike)):
+        raise ValueError(f"an alphabet is named by a string or the path of an alphabet file, got {name_or_path!r}")
+    name_or_path = os.fspath(name_or_path)
+    key = " ".join(name_or_path.strip().lower().split())
+    key = _NAME_ALIASES.get(key, key)
     if key in BUILTIN_ALPHABETS:
         return BUILTIN_ALPHABETS[key]()
-    if os.path.isfile(name_or_path):
-        return Alphabet.load(name_or_path)
+    path = os.path.expanduser(name_or_path.strip())
+    if os.path.isfile(path):
+        return Alphabet.load(path)
     raise ValueError(
         f"{name_or_path!r} is neither a built-in alphabet "
         f"({', '.join(sorted(BUILTIN_ALPHABETS))}) nor an alphabet file")

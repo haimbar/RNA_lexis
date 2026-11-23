@@ -21,12 +21,16 @@ defaults for the Markov order and the multiple-testing family were chosen.
 
 from __future__ import annotations
 
+import bisect
 import csv
 import itertools
 import math
+import warnings
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 from typing import Iterable, Iterator, Sequence
+
+import numpy as np
 
 
 from scipy.stats import binom, poisson
@@ -41,6 +45,9 @@ except ImportError:  # pragma: no cover - compatibility for older SciPy
 
 
 ALPHABET = "acgt"
+
+MAX_FLANK = 500
+"""Most units on each side of a motif in a unit profile; the table has one column per position, and no figure can show more."""
 
 
 def default_markov_order(alphabet_size: int, n_letters: int) -> int:
@@ -57,12 +64,44 @@ def default_markov_order(alphabet_size: int, n_letters: int) -> int:
     return 1 if n_letters >= alphabet_size ** 2 else 0
 
 
+def _require(name: str, value, *, low=None, high=None, low_open=False, high_open=False,
+             integer=False):
+    """Check a numeric parameter and return it; raise ``ValueError`` saying what is wrong.
+
+    Without this a bad value (``alpha=5``, ``markov_order="a"``, a negative count) either failed deep
+    inside the computation with a message about something else, or ran and returned meaningless numbers.
+    """
+    if isinstance(value, bool) or not isinstance(value, (int, float, np.integer, np.floating)):
+        raise ValueError(f"{name} must be a number, got {value!r}")
+    if integer and float(value) != int(value):
+        raise ValueError(f"{name} must be a whole number, got {value!r}")
+    if not math.isfinite(value):
+        raise ValueError(f"{name} must be finite, got {value!r}")
+    if low is not None and (value <= low if low_open else value < low):
+        raise ValueError(f"{name} must be {'greater than' if low_open else 'at least'} {low}, got {value!r}")
+    if high is not None and (value >= high if high_open else value > high):
+        raise ValueError(f"{name} must be {'less than' if high_open else 'at most'} {high}, got {value!r}")
+    return int(value) if integer else value
+
+
 def _resolve_order(markov_order: int | None, alphabet, n_letters: int) -> int:
     if markov_order is not None:
-        return markov_order
+        order = _require("markov_order", markov_order, low=0, integer=True)
+        size = len(alphabet.chars) if isinstance(alphabet, Alphabet) else len(ALPHABET)
+        if order and size ** order > max(n_letters, 1):
+            warnings.warn(
+                f"markov_order={order} gives {size}**{order} contexts for a text of {n_letters} "
+                "units: most contexts are never seen, and the background is mostly the pseudocount",
+                UserWarning, stacklevel=3)
+        return order
     if isinstance(alphabet, Alphabet):
         return default_markov_order(alphabet.size, n_letters)
     return 1
+
+
+_CHECKED: dict = {}
+_CHECKED_MIN = 2000      # shorter texts are cheaper to check again than to remember
+_CHECKED_KEEP = 4
 
 
 def normalize_sequence(seq: str, alphabet=None) -> str:
@@ -75,22 +114,43 @@ def normalize_sequence(seq: str, alphabet=None) -> str:
     internal character of the alphabet raises ``ValueError``, so text that has
     not been read with :func:`rna_lexis.tokenizers.tokenize` is caught
     instead of silently losing symbols.
+
+    Scoring looks up many motifs in the same long text and each lookup normalizes the text
+    again.  The result for the last few long texts is remembered (by identity, so a different
+    string is always checked afresh), which makes the repeated checks free.
     """
 
+    if not isinstance(seq, str):
+        raise TypeError(f"a sequence must be a string, got {type(seq).__name__}")
+    if len(seq) >= _CHECKED_MIN:
+        hit = _CHECKED.get((id(seq), id(alphabet)))
+        if hit is not None and hit[0] is seq and hit[1] is alphabet:
+            return hit[2]
+        out = _normalize(seq, alphabet)
+        if len(_CHECKED) >= _CHECKED_KEEP:
+            _CHECKED.pop(next(iter(_CHECKED)))
+        _CHECKED[(id(seq), id(alphabet))] = (seq, alphabet, out)    # holding seq keeps its id from being reused
+        return out
+    return _normalize(seq, alphabet)
+
+
+def _normalize(seq: str, alphabet) -> str:
     if isinstance(alphabet, Alphabet):
         s = seq if alphabet.case_sensitive else seq.lower()
         if alphabet.mode == "chars" and alphabet.aliases:
-            s = "".join(alphabet.aliases.get(c, c) for c in s)
-        valid = set(alphabet.chars)
-        valid.add(BOUNDARY)
-        bad = sorted({c for c in s if c not in valid})
+            table = {ord(k): v for k, v in alphabet.aliases.items() if len(k) == 1}
+            s = s.translate(table)
+        bad = set(s) - set(alphabet.chars) - {BOUNDARY}
         if bad:
             raise ValueError(
-                f"{bad[:3]!r} is not an internal character of alphabet {alphabet.name!r}; "
+                f"{sorted(bad)[:3]!r} is not an internal character of alphabet {alphabet.name!r}; "
                 "read the text with rna_lexis.tokenizers.tokenize first")
         return s
     chars = ALPHABET if alphabet is None else alphabet
-    return "".join(c for c in seq.lower().replace("u", "t") if c in chars)
+    s = seq.lower().replace("u", "t")
+    if set(s) <= set(chars):
+        return s
+    return "".join(c for c in s if c in chars)
 
 
 @dataclass(frozen=True)
@@ -114,6 +174,7 @@ class MarkovBackground:
     def __post_init__(self) -> None:
         if self.order < 0:
             raise ValueError("order must be non-negative")
+        _require("pseudocount", self.pseudocount, low=0, low_open=True)
         alph_obj = self.alphabet if isinstance(self.alphabet, Alphabet) else None
         chars = alph_obj.chars if alph_obj is not None else self.alphabet
         seq = normalize_sequence(self.sequence, self.alphabet)
@@ -218,7 +279,9 @@ def window_hamming(a: str, b: str) -> int:
 def hamming_family_positions(motif: str, txt: str, radius: int, alphabet=None) -> list[tuple[int, str, int]]:
     """Return all transcript windows within Hamming radius of motif.
 
-    Windows that span a segment boundary are skipped.
+    Windows that span a segment boundary are skipped.  Each hit is ``(start, window, distance)``, in order of start.
+    Mismatches are counted one motif position at a time over all windows at once, so a long text costs
+    ``len(motif)`` passes instead of ``len(text) * len(motif)`` steps.
     """
 
     motif = normalize_sequence(motif, alphabet)
@@ -226,15 +289,17 @@ def hamming_family_positions(motif: str, txt: str, radius: int, alphabet=None) -
     L = len(motif)
     if radius < 0 or L == 0 or L > len(txt):
         return []
-    hits = []
-    for i in range(len(txt) - L + 1):
-        window = txt[i : i + L]
-        if BOUNDARY in window:
-            continue
-        dist = window_hamming(window, motif)
-        if dist <= radius:
-            hits.append((i, window, dist))
-    return hits
+    n_windows = len(txt) - L + 1
+    codes = np.frombuffer(txt.encode("utf-32-le"), dtype=np.uint32)
+    distance = np.zeros(n_windows, dtype=np.int32)
+    spans_boundary = np.zeros(n_windows, dtype=bool)
+    boundary = ord(BOUNDARY)
+    for j, ch in enumerate(motif):
+        column = codes[j : j + n_windows]
+        distance += column != ord(ch)
+        spans_boundary |= column == boundary
+    keep = np.flatnonzero((distance <= radius) & ~spans_boundary)
+    return [(int(i), txt[i : i + L], int(distance[i])) for i in keep]
 
 
 def nonoverlap_count(positions: Sequence[int], length: int) -> int:
@@ -328,6 +393,26 @@ def _inside_any_interval(start: int, end: int, intervals: Sequence[tuple[int, in
     return any(i0 <= start and end <= i1 for i0, i1, _ in intervals)
 
 
+class _IntervalIndex:
+    """Answers "does some interval contain ``[start, end]``?" without looking at every interval.
+
+    The intervals are sorted by their start; for each prefix of that order the largest end is kept.  An
+    interval that begins at or before ``start`` and ends at or after ``end`` exists exactly when the largest
+    end among the intervals beginning at or before ``start`` reaches ``end``, so one binary search answers.
+    That is the same answer as :func:`_inside_any_interval`, which compares against all of them (scoring a
+    few thousand motif positions against a few thousand xmotif intervals took tens of seconds).
+    """
+
+    def __init__(self, intervals: Sequence[tuple[int, int, str]]):
+        ordered = sorted((i0, i1) for i0, i1, _ in intervals)
+        self._starts = [i0 for i0, _ in ordered]
+        self._max_end = list(itertools.accumulate((i1 for _, i1 in ordered), max))
+
+    def contains(self, start: int, end: int) -> bool:
+        k = bisect.bisect_right(self._starts, start)
+        return k > 0 and self._max_end[k - 1] >= end
+
+
 def score_exact_motifs(
     txt: str,
     motifs: Iterable[str],
@@ -368,6 +453,10 @@ def score_exact_motifs(
         family = "candidates" if alphabet is None else "bylength"
     if family not in ("candidates", "bylength"):
         raise ValueError("family must be 'candidates' or 'bylength'")
+    _require("alpha", alpha, low=0, high=1, low_open=True)
+    _require("enrichment_threshold", enrichment_threshold, low=0)
+    _require("min_count", min_count, low=1, integer=True)
+    _require("min_xmotif_type_support", min_xmotif_type_support, low=0, integer=True)
     txt = normalize_sequence(txt, alphabet)
     motif_list = [m for m in dict.fromkeys(normalize_sequence(m, alphabet) for m in motifs if m)]
     if any(BOUNDARY in m for m in motif_list):
@@ -376,7 +465,8 @@ def score_exact_motifs(
     bg = MarkovBackground(txt, order=order, pseudocount=pseudocount,
                           alphabet=alphabet if alphabet is not None else ALPHABET)
     xmotif_list = [normalize_sequence(x, alphabet) for x in (xmotifs or []) if x]
-    xmotif_intervals = xmotif_occurrence_intervals(txt, xmotif_list, alphabet) if xmotif_list else []
+    xmotif_intervals = _IntervalIndex(xmotif_occurrence_intervals(txt, xmotif_list, alphabet)) if xmotif_list else None
+    xmotif_set = set(xmotif_list)
 
     rows = []
     pvalues = []
@@ -389,8 +479,8 @@ def score_exact_motifs(
         pvalues.append(pvalue)
 
         if xmotif_list:
-            x_support = sum(1 for xm in set(xmotif_list) if motif in xm)
-            inside = sum(1 for p in positions if _inside_any_interval(p, p + L, xmotif_intervals))
+            x_support = sum(1 for xm in xmotif_set if motif in xm)
+            inside = sum(1 for p in positions if xmotif_intervals.contains(p, p + L))
         else:
             x_support = 0
             inside = 0
@@ -467,6 +557,8 @@ def enumerate_core_candidates(
 ) -> list[str]:
     """Enumerate substrings shared by at least two distinct xmotif sequences."""
 
+    _require("candidate_min_len", candidate_min_len, low=1, integer=True)
+    _require("candidate_max_len", candidate_max_len, low=candidate_min_len, integer=True)
     xmotif_list = [normalize_sequence(x, alphabet) for x in dict.fromkeys(xmotifs) if x]
     support: dict[str, set[str]] = defaultdict(set)
     for xm in xmotif_list:
@@ -604,6 +696,13 @@ def mutation_family_tests(
     radius), as before; that family has not been calibrated for other alphabets.
     """
 
+    _require("mutr", mutr, low=0, high=1)
+    _require("M", M, low=0, integer=True)
+    _require("alpha", alpha, low=0, high=1, low_open=True)
+    _require("enrichment_threshold", enrichment_threshold, low=0)
+    _require("expected_max", expected_max, low=0, low_open=True)
+    _require("min_family_count", min_family_count, low=1, integer=True)
+    _require("max_variants", max_variants, low=1, integer=True)
     txt = normalize_sequence(txt, alphabet)
     motif_list = [m for m in dict.fromkeys(normalize_sequence(m, alphabet) for m in motifs if m)]
     markov_order = _resolve_order(markov_order, alphabet, len(txt.replace(BOUNDARY, "")))
@@ -722,6 +821,25 @@ def best_mutation_family_per_motif(rows: Iterable[dict]) -> list[dict]:
 _TEXT_COLUMNS = ("motif", "left_anchor", "right_anchor", "gap_sequence", "matched_sequence", "core")
 
 
+_FORMULA_STARTS = ("=", "+", "-", "@", "\t", "\r")
+
+
+def csv_safe(value):
+    """A cell value that a spreadsheet will show as text and never run as a formula.
+
+    A cell that starts with ``=``, ``+``, ``-`` or ``@`` is a formula to Excel, LibreOffice and
+    Google Sheets, so a symbol label from an alphabet file (``=HYPERLINK(...)``) written into a results table
+    could run when the table is opened.  Such a string gets a leading apostrophe.  Numbers, and strings
+    that are numbers (``-3.2``), are left alone, and so are the letters-only sequences of nucleotide text.
+    """
+    if isinstance(value, str) and value.startswith(_FORMULA_STARTS):
+        try:
+            float(value)
+        except ValueError:
+            return "'" + value
+    return value
+
+
 def write_rows_csv(path: str, rows: Sequence[dict], alphabet=None) -> str:
     """Write dict rows to CSV and return the path.
 
@@ -743,7 +861,7 @@ def write_rows_csv(path: str, rows: Sequence[dict], alphabet=None) -> str:
     with open(path, "w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=fieldnames)
         writer.writeheader()
-        writer.writerows(rows)
+        writer.writerows({k: csv_safe(v) for k, v in row.items()} for row in rows)
     return path
 
 
@@ -968,6 +1086,9 @@ def unit_profile(
         and ``motif`` / ``motif_labels`` (the motif, internal and for display).
     """
 
+    _require("flank", flank, low=0, high=MAX_FLANK, integer=True)
+    _require("mismatches", mismatches, low=0, integer=True)
+    _require("alpha", alpha, low=0, high=1, low_open=True)
     txt_n = normalize_sequence(txt, alphabet)
     motif_n = normalize_sequence(motif, alphabet)
     if not motif_n or BOUNDARY in motif_n:
@@ -1041,7 +1162,7 @@ def write_unit_profile_csv(path: str, profile: dict) -> str:
         writer = csv.writer(handle)
         writer.writerow(header)
         for i, label in enumerate(profile["labels"]):
-            row = [label.upper(), f"{profile['background'][i]:.6g}"]
+            row = [csv_safe(label.upper()), f"{profile['background'][i]:.6g}"]
             for j in range(len(profile["columns"])):
                 row += [profile["counts"][i][j], f"{profile['log_odds'][i][j]:.3f}",
                         f"{profile['p_value'][i][j]:.3g}"]

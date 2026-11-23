@@ -188,7 +188,21 @@ Serialize a `SessionData` (or plain dict) to `<filename>.json`. Do not include t
 ### `load_session(filename) -> dict | None`
 
 Load a session dict from `<filename>` (full path, including `.json`). Returns
-`None` if the file is missing or malformed.
+`None`, with a message printed, if the file is missing, unreadable, too large (over
+200 MB), not JSON, or JSON that is not an object.
+
+### `session_problem(data) -> str | None`
+
+What is wrong with a loaded session dict, or `None` if it is usable: the text and file
+path are strings, `corelist` and `xmotifs` are lists of strings, any `alphabet` is a valid
+description, and the text, cores and xmotifs contain only characters of that alphabet.
+The menu runs it on every session it loads.
+
+### `split_fasta(text) -> (headers, records) | None`
+
+Split FASTA text into header lines and one string per record, or `None` if the text is
+not FASTA. The text is FASTA when its first line that is not blank and not a `;` comment
+starts with `>`; `;` comment lines are dropped.
 
 ### `is_valid_session(filepath) -> SessionData | None`
 
@@ -285,6 +299,17 @@ tokenize(["bout one", "bout two"], latin())   # segments joined by "_" boundarie
 - Unknown symbols: removed with an `UnknownSymbolWarning` by default;
   `on_unknown="error"` raises `UnknownSymbolError`. In codon mode a whole codon
   containing an ambiguity code (`n`) is the unknown unit, so the frame is kept.
+- A text that does not look like it belongs to the alphabet also gets an
+  `AlphabetMismatchWarning`: half or more of it is not in the alphabet (English read as
+  nucleotides, a protein as codons, words with the wrong separator), or it is only
+  `a c g t u n` but the alphabet has 20 or more symbols (DNA read as Latin letters or
+  amino acids). It is a warning, not an error; the text is still read.
+- Wrong kinds of input raise at once: `text` that is not a string or a list of strings is a
+  `TypeError`; a bad `gap`, `frame`, `width` or `mode` is a `ValueError`.
+- Whitespace is formatting, unless the alphabet declares a space; then a line break or tab
+  between two words is read as one space (a run of declared spaces is read as written). In
+  `"fixed"` mode a line break stays formatting. In `"words"` mode whitespace separates
+  symbols and cannot be a symbol.
 - Result `Tokenized`: `.text`, `.segments`, `.offsets` (index in the original
   text of each unit), `.skipped`, `.dropped`, `.removal_points`,
   `.spans_removal(start, length)`, `.decode(...)`.
@@ -704,8 +729,10 @@ shared = shared_exact_motifs(gene_txt, enhancer_txt, cores_a=gene_corelist, n_to
 
 ### `write_rows_csv(path, rows, alphabet=None) -> str`
 
-Write a list of dicts to a CSV file. Returns the path written. With an `Alphabet`
-the sequence columns (`motif`, `left_anchor`, `right_anchor`, `gap_sequence`,
+Write a list of dicts to a CSV file. Returns the path written. A text cell that starts with
+`=`, `+`, `-` or `@` (and is not a number) gets a leading apostrophe (`csv_safe`), so a symbol
+label from an alphabet file cannot start a formula when the table is opened in a spreadsheet.
+With an `Alphabet` the sequence columns (`motif`, `left_anchor`, `right_anchor`, `gap_sequence`,
 `matched_sequence`, `core`, and the `pattern` of a gapped motif) are decoded from
 internal strings to the alphabet's labels in upper case (`ATG AAA TTT`). Result rows
 from the statistical functions keep the internal string, so they can be fed back in.

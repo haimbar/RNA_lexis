@@ -31,7 +31,7 @@ called **xmotifs** and extracts their shorter conserved cores. From there you ca
 
 ## Documentation
 
-This README covers installation, features, and troubleshooting. Two other
+This README covers installation, features, and troubleshooting. Three other
 docs go deeper:
 
 - **[docs/user_guide.md](docs/user_guide.md)** — full menu-by-menu walkthrough
@@ -41,6 +41,9 @@ docs go deeper:
 - **[llms.txt](llms.txt)** — API reference for using RNA_lexis as a Python
   library (functions, data structures, worked examples), written for both
   developers and AI coding agents.
+- **[docs/robustness_and_security_review.md](docs/robustness_and_security_review.md)** —
+  how the code treats wrong input, a wrong alphabet and damaged files, where it was
+  slow, and the security review, including the risks that were left and why.
 
 ## Initialisation summary (`_test_init.csv`)
 

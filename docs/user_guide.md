@@ -132,6 +132,12 @@ Queries (a motif to search for, an anchor, a seed) are read the same way as the 
 
 A symbol that is not in the alphabet is skipped with a warning that says how many were skipped, which ones and where (digits and punctuation in a text file, for example). Skipping makes the units on either side of it neighbors that were not neighbors in the file, so a motif found across a skipped symbol may not exist in the original. The batch CLI can stop instead (`--on-unknown error`).
 
+### Spaces, line breaks and the wrong alphabet
+
+Whitespace is formatting and is ignored, unless the alphabet declares a space as a symbol. When it does, a line break or tab between two words counts as a space too (a run of such whitespace is one space), so a text wrapped at 70 columns keeps its word gaps. For codons a line break stays formatting, because a wrapped line of a sequence is not a gap; put a declared space where you want one. For an alphabet of whole words or syllables (`"mode": "words"`) whitespace is the separator between symbols, so it cannot also be a symbol.
+
+If the text does not look like it belongs to the alphabet, the menu and the batch CLI say so before going on. You get a warning when half or more of the text is not in the alphabet (English read as nucleotides, a protein read as codons, syllables written with hyphens read as words), and when the text is only A, C, G, T, U and N but the alphabet has 20 or more symbols (DNA read as Latin letters or amino acids, where most symbols can never occur). Nothing is stopped: the text is still read, so you can decide. In nucleotide mode the batch CLI also says, on stderr, when most of the letters in the file are not nucleotides, and stops when none are.
+
 ### An alphabet file
 
 An alphabet file is JSON. The simplest form lists the symbols:
@@ -993,6 +999,12 @@ Exits the program.
 
 ---
 
+### Files from someone else
+
+Alphabet files, session files and FASTA files are data, not programs: nothing in them is run. They are checked when they are opened, and a file that cannot be used is refused with a message that names the file and what is wrong, not a traceback. An alphabet file larger than 5 MB or a session larger than 200 MB is refused. A session whose text or motifs contain characters that are not in its own alphabet is refused, because it has been damaged or edited by hand. In the results tables a text cell that starts with `=`, `+`, `-` or `@` gets a leading apostrophe, so a symbol label in an alphabet file cannot become a spreadsheet formula when you open the table in Excel or LibreOffice. A FASTA file may begin with `;` comment lines; they and the `>` header lines are not read as sequence.
+
+Two things to know about a session file from someone else: it names the folder the results are written to, and it can be large. Open it only from people you trust, as you would any file that tells a program where to write.
+
 ## Troubleshooting
 
 Issues specific to using the interactive menu. For installation and dependency
@@ -1012,7 +1024,11 @@ problems (missing `tkinter`, broken image export, etc.), see the
   **X-axis range** prompt (default full range, but a previously-entered
   narrow range persists until changed). Mutations are always shown regardless
   of the minimum-occurrences filter.
-- **`Unexpected error: ...` appears and you're dropped back to the main
+- **`That could not be done: ...` appears and you're dropped back to the main
+  menu.** Something you typed or a file could not be used (a value out of range, a folder that does not exist, a file name that is too long). The message says which. Your session is unchanged.
+- **A number you typed is replaced by the default.** The prompt says `'abc' is not a whole number; using the default, 5`. Blank has always meant the default; a value that is not a number, not whole where a whole number is needed, or out of range now does too, instead of stopping the analysis.
+- **`There are N occurrences, which makes M pairs to extend`.** *Motif extensions* and the arc plot compare every pair of occurrences, so a single common letter in a long text is millions of pairs. The menu asks before it starts; a longer, more specific motif has far fewer.
+- **`Unexpected error (SomeError): ...` appears and you're dropped back to the main
   menu.** This is a catch-all error handler — it means the specific action
   you just tried failed, not that your session was lost. Your loaded
   sequence, xmotifs, and cores are still in memory; you can retry the same
