@@ -201,11 +201,14 @@ or wants to export a unit sequence as codon text.
 
 ### 3.9 Menu and batch CLI
 
-- A data-type choice at load time (nucleotide, codon, custom alphabet)
-  replaces the `is_rna` check, and the nucleotide-only items are hidden or
-  warn.
-- `rna_lexis_stat_cli` gets an `--alphabet` option (and `--frame`,
-  `--codebook`). Default behavior is unchanged.
+- An alphabet choice at load time replaces the `is_rna` check, and the
+  nucleotide-only items are hidden or warn. The menu lists the built-in
+  named alphabets (nucleotide, codon, amino acid, Latin letters) plus
+  "Load alphabet from file" for user-defined ones, which carry their own
+  display name (section 9, question 6).
+- `rna_lexis_stat_cli` gets an `--alphabet` option that takes a built-in
+  name or an alphabet file, plus `--frame` and `--on-unknown`. Default
+  behavior is unchanged.
 
 ## 4. What the design does not rule out
 
@@ -310,9 +313,17 @@ just uniform symbols.
    arise, since every unit is already a token.
 5. ~~Unknown symbols~~ Decided: both options exist (`on_unknown='skip'` or
    `'error'`), and the default is skip with a warning (section 3.2).
-6. **Naming on the CLI and menu** for a codebook-defined alphabet.
-7. **Genetic codes:** standard only, or also mitochondrial and others.
-8. **Packaging name:** only needed once the alias is wanted (section 6).
+6. ~~Naming on the CLI and menu~~ Decided: named alphabets. Built-ins are
+   named by what they are (nucleotide, codon, amino acid, Latin letters).
+   A user-defined alphabet is an alphabet file with its own display name
+   (for example "finch syllables"), loaded with `--alphabet <file>` on the
+   CLI and "Load alphabet from file" in the menu. The display name appears
+   in plot titles and CSV headers. The alphabet file also carries the full
+   declared symbol set, extra symbols included (section 3.2).
+7. ~~Genetic codes~~ Decided: the standard code only for now. Other codes
+   are on the wishlist (section 12).
+8. ~~Packaging name~~ Decided: revisit the name when the tool is ready
+   (section 6).
 
 ## 10. Suggested phases
 
@@ -341,3 +352,24 @@ Each phase should be shippable and leave nucleotide behavior unchanged.
   none). It should land first, on its own, before any new feature.
 - Variant-family size at 64 or more symbols can make the mutation-family
   tests unusable at radius 2 or more without a smarter enumeration.
+
+## 12. Wishlist (deliberately deferred)
+
+Not part of the first release. Listed so the design leaves room for them.
+
+1. **Other genetic codes:** mitochondrial, and the other NCBI translation
+   tables, for the codon-to-amino-acid projection (section 3.7). The first
+   release has the standard code only. The projection should be a
+   replaceable table, not hardcoded, so this is an addition and not a
+   rewrite.
+2. **Unit distance matrices:** partial credit for near-synonymous codons,
+   and amino-acid substitution matrices (BLOSUM) for the alignment code
+   (section 3.7).
+3. **Synonymous-shuffle null:** permute codons within each amino acid to
+   test whether a motif depends on synonymous choice (section 9,
+   question 2).
+4. **Unit-level logo plot:** its own renderer for 64 or more symbols
+   (section 5).
+5. **Codon-level reverse complement and stop-codon splitting** of segments
+   (section 3.7).
+6. **Arbitrary token vocabularies,** such as whole words (section 4).
