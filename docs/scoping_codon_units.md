@@ -85,6 +85,14 @@ over 64. Concretely:
   original text and occurrences spanning a removal can be flagged.
 - The `Alphabet` is saved with a session and written into result files, so a
   later analysis of another text can use the same one.
+- **Each alphabet carries its own analysis defaults:** the background
+  settings (order, shrinkage target and strength) and the motif-length and
+  mismatch defaults of section 7. Built-in alphabets ship calibrated
+  values. A user-defined alphabet file may specify its own; if it does
+  not, the generic rule applies (order chosen from the text length,
+  shrinkage toward uniform). Some defaults are rules that depend on the
+  text length, not constants. The command-line and menu options override
+  them.
 
 ### 3.3 Units as fixed-width tuples, plus extra symbols
 
@@ -313,8 +321,10 @@ false-positive rate:
   FDR level, and the power to recover a planted repeat, with and without
   masking the motif when estimating the background.
 
-The hybrid becomes the default only if it is calibrated at the lengths
-above; otherwise the section 3.4 recommendation is revised.
+The hybrid becomes the codon alphabet's default only if it is calibrated
+at the lengths above; otherwise the section 3.4 recommendation is revised.
+The same simulation is repeated for each other built-in alphabet, using a
+generator that matches its structure.
 
 ## 8. Testing
 
@@ -343,12 +353,20 @@ above; otherwise the section 3.4 recommendation is revised.
 
 ## 9. Open questions
 
-1. **Default background for codon mode:** recommended, not yet decided.
-   Order 0 over the declared units (codon usage), shrunk toward a
-   nucleotide model by codon position (section 3.4). Order 1 over 64 units
-   is rejected as the default because it overfits and absorbs repeats. The
-   decision is confirmed or revised by the calibration in section 7, which
-   must run before phase 2. Related but separate: question 2 asks a
+1. ~~Default background~~ Decided in structure: the default belongs to the
+   alphabet (section 3.2), so there is no single global default. The
+   values are pending the calibration in section 7, which must run before
+   phase 2, once per built-in alphabet:
+   - nucleotide: order 1, unchanged, no calibration needed;
+   - codon: order 0 over the declared units (codon usage), shrunk toward a
+     nucleotide model by codon position (section 3.4); order 1 over 64
+     units is rejected because it overfits and absorbs repeats;
+   - amino acid and Latin letters: calibrated separately, with uniform
+     shrinkage targets. Latin letters use the Mark Antony text and the
+     existing GeneDB sweeps.
+
+   A user-defined alphabet without its own defaults gets the generic rule
+   and is not calibrated. Related but separate: question 2 asks a
    different question (dependence on synonymous choice with the amino acid
    sequence held fixed), not a better background for the same test.
 2. ~~A synonymous-shuffle null~~ Decided: wishlist, high priority, not
@@ -455,3 +473,7 @@ Not part of the first release. Listed so the design leaves room for them.
 7. **Reference codon usage as a background:** an organism-wide codon usage
    table as an alternative to the transcript's own, for short transcripts
    where the transcript-specific estimate is poor.
+8. **"Calibrate for my data" command:** for a user-defined alphabet, run
+   the section 7 simulation from the user's own text (simulating from its
+   fitted background) and report the false-positive rate and a suggested
+   background setting. Not scheduled.
