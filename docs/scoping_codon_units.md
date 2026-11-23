@@ -74,9 +74,15 @@ over 64. Concretely:
 - Every declared symbol gets an internal character when the `Alphabet` is
   created, whether or not it occurs. The unused ones simply have zero
   counts, and the pseudocount gives them the right small probability.
-- A symbol in the text that is not in the alphabet is an error (or an
-  explicit "skip with a warning" choice), never silently dropped. That
-  silent dropping is exactly what `normalize_sequence()` does today.
+- A symbol in the text that is not in the alphabet is handled by an
+  explicit `on_unknown` option with two settings. The default is `skip`:
+  the symbol is removed and a warning reports how many were skipped, which
+  ones, and where. The other is `error`, which stops with the first
+  offender. Either way it is never silent, unlike `normalize_sequence()`
+  today. Skipping makes the two symbols on either side adjacent, which can
+  create a motif occurrence that is not in the original text. The skipped
+  positions are therefore recorded, so results can be mapped back to the
+  original text and occurrences spanning a removal can be flagged.
 - The `Alphabet` is saved with a session and written into result files, so a
   later analysis of another text can use the same one.
 
@@ -171,8 +177,27 @@ generalization of `eng2rna.py`. All 26 letters are in the codebook whether or
 not a given text uses them (section 3.2), and spaces or digits can be added
 as extra symbols.
 
-`eng2rna.py` stays available as the nucleotide-level comparison mode. The
-open question is where it lives (section 9).
+`eng2rna.py` stays in GeneDB as the nucleotide-level comparison mode; it is
+not ported. This package gets its own, more general codec instead:
+
+- **Any external symbol set** (letters, syllable labels, digits, spaces),
+  not only a-z, mapped to unit labels of width k over a base alphabet of
+  size V (V = 4, k = 3 for codons; larger V or k when the symbol set needs
+  more than 64 labels).
+- **Codebook in and out:** read and write the codebook file (same format as
+  `birdsong_codebook.csv`), so an encoding can be saved with a result and
+  reused.
+- **Assignment rules:** an explicit mapping, a seeded random permutation,
+  or a mapping chosen to balance base frequencies (the idea behind
+  `BALANCED_CODEC`). The assignment is recorded in the codebook, so it is
+  reproducible without the seed.
+- **Round trip:** encode, decode, and decode a motif found at an arbitrary
+  offset (the partial-codon handling that GeneDB's `decode_cores.py` does).
+- **Unknown symbols** follow the `on_unknown` option from section 3.2.
+
+Since the engine works at the unit level, the codec is only needed when the
+user wants the nucleotide-level view (for comparison with `eng2rna` output)
+or wants to export a unit sequence as codon text.
 
 ### 3.9 Menu and batch CLI
 
@@ -250,6 +275,11 @@ just uniform symbols.
   identical output.
 - Round-trip tests for each `Alphabet` and tokenizer, including partial
   trailing codons, the frame offset, and extra symbols.
+- Unknown-symbol tests: `skip` removes them, warns with counts and
+  positions, and maps results back to the original text; `error` stops at
+  the first one.
+- Codec tests: codebook write/read round trip, reproducibility from the
+  codebook alone, and decoding a motif found at an arbitrary offset.
 - Declared-alphabet tests: a text missing one letter (or one codon) gives
   the same background size, pseudocounts and variant families as a text
   that uses it.
@@ -272,14 +302,14 @@ just uniform symbols.
    codons within each amino acid. It tests directly whether a motif depends
    on synonymous choice. A natural fit for the motivation, but a separate
    feature.
-3. **Where `eng2rna` lives:** keep it in GeneDB, or port it into the package
-   as an encoding module that sits beside the `Alphabet` code. Porting is
-   more convenient for users; keeping it out keeps the package free of the
-   English-text experiment.
+3. ~~Where `eng2rna` lives~~ Decided: it stays in GeneDB. The package gets
+   a generalized codec instead (section 3.8). Remaining detail: which
+   assignment rules (explicit, seeded permutation, balanced) ship first.
 4. **Extra symbols in a raw nucleotide stream:** does codon reading restart
    after each one, or continue across it? With a codebook this does not
    arise, since every unit is already a token.
-5. **Unknown symbols:** error, or skip with a warning, as the default.
+5. ~~Unknown symbols~~ Decided: both options exist (`on_unknown='skip'` or
+   `'error'`), and the default is skip with a warning (section 3.2).
 6. **Naming on the CLI and menu** for a codebook-defined alphabet.
 7. **Genetic codes:** standard only, or also mitochondrial and others.
 8. **Packaging name:** only needed once the alias is wanted (section 6).
