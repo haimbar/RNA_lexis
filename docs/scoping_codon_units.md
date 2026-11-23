@@ -468,6 +468,40 @@ as wildcards, and `n` is also a Latin letter. The wildcard must become a
 character that cannot be an alphabet symbol before Latin text can go through
 the gapped-motif code.
 
+### Phase 2 status
+
+Phase 2 is implemented in `statistical.py` (every function that depends on the
+alphabet takes `alphabet=`), with 25 new tests. Without the argument the output is
+unchanged: 36 outputs for the human and mouse NORAD sequences are identical to the
+code before the change. Choices made while implementing:
+
+- **Texts and motifs over an alphabet are internal strings**, and
+  `normalize_sequence` checks them instead of filtering: a character that is not an
+  internal character raises `ValueError`, so text that was not read with `tokenize`
+  is caught. The nucleotide default still strips silently, as always.
+- **Segment boundaries are respected** by the background (boundaries are not
+  counted, no transition crosses one, the slots for a word are counted per
+  segment), by literal positions, Hamming windows and gapped hits.
+- **Order and family** are the calibrated ones: `default_markov_order` and
+  `family="bylength"` (section 3.4). `markov_order=None` means order 1 for
+  nucleotides. A list of candidates that leaves out some words treats the missing
+  tests as p = 1, which is slightly conservative.
+- **Wildcard:** `rna_lexis.alphabet.WILDCARD`, the last private use character,
+  replaces `n . ? *` for patterns over an alphabet (the nucleotide code is unchanged).
+- **Not calibrated for other alphabets:** the correction in `mutation_family_tests`
+  (over the rows listed), and `markov_kmer_pvalues` in `algorithms.py`, which works
+  from observed k-mer counts and was left alone.
+- The package reproduces the calibration: on simulated codon text 0.0 false
+  positives per 100 null texts (simulation: 0.0025), and 99% and 93% recall for the
+  two planted cases checked (simulation: 99.5% and 93.5%).
+- A bug I introduced while editing `hamming_variants` (the alphabet's characters
+  shared a name with a list the loop rewrites) was caught by the before/after
+  comparison, not by any existing test; the function now has tests.
+
+Left for phases 3 and 4: decoding results for display (plots, CSV columns,
+console), the menu and CLI, the nucleotide-only gating, and `algorithms.py` pieces
+that assume nucleotides (`extendRNA`, `gen_hairpins`, GC content).
+
 ## 11. Risks
 
 - The discovery defaults (section 7) are still uncalibrated, and the

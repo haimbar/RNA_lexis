@@ -7,6 +7,16 @@ post-analysis layer discussed during the reviewer-response work:
 * candidate cores are filtered/ranked with enrichment p-values and FDR;
 * mutation-tolerant Hamming families are accepted only when the expanded
   family remains enriched under the same background.
+
+Every function that depends on the alphabet takes an optional ``alphabet``.
+Left out, it is the nucleotide alphabet and behavior is as it has always been.
+Given an :class:`rna_lexis.alphabet.Alphabet`, texts and motifs are *internal
+strings* (one character per unit, from :func:`rna_lexis.tokenizers.tokenize`),
+the alphabet's declared size is used for every pseudocount and count of
+possible words whether or not all symbols occur, motifs may not span a
+segment boundary (``"_"``), and wildcards in patterns are
+:data:`rna_lexis.alphabet.WILDCARD`.  See ``calibration/README.md`` for how the
+defaults for the Markov order and the multiple-testing family were chosen.
 """
 
 from __future__ import annotations
@@ -22,6 +32,7 @@ from typing import Iterable, Iterator, Sequence
 from scipy.stats import binom, poisson
 
 from rna_lexis.algorithms import cores, cover, find_boundary
+from rna_lexis.alphabet import Alphabet, BOUNDARY, WILDCARD
 
 try:
     from scipy.stats import false_discovery_control
@@ -32,45 +43,121 @@ except ImportError:  # pragma: no cover - compatibility for older SciPy
 ALPHABET = "acgt"
 
 
+def default_markov_order(alphabet_size: int, n_letters: int) -> int:
+    """Default Markov order for an alphabet other than the nucleotide one.
+
+    Order 1 when the text has at least one observation per transition on
+    average (``n_letters >= alphabet_size ** 2``), otherwise order 0; never
+    above 1.  Chosen by simulation (``calibration/README.md``): codons
+    (K = 64, up to 1,500 codons) need order 0, letter alphabets (K about 26,
+    1,000 letters and more) need order 1, and higher orders are not
+    calibrated with a flat pseudocount.
+    """
+
+    return 1 if n_letters >= alphabet_size ** 2 else 0
+
+
+def _resolve_order(markov_order: int | None, alphabet, n_letters: int) -> int:
+    if markov_order is not None:
+        return markov_order
+    if isinstance(alphabet, Alphabet):
+        return default_markov_order(alphabet.size, n_letters)
+    return 1
+
+
+def normalize_sequence(seq: str, alphabet=None) -> str:
+    """Normalize a sequence for analysis.
+
+    Without ``alphabet``: RNA/DNA text to the lower-case DNA alphabet (``u``
+    becomes ``t``; anything else is dropped), as always.  With an
+    :class:`Alphabet`: ``seq`` is an internal string; it is checked, not
+    filtered, and the segment boundary is kept.  A character that is not an
+    internal character of the alphabet raises ``ValueError``, so text that has
+    not been read with :func:`rna_lexis.tokenizers.tokenize` is caught
+    instead of silently losing symbols.
+    """
+
+    if isinstance(alphabet, Alphabet):
+        s = seq if alphabet.case_sensitive else seq.lower()
+        if alphabet.mode == "chars" and alphabet.aliases:
+            s = "".join(alphabet.aliases.get(c, c) for c in s)
+        valid = set(alphabet.chars)
+        valid.add(BOUNDARY)
+        bad = sorted({c for c in s if c not in valid})
+        if bad:
+            raise ValueError(
+                f"{bad[:3]!r} is not an internal character of alphabet {alphabet.name!r}; "
+                "read the text with rna_lexis.tokenizers.tokenize first")
+        return s
+    chars = ALPHABET if alphabet is None else alphabet
+    return "".join(c for c in seq.lower().replace("u", "t") if c in chars)
+
+
 @dataclass(frozen=True)
 class MarkovBackground:
-    """Transcript-specific Markov background with pseudocount smoothing."""
+    """Transcript-specific Markov background with pseudocount smoothing.
+
+    ``alphabet`` is the nucleotide characters (default), a string of other
+    characters, or an :class:`Alphabet`.  With an ``Alphabet`` the sequence is
+    an internal string whose segment boundaries (``"_"``) are respected:
+    boundaries are not counted as symbols, no transition is counted across one,
+    and no word can occupy a window that spans one.  After construction
+    ``alphabet`` is the string of internal characters, whatever was passed, so
+    ``len(alphabet)`` is the declared alphabet size.
+    """
 
     sequence: str
     order: int = 1
     pseudocount: float = 1.0
-    alphabet: str = ALPHABET
+    alphabet: object = ALPHABET
 
     def __post_init__(self) -> None:
         if self.order < 0:
             raise ValueError("order must be non-negative")
-        seq = normalize_sequence(self.sequence)
+        alph_obj = self.alphabet if isinstance(self.alphabet, Alphabet) else None
+        chars = alph_obj.chars if alph_obj is not None else self.alphabet
+        seq = normalize_sequence(self.sequence, self.alphabet)
+        segments = seq.split(BOUNDARY) if BOUNDARY in seq else [seq]
+        letters = "".join(segments)
         object.__setattr__(self, "sequence", seq)
-        object.__setattr__(self, "_char_counts", Counter(seq))
+        object.__setattr__(self, "alphabet", chars)
+        object.__setattr__(self, "_alphabet_obj", alph_obj)
+        object.__setattr__(self, "_segment_lengths", tuple(len(s) for s in segments))
+        object.__setattr__(self, "_n", len(letters))
+        object.__setattr__(self, "_char_counts", Counter(letters))
         object.__setattr__(self, "_context_counts", Counter())
         object.__setattr__(self, "_transition_counts", Counter())
 
         if self.order > 0:
             context_counts = Counter()
             transition_counts = Counter()
-            for i in range(len(seq) - self.order):
-                ctx = seq[i : i + self.order]
-                nxt = seq[i + self.order]
-                context_counts[ctx] += 1
-                transition_counts[(ctx, nxt)] += 1
+            for segment in segments:
+                for i in range(len(segment) - self.order):
+                    ctx = segment[i : i + self.order]
+                    nxt = segment[i + self.order]
+                    context_counts[ctx] += 1
+                    transition_counts[(ctx, nxt)] += 1
             object.__setattr__(self, "_context_counts", context_counts)
             object.__setattr__(self, "_transition_counts", transition_counts)
+
+    def _norm(self, word: str) -> str:
+        return normalize_sequence(word, self._alphabet_obj if self._alphabet_obj is not None else self.alphabet)
+
+    def slots(self, length: int) -> int:
+        """Number of positions where a word of ``length`` fits inside one segment."""
+
+        return sum(max(0, n - length + 1) for n in self._segment_lengths)
 
     def probability(self, word: str) -> float:
         """Return Markov probability for one word."""
 
-        word = normalize_sequence(word)
-        if not word:
+        word = self._norm(word)
+        if not word or BOUNDARY in word:
             return 0.0
 
         alpha = len(self.alphabet)
         pc = self.pseudocount
-        n = len(self.sequence)
+        n = self._n
         p = (self._char_counts.get(word[0], 0) + pc) / (n + pc * alpha)
         if len(word) == 1:
             return p
@@ -94,22 +181,22 @@ class MarkovBackground:
     def expected_count(self, word: str) -> float:
         """Expected overlapping count of word in this transcript."""
 
-        word = normalize_sequence(word)
-        slots = max(0, len(self.sequence) - len(word) + 1)
-        return slots * self.probability(word)
+        word = self._norm(word)
+        return self.slots(len(word)) * self.probability(word)
 
 
-def normalize_sequence(seq: str) -> str:
-    """Normalize RNA/DNA text to lower-case DNA alphabet."""
+def literal_positions(seq: str, txt: str, alphabet=None) -> list[int]:
+    """Return overlapping exact start positions for seq in txt.
 
-    return "".join(c for c in seq.lower().replace("u", "t") if c in ALPHABET)
+    Positions index the normalized text.  With an :class:`Alphabet` that is the
+    internal string itself (segment boundaries included), and an occurrence
+    never spans a boundary because ``seq`` cannot contain one.
+    """
 
-
-def literal_positions(seq: str, txt: str) -> list[int]:
-    """Return overlapping exact start positions for seq in txt."""
-
-    seq = normalize_sequence(seq)
-    txt = normalize_sequence(txt)
+    seq = normalize_sequence(seq, alphabet)
+    txt = normalize_sequence(txt, alphabet)
+    if BOUNDARY in seq:
+        raise ValueError("a motif cannot contain the segment boundary")
     if not seq or len(seq) > len(txt):
         return []
     out = []
@@ -128,17 +215,22 @@ def window_hamming(a: str, b: str) -> int:
     return sum(x != y for x, y in zip(a, b))
 
 
-def hamming_family_positions(motif: str, txt: str, radius: int) -> list[tuple[int, str, int]]:
-    """Return all transcript windows within Hamming radius of motif."""
+def hamming_family_positions(motif: str, txt: str, radius: int, alphabet=None) -> list[tuple[int, str, int]]:
+    """Return all transcript windows within Hamming radius of motif.
 
-    motif = normalize_sequence(motif)
-    txt = normalize_sequence(txt)
+    Windows that span a segment boundary are skipped.
+    """
+
+    motif = normalize_sequence(motif, alphabet)
+    txt = normalize_sequence(txt, alphabet)
     L = len(motif)
     if radius < 0 or L == 0 or L > len(txt):
         return []
     hits = []
     for i in range(len(txt) - L + 1):
         window = txt[i : i + L]
+        if BOUNDARY in window:
+            continue
         dist = window_hamming(window, motif)
         if dist <= radius:
             hits.append((i, window, dist))
@@ -175,12 +267,30 @@ def union_coverage_bp(positions: Sequence[int], length: int) -> int:
     return total
 
 
-def bh_adjust(pvalues: Sequence[float]) -> list[float]:
-    """Benjamini-Hochberg FDR correction."""
+def bh_adjust(pvalues: Sequence[float], m: int | float | None = None) -> list[float]:
+    """Benjamini-Hochberg FDR correction.
+
+    ``m`` is the total number of tests when it is larger than the number of
+    p-values given (the missing tests are taken to have p = 1).  Left out, it is
+    the number of p-values given, as usual.  Use it to correct over a search
+    space that was only partly listed, e.g. all ``K ** k`` possible words of a
+    length when only the observed ones have a p-value.
+    """
 
     pvalues = [float(p) for p in pvalues]
     if not pvalues:
         return []
+    if m is not None:
+        if m < len(pvalues):
+            raise ValueError("m cannot be smaller than the number of p-values")
+        order = sorted(range(len(pvalues)), key=lambda i: pvalues[i])
+        adjusted = [1.0] * len(pvalues)
+        prev = math.inf
+        for rank in range(len(order), 0, -1):
+            i = order[rank - 1]
+            prev = min(prev, pvalues[i] * m / rank)
+            adjusted[i] = min(1.0, prev)
+        return adjusted
     if false_discovery_control is not None:
         return [float(x) for x in false_discovery_control(pvalues, method="bh")]
 
@@ -202,13 +312,13 @@ def _safe_enrichment(observed: int, expected: float) -> float:
     return observed / expected
 
 
-def xmotif_occurrence_intervals(txt: str, xmotifs: Iterable[str]) -> list[tuple[int, int, str]]:
+def xmotif_occurrence_intervals(txt: str, xmotifs: Iterable[str], alphabet=None) -> list[tuple[int, int, str]]:
     """Return intervals for every exact xmotif occurrence in txt."""
 
     intervals = []
-    for xm in dict.fromkeys(normalize_sequence(x) for x in xmotifs if x):
+    for xm in dict.fromkeys(normalize_sequence(x, alphabet) for x in xmotifs if x):
         L = len(xm)
-        for pos in literal_positions(xm, txt):
+        for pos in literal_positions(xm, txt, alphabet):
             intervals.append((pos, pos + L, xm))
     intervals.sort(key=lambda x: (x[0], x[1], x[2]))
     return intervals
@@ -223,27 +333,56 @@ def score_exact_motifs(
     motifs: Iterable[str],
     *,
     xmotifs: Iterable[str] | None = None,
-    markov_order: int = 1,
+    markov_order: int | None = None,
     pseudocount: float = 1.0,
     alpha: float = 0.05,
     enrichment_threshold: float = 10.0,
     min_count: int = 2,
     min_xmotif_type_support: int = 0,
     area_power: float = 1.2,
+    alphabet=None,
+    family: str | None = None,
 ) -> list[dict]:
-    """Score exact motif candidates with transcript-specific Markov/FDR support."""
+    """Score exact motif candidates with transcript-specific Markov/FDR support.
 
-    txt = normalize_sequence(txt)
-    motif_list = [m for m in dict.fromkeys(normalize_sequence(m) for m in motifs if m)]
-    bg = MarkovBackground(txt, order=markov_order, pseudocount=pseudocount)
-    xmotif_list = [normalize_sequence(x) for x in (xmotifs or []) if x]
-    xmotif_intervals = xmotif_occurrence_intervals(txt, xmotif_list) if xmotif_list else []
+    Args:
+        alphabet:     ``None`` (nucleotides, the default) or an
+                      :class:`Alphabet`; with one, ``txt``, ``motifs`` and
+                      ``xmotifs`` are internal strings.
+        markov_order: Order of the background.  Left out it is 1 for
+                      nucleotides and :func:`default_markov_order` for an
+                      ``Alphabet`` (0 for codons, 1 for letters).
+        family:       The multiple-testing family for the Benjamini-Hochberg
+                      correction.  ``"candidates"`` corrects over the motifs
+                      given, which are usually already selected for being
+                      repeated, so it counts too few tests on a long text.
+                      ``"bylength"`` corrects within each motif length ``L``
+                      over all ``K ** L`` possible words of that length
+                      (``K`` the declared alphabet size); it keeps false
+                      positives at or below the nominal level in simulation.
+                      Default: ``"candidates"`` for nucleotides, which keeps
+                      existing results, and ``"bylength"`` for an ``Alphabet``.
+    """
+
+    if family is None:
+        family = "candidates" if alphabet is None else "bylength"
+    if family not in ("candidates", "bylength"):
+        raise ValueError("family must be 'candidates' or 'bylength'")
+    txt = normalize_sequence(txt, alphabet)
+    motif_list = [m for m in dict.fromkeys(normalize_sequence(m, alphabet) for m in motifs if m)]
+    if any(BOUNDARY in m for m in motif_list):
+        raise ValueError("a motif cannot contain the segment boundary")
+    order = _resolve_order(markov_order, alphabet, len(txt.replace(BOUNDARY, "")))
+    bg = MarkovBackground(txt, order=order, pseudocount=pseudocount,
+                          alphabet=alphabet if alphabet is not None else ALPHABET)
+    xmotif_list = [normalize_sequence(x, alphabet) for x in (xmotifs or []) if x]
+    xmotif_intervals = xmotif_occurrence_intervals(txt, xmotif_list, alphabet) if xmotif_list else []
 
     rows = []
     pvalues = []
     for motif in motif_list:
         L = len(motif)
-        positions = literal_positions(motif, txt)
+        positions = literal_positions(motif, txt, alphabet)
         observed = len(positions)
         expected = bg.expected_count(motif)
         pvalue = float(poisson.sf(observed - 1, expected)) if expected > 0 else (0.0 if observed > 0 else 1.0)
@@ -271,10 +410,21 @@ def score_exact_motifs(
             "enrichment_markov": _safe_enrichment(observed, expected),
             "p_markov": pvalue,
             "q_markov": 1.0,
-            "markov_order": markov_order,
+            "markov_order": order,
         })
 
-    qvalues = bh_adjust(pvalues)
+    if family == "candidates":
+        qvalues = bh_adjust(pvalues)
+    else:
+        qvalues = [1.0] * len(pvalues)
+        size = len(bg.alphabet)
+        by_length: dict[int, list[int]] = defaultdict(list)
+        for idx, row in enumerate(rows):
+            by_length[row["length"]].append(idx)
+        for length, idxs in by_length.items():
+            adjusted = bh_adjust([pvalues[i] for i in idxs], m=float(size) ** length)
+            for i, q in zip(idxs, adjusted):
+                qvalues[i] = q
     for row, qvalue in zip(rows, qvalues):
         row["q_markov"] = qvalue
         row["statistically_supported"] = (
@@ -313,10 +463,11 @@ def enumerate_core_candidates(
     candidate_min_len: int = 5,
     candidate_max_len: int = 18,
     min_xmotif_type_support: int = 2,
+    alphabet=None,
 ) -> list[str]:
     """Enumerate substrings shared by at least two distinct xmotif sequences."""
 
-    xmotif_list = [normalize_sequence(x) for x in dict.fromkeys(xmotifs) if x]
+    xmotif_list = [normalize_sequence(x, alphabet) for x in dict.fromkeys(xmotifs) if x]
     support: dict[str, set[str]] = defaultdict(set)
     for xm in xmotif_list:
         upper = min(candidate_max_len, len(xm))
@@ -337,6 +488,7 @@ def rank_core_candidates(
     candidate_min_len: int = 5,
     candidate_max_len: int = 18,
     min_xmotif_type_support: int = 2,
+    alphabet=None,
     **score_kwargs,
 ) -> list[dict]:
     """Generate, score, and rank Markov-supported core motif candidates."""
@@ -346,25 +498,47 @@ def rank_core_candidates(
         candidate_min_len=candidate_min_len,
         candidate_max_len=candidate_max_len,
         min_xmotif_type_support=min_xmotif_type_support,
+        alphabet=alphabet,
     )
     return score_exact_motifs(
         txt,
         candidates,
         xmotifs=xmotifs,
         min_xmotif_type_support=min_xmotif_type_support,
+        alphabet=alphabet,
         **score_kwargs,
     )
 
 
-def _variant_count(length: int, radius: int) -> int:
-    return sum(math.comb(length, d) * (len(ALPHABET) - 1) ** d for d in range(radius + 1))
+def _chars_of(alphabet) -> str:
+    """The characters of an alphabet given as None (nucleotides), a string, or an Alphabet."""
+
+    if alphabet is None:
+        return ALPHABET
+    if isinstance(alphabet, Alphabet):
+        return alphabet.chars
+    return alphabet
 
 
-def hamming_variants(motif: str, radius: int, *, max_variants: int = 500_000) -> Iterator[str]:
-    """Yield all words within Hamming radius of motif."""
+def _variant_count(length: int, radius: int, size: int = len(ALPHABET)) -> int:
+    """Number of words within Hamming radius ``radius`` of a word of ``length`` over ``size`` symbols."""
 
-    motif = normalize_sequence(motif)
-    count = _variant_count(len(motif), radius)
+    return sum(math.comb(length, d) * (size - 1) ** d for d in range(radius + 1))
+
+
+def hamming_variants(motif: str, radius: int, *, max_variants: int = 500_000, alphabet=None) -> Iterator[str]:
+    """Yield all words within Hamming radius of motif.
+
+    The number of variants grows with the alphabet size: at radius 2 a word of
+    6 codons has 15 * 63 ** 2 = 59,535 variants beyond the first-radius ones, so
+    ``max_variants`` matters much more over 64 symbols than over 4.
+    """
+
+    motif = normalize_sequence(motif, alphabet)
+    symbols = _chars_of(alphabet)
+    if BOUNDARY in motif:
+        raise ValueError("a motif cannot contain the segment boundary")
+    count = _variant_count(len(motif), radius, len(symbols))
     if count > max_variants:
         raise ValueError(
             f"Hamming family has {count:,} variants; lower radius or raise max_variants"
@@ -373,7 +547,7 @@ def hamming_variants(motif: str, radius: int, *, max_variants: int = 500_000) ->
     for d in range(1, radius + 1):
         for positions in itertools.combinations(range(len(motif)), d):
             replacements = [
-                [base for base in ALPHABET if base != motif[pos]]
+                [base for base in symbols if base != motif[pos]]
                 for pos in positions
             ]
             for repl in itertools.product(*replacements):
@@ -392,7 +566,9 @@ def hamming_family_probability(
 ) -> float:
     """Markov probability of the full Hamming family."""
 
-    return sum(background.probability(v) for v in hamming_variants(motif, radius, max_variants=max_variants))
+    alphabet = background._alphabet_obj if background._alphabet_obj is not None else background.alphabet
+    return sum(background.probability(v)
+               for v in hamming_variants(motif, radius, max_variants=max_variants, alphabet=alphabet))
 
 
 def mutation_family_tests(
@@ -401,19 +577,28 @@ def mutation_family_tests(
     *,
     mutr: float = 1 / 6,
     M: int = 4,
-    markov_order: int = 1,
+    markov_order: int | None = None,
     pseudocount: float = 1.0,
     alpha: float = 0.05,
     enrichment_threshold: float = 5.0,
     expected_max: float = 5.0,
     min_family_count: int = 2,
     max_variants: int = 500_000,
+    alphabet=None,
 ) -> list[dict]:
-    """Evaluate Hamming-radius motif families with Markov enrichment and FDR."""
+    """Evaluate Hamming-radius motif families with Markov enrichment and FDR.
 
-    txt = normalize_sequence(txt)
-    motif_list = [m for m in dict.fromkeys(normalize_sequence(m) for m in motifs if m)]
-    bg = MarkovBackground(txt, order=markov_order, pseudocount=pseudocount)
+    With an :class:`Alphabet` the texts are internal strings and a mismatch is a
+    different unit.  The correction is over the rows listed (each motif at each
+    radius), as before; that family has not been calibrated for other alphabets.
+    """
+
+    txt = normalize_sequence(txt, alphabet)
+    motif_list = [m for m in dict.fromkeys(normalize_sequence(m, alphabet) for m in motifs if m)]
+    markov_order = _resolve_order(markov_order, alphabet, len(txt.replace(BOUNDARY, "")))
+    bg = MarkovBackground(txt, order=markov_order, pseudocount=pseudocount,
+                          alphabet=alphabet if alphabet is not None else ALPHABET)
+    size = len(bg.alphabet)
     rows = []
     pvalues = []
 
@@ -421,7 +606,7 @@ def mutation_family_tests(
         L = len(motif)
         max_radius = min(M, math.floor(L * mutr))
         for radius in range(max_radius + 1):
-            hits = hamming_family_positions(motif, txt, radius)
+            hits = hamming_family_positions(motif, txt, radius, alphabet)
             hist = Counter(dist for _, _, dist in hits)
             family_count = len(hits)
             exact_count = hist.get(0, 0)
@@ -432,16 +617,16 @@ def mutation_family_tests(
                 family_probability = hamming_family_probability(
                     motif, radius, bg, max_variants=max_variants
                 )
-                expected = max(0, len(txt) - L + 1) * family_probability
+                expected = bg.slots(L) * family_probability
                 pvalue = float(poisson.sf(family_count - 1, expected)) if expected > 0 else (
                     0.0 if family_count > 0 else 1.0
                 )
-                variant_count = _variant_count(L, radius)
+                variant_count = _variant_count(L, radius, size)
                 variant_error = ""
             except ValueError as exc:
                 expected = math.nan
                 pvalue = 1.0
-                variant_count = _variant_count(L, radius)
+                variant_count = _variant_count(L, radius, size)
                 variant_error = str(exc)
 
             pvalues.append(pvalue)
@@ -535,19 +720,36 @@ def _allowed_pattern_chars(char: str, alphabet: str = ALPHABET) -> list[str]:
 def markov_pattern_probability(pattern: str, background: MarkovBackground) -> float:
     """Probability of a pattern with wildcard positions under a Markov model.
 
-    Fixed bases are written as A/C/G/T/U. Wildcards may be N, '.', '?', or '*'
-    and match any nucleotide. This is used for gap-aware motifs such as
-    ``TGTNNNTATA`` without enumerating every gap sequence.
+    Nucleotide background: fixed bases are written as A/C/G/T/U. Wildcards may
+    be N, '.', '?', or '*' and match any nucleotide. This is used for gap-aware
+    motifs such as ``TGTNNNTATA`` without enumerating every gap sequence.
+
+    Background over an :class:`Alphabet`: the pattern is an internal string and
+    the only wildcard is :data:`rna_lexis.alphabet.WILDCARD` (``n`` and ``.`` are
+    ordinary symbols there); any other character that is not a symbol of the
+    alphabet raises ``ValueError``.
     """
 
-    raw = pattern.lower().replace("u", "t")
-    pattern = "".join(c if c in background.alphabet else "n" for c in raw)
+    if background._alphabet_obj is None:
+        raw = pattern.lower().replace("u", "t")
+        pattern = "".join(c if c in background.alphabet else "n" for c in raw)
+        wildcards = {"n", ".", "?", "*"}
+    else:
+        bad = sorted({c for c in pattern if c not in background.alphabet and c != WILDCARD})
+        if bad:
+            raise ValueError(
+                f"{bad[:3]!r} is neither a symbol of alphabet {background._alphabet_obj.name!r} "
+                "nor the wildcard")
+        wildcards = {WILDCARD}
     if not pattern:
         return 0.0
 
+    def allowed(char: str) -> list[str]:
+        return list(background.alphabet) if char in wildcards else [char]
+
     alpha = len(background.alphabet)
     pc = background.pseudocount
-    n = len(background.sequence)
+    n = background._n
 
     def base_prob(base: str) -> float:
         return (background._char_counts.get(base, 0) + pc) / (n + pc * alpha)
@@ -559,14 +761,14 @@ def markov_pattern_probability(pattern: str, background: MarkovBackground) -> fl
 
     order = background.order
     states: dict[str, float] = {}
-    for base in _allowed_pattern_chars(pattern[0], background.alphabet):
+    for base in allowed(pattern[0]):
         key = base[-order:] if order > 0 else ""
         states[key] = states.get(key, 0.0) + base_prob(base)
 
     for idx, char in enumerate(pattern[1:], 1):
         next_states: dict[str, float] = {}
         for state, state_prob in states.items():
-            for base in _allowed_pattern_chars(char, background.alphabet):
+            for base in allowed(char):
                 if order == 0 or idx < order:
                     step_prob = base_prob(base)
                 else:
@@ -584,25 +786,29 @@ def find_gapped_motif_hits(
     *,
     min_gap: int = 0,
     max_gap: int = 30,
+    alphabet=None,
 ) -> list[dict]:
-    """Find exact anchor pairs separated by an unconstrained gap."""
+    """Find exact anchor pairs separated by an unconstrained gap.
 
-    txt = normalize_sequence(txt)
-    left = normalize_sequence(left_anchor)
-    right = normalize_sequence(right_anchor)
+    A hit never spans a segment boundary.
+    """
+
+    txt = normalize_sequence(txt, alphabet)
+    left = normalize_sequence(left_anchor, alphabet)
+    right = normalize_sequence(right_anchor, alphabet)
     if not left or not right:
         raise ValueError("left_anchor and right_anchor must contain sequence letters")
     if min_gap < 0 or max_gap < min_gap:
         raise ValueError("gap range must satisfy 0 <= min_gap <= max_gap")
 
     hits = []
-    for start in literal_positions(left, txt):
+    for start in literal_positions(left, txt, alphabet):
         for gap in range(min_gap, max_gap + 1):
             right_start = start + len(left) + gap
             right_end = right_start + len(right)
             if right_end > len(txt):
                 continue
-            if txt[right_start:right_end] == right:
+            if txt[right_start:right_end] == right and BOUNDARY not in txt[start:right_end]:
                 hits.append({
                     "start": start,
                     "end": right_end,
@@ -622,26 +828,31 @@ def score_gapped_motif(
     *,
     min_gap: int = 0,
     max_gap: int = 30,
-    markov_order: int = 1,
+    markov_order: int | None = None,
     pseudocount: float = 1.0,
+    alphabet=None,
 ) -> dict:
     """Score an anchor-gap-anchor motif as one statistical family."""
 
-    txt = normalize_sequence(txt)
-    left = normalize_sequence(left_anchor)
-    right = normalize_sequence(right_anchor)
+    txt = normalize_sequence(txt, alphabet)
+    left = normalize_sequence(left_anchor, alphabet)
+    right = normalize_sequence(right_anchor, alphabet)
     hits = find_gapped_motif_hits(
         txt,
         left,
         right,
         min_gap=min_gap,
         max_gap=max_gap,
+        alphabet=alphabet,
     )
-    bg = MarkovBackground(txt, order=markov_order, pseudocount=pseudocount)
+    markov_order = _resolve_order(markov_order, alphabet, len(txt.replace(BOUNDARY, "")))
+    bg = MarkovBackground(txt, order=markov_order, pseudocount=pseudocount,
+                          alphabet=alphabet if alphabet is not None else ALPHABET)
+    wildcard = "n" if alphabet is None else WILDCARD
     expected = 0.0
     for gap in range(min_gap, max_gap + 1):
-        pattern = left + ("n" * gap) + right
-        expected += max(0, len(txt) - len(pattern) + 1) * markov_pattern_probability(pattern, bg)
+        pattern = left + (wildcard * gap) + right
+        expected += bg.slots(len(pattern)) * markov_pattern_probability(pattern, bg)
     observed = len(hits)
     pvalue = float(poisson.sf(observed - 1, expected)) if expected > 0 else (0.0 if observed > 0 else 1.0)
     positions = [hit["start"] for hit in hits]
@@ -777,6 +988,7 @@ def shared_exact_motifs(
     maxxmlen: int = 60,
     mincorelen: int = 6,
     mincount: int = 2,
+    alphabet=None,
 ) -> list[str]:
     """Select motifs with exact occurrences in both sequences.
 
@@ -809,6 +1021,8 @@ def shared_exact_motifs(
         maxxmlen:   Passed to find_boundary() for the joint discovery scan.
         mincorelen: Passed to cores() for the joint discovery scan.
         mincount:   Passed to find_boundary() for the joint discovery scan.
+        alphabet:   ``None`` (nucleotides) or an :class:`Alphabet`; with one,
+                    both sequences are internal strings.
 
     Returns:
         Up to `n_top` motif strings, longest-coverage-in-A first.
@@ -819,10 +1033,10 @@ def shared_exact_motifs(
     concat_cores = cores(concat_txt, concat_xmotifs, minclen=mincorelen)
 
     candidates = [c for c in concat_cores
-                  if literal_positions(c, txt_a) and literal_positions(c, txt_b)]
+                  if literal_positions(c, txt_a, alphabet) and literal_positions(c, txt_b, alphabet)]
     seen = set(candidates)
     for c in (cores_a or []):
-        if c not in seen and literal_positions(c, txt_b):
+        if c not in seen and literal_positions(c, txt_b, alphabet):
             candidates.append(c)
             seen.add(c)
 

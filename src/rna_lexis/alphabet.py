@@ -21,7 +21,8 @@ unaffected by ``lower()``/``upper()``.  Characters are assigned in the order
 the symbols are declared, so the same alphabet always maps the same way.
 
 The segment boundary is the internal character ``"_"``, as elsewhere in the
-package.  It is never a symbol of any alphabet.
+package, and ``WILDCARD`` (the last private use character) means "any symbol" in
+a pattern.  Neither is ever a symbol of any alphabet.
 """
 
 from __future__ import annotations
@@ -35,8 +36,15 @@ from typing import Iterable, Mapping, Optional
 BOUNDARY = "_"
 """Internal character that separates segments; never an alphabet symbol."""
 
+WILDCARD = "\uf8ff"
+"""Internal character that stands for "any symbol" in a pattern; never an alphabet symbol.
+
+The nucleotide code writes wildcards as ``n``, ``.``, ``?`` or ``*``, but those are
+ordinary symbols in other alphabets (``n`` is a Latin letter), so patterns over an
+:class:`Alphabet` use this reserved private use character instead."""
+
 _PRIVATE_USE_START = 0xE000
-_PRIVATE_USE_END = 0xF8FF
+_PRIVATE_USE_END = 0xF8FE            # U+F8FF is the wildcard
 
 TOKENIZATION_MODES = ("chars", "fixed", "words")
 

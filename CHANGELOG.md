@@ -19,6 +19,29 @@
 
 ### Added
 
+- **The statistical functions take an alphabet (phase 2 of the codon-level work).**
+  `normalize_sequence`, `MarkovBackground`, `literal_positions`,
+  `score_exact_motifs`, `rank_core_candidates`, `enumerate_core_candidates`,
+  `mutation_family_tests`, `hamming_variants`, `hamming_family_positions`,
+  `find_gapped_motif_hits`, `score_gapped_motif`, `markov_pattern_probability`
+  and `shared_exact_motifs` accept `alphabet=` (an `rna_lexis.alphabet.Alphabet`).
+  Left out, behavior is exactly as before (checked on 36 outputs for the human and
+  mouse NORAD sequences). With an alphabet:
+  - texts and motifs are internal strings from `tokenize`; the declared alphabet size
+    is used for pseudocounts, variant counts and the count of possible words;
+  - **segment boundaries are respected**: the boundary is not a symbol, no transition
+    is counted across it, and no motif, Hamming window or gapped hit spans one;
+  - **the Markov order defaults by rule**, `default_markov_order(K, n)`: order 1 when
+    n >= K**2, otherwise order 0 (order 0 for codons, order 1 for letters);
+  - **the multiple-testing family** of `score_exact_motifs` is `family="bylength"`:
+    Benjamini-Hochberg within each motif length L over all K**L possible words.
+    Nucleotide mode keeps `family="candidates"`, which corrects over the motifs given.
+    `bh_adjust` gained `m=` (the total number of tests);
+  - **wildcards** in patterns are `rna_lexis.alphabet.WILDCARD`, since `n` is a letter
+    in other alphabets.
+  The defaults come from the simulations in `calibration/`; on simulated codon text
+  the package gives 0.0 false positives per 100 null texts and recovers 99% of a
+  4-codon phrase with 3 copies at 100 codons, as the simulation did. 25 new tests.
 - **Alphabets and units (phase 1 of the codon-level work; not yet used by the
   analysis code).** `rna_lexis.alphabet.Alphabet` is a *declared* set of symbols:
   every symbol counts whether or not a text uses it, so an English text with no
