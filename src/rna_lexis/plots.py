@@ -6,6 +6,7 @@ import sys
 import math
 import shutil
 import subprocess
+import tempfile
 import numpy as np
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 import matplotlib.pyplot as plt
@@ -724,25 +725,29 @@ def plot_logo(wd, k, txt, outfile, fmt='pdf', muts=0):
         print("Then run again.")
         return(None)
     weblogoexe = weblogoexe.strip()
-    with open(f"{outfile}.fa", "w", encoding="utf-8") as f:
-        f.write(faseq)
     ttl = f'{wd0}, {len(found)} sequences'
     if fmt.lower() == "svg" and shutil.which("pdf2svg") is None:
         print("SVG output requires 'pdf2svg', which was not found in PATH.")
         print("Falling back to PDF output.")
         fmt = "pdf"
-    cmd = [weblogoexe, "-U",  "probability", "-c", "classic", "-t", ttl, "-F", fmt, "-f", f"{outfile}.fa", "-o", f"{outfile}.{fmt}"]
-    if weblogoexe.lower().endswith(".py"):
-        cmd = [sys.executable] + cmd
-    try:
-        subprocess.run(cmd, check=True, capture_output=True, text=True)
-    except subprocess.CalledProcessError as e:
-        print("WebLogo failed to generate the plot.")
-        if e.stderr:
-            print(e.stderr.strip())
-        elif e.stdout:
-            print(e.stdout.strip())
-        return(None)
+    # The sequences WebLogo reads are an intermediate, so they go in a temporary folder: they are removed
+    # afterwards, and they cannot overwrite a file of the user's that happens to be named <outfile>.fa.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        fa_path = os.path.join(tmpdir, "logo_input.fa")
+        with open(fa_path, "w", encoding="utf-8") as f:
+            f.write(faseq)
+        cmd = [weblogoexe, "-U",  "probability", "-c", "classic", "-t", ttl, "-F", fmt, "-f", fa_path, "-o", f"{outfile}.{fmt}"]
+        if weblogoexe.lower().endswith(".py"):
+            cmd = [sys.executable] + cmd
+        try:
+            subprocess.run(cmd, check=True, capture_output=True, text=True)
+        except subprocess.CalledProcessError as e:
+            print("WebLogo failed to generate the plot.")
+            if e.stderr:
+                print(e.stderr.strip())
+            elif e.stdout:
+                print(e.stdout.strip())
+            return(None)
 
     out_plot = f'{outfile}.{fmt}'
     if not os.path.isfile(out_plot) or os.path.getsize(out_plot) == 0:

@@ -629,5 +629,74 @@ class IntervalIndexTests(unittest.TestCase):
                 self.assertEqual(index.contains(s, e), S._inside_any_interval(s, e, intervals))
 
 
+# ----------------------------------------------------------------------
+# Clear workspace keeps inputs; the logo leaves no intermediate file behind
+# ----------------------------------------------------------------------
+class ClearWorkspaceTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.d = self.tmp.name
+        for name in ("gene.fa", "gene.json", "other.fasta", "OTHER2.FNA", "third.fas", "gene_test_init.csv",
+                     "plot.png", "notes.txt", "gene_logo.pdf"):
+            open(os.path.join(self.d, name), "w").write("x")
+        self.saved = M.safe_input
+
+    def tearDown(self):
+        M.safe_input = self.saved
+
+    def run_clear(self, answers):
+        it = iter(answers)
+        M.safe_input = lambda prompt="": next(it, "")
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            done = M._clear_workspace(self.d, os.path.join(self.d, "gene.fa"))
+        return done, out.getvalue()
+
+    def test_inputs_sessions_and_other_fasta_files_are_kept_and_listed_as_kept(self):
+        done, text = self.run_clear(["YES", ""])
+        self.assertTrue(done)
+        self.assertEqual(sorted(os.listdir(self.d)), ["OTHER2.FNA", "gene.fa", "gene.json", "other.fasta", "third.fas"])
+        kept_part = text.split("KEPT")[1]
+        for name in ("other.fasta", "OTHER2.FNA", "third.fas", "gene.json", "gene.fa"):
+            self.assertIn(name, kept_part)
+
+    def test_anything_but_yes_deletes_nothing(self):
+        before = sorted(os.listdir(self.d))
+        for answer in ("", "yes", "Y", "no"):
+            done, _ = self.run_clear([answer, ""])
+            self.assertFalse(done)
+        self.assertEqual(sorted(os.listdir(self.d)), before)
+
+
+class LogoIntermediateTests(unittest.TestCase):
+    def test_the_sequences_go_to_a_temporary_folder_and_nothing_is_left_beside_the_output(self):
+        import rna_lexis.plots as P
+        seen = {}
+
+        def fake_run(cmd, **kwargs):
+            seen["cmd"] = cmd
+            fa = cmd[cmd.index("-f") + 1]
+            seen["fa_existed"] = os.path.isfile(fa)
+            seen["fa"] = fa
+            open(cmd[cmd.index("-o") + 1], "w").write("pdf")
+        saved = (P.shutil.which, P.subprocess.run, P.open_pdf)
+        P.shutil.which = lambda name: "/usr/bin/weblogo"
+        P.subprocess.run = fake_run
+        P.open_pdf = lambda *a, **k: None
+        try:
+            with tempfile.TemporaryDirectory() as d:
+                mine = os.path.join(d, "mine.fa")
+                open(mine, "w").write("my own file")
+                out = os.path.join(d, "mine")                 # the user names the output like their input file
+                with contextlib.redirect_stdout(io.StringIO()):
+                    P.plot_logo("acg", 2, "ttacgaatacgcc" * 3, out, fmt="pdf")
+                self.assertEqual(sorted(os.listdir(d)), ["mine.fa", "mine.pdf"])
+                self.assertEqual(open(mine).read(), "my own file")      # not overwritten
+        finally:
+            P.shutil.which, P.subprocess.run, P.open_pdf = saved
+        self.assertTrue(seen["fa_existed"])                              # WebLogo did get its input
+        self.assertFalse(os.path.exists(seen["fa"]))                     # and it is gone now
+
+
 if __name__ == "__main__":
     unittest.main()

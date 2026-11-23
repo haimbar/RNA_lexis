@@ -2977,6 +2977,9 @@ def batch_spacing_test_input(file_path, txt, strs, alphabet=None):
 
 
 
+FASTA_EXTENSIONS = ('.fasta', '.fa', '.fna', '.fas')
+
+
 def _clear_workspace(workdir, file_path):
     """List all files in workdir, keep FASTA files, ask for confirmation, then delete the rest.
 
@@ -2987,13 +2990,14 @@ def _clear_workspace(workdir, file_path):
         return False
 
     all_files = [f for f in os.listdir(workdir) if os.path.isfile(os.path.join(workdir, f))]
-    # Keep only the original input file and its session JSON.
-    # Deliberately NOT keeping all .fa files — logo plots generate temporary
-    # .fa intermediates that should be treated as output and deleted.
+    # Keep the original input file (whatever its extension), its session JSON, and every other FASTA
+    # file in the folder: those are inputs, not output.  (The logo plot's intermediate .fa file used to
+    # be the reason FASTA files were not kept; it is now written to a temporary folder.)
     input_basename = os.path.basename(file_path)
     input_stem = os.path.splitext(input_basename)[0]
     session_json = input_stem + '.json'
-    to_keep = {f for f in all_files if f in {input_basename, session_json}}
+    to_keep = {f for f in all_files
+               if f in {input_basename, session_json} or f.lower().endswith(FASTA_EXTENSIONS)}
     to_delete = sorted(f for f in all_files if f not in to_keep)
 
     if not to_delete:

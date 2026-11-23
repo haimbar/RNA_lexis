@@ -19,6 +19,12 @@
 - **An invalid regular expression typed as a nucleotide query** (`[a`, `a{2,1}`, `(`) raised in the
   search handlers; it is now reported and asked again.
 - **`--motif-column` naming a column that is not there silently used the first column.** It is an error.
+- **Clear workspace deleted the user's other FASTA files**, although the user guide says it keeps them. It now
+  keeps the loaded input, its session file and every `.fasta`, `.fa`, `.fna` or `.fas` file. The reason it had not
+  was the logo plot's intermediate `.fa` file, which the plot wrote next to its output and never removed; it is
+  now written to a temporary folder and removed. That also stops the logo from overwriting a file named
+  `<output name>.fa`, such as the input itself when the output is named after it. The guide's list of what is
+  deleted said the session file goes; the code keeps the input's session file, and the guide now says so.
 - **A line break between words was glued** when the alphabet declares a space (`"to be\nor"` read as
   `"to beor"`); it is now one space.
 
