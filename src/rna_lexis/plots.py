@@ -751,6 +751,88 @@ def plot_logo(wd, k, txt, outfile, fmt='pdf', muts=0):
     open_pdf(out_plot)
 
 
+def plot_unit_profile(profile, title='', file='', scale=1, annotate=True):
+    """Heatmap of what surrounds a motif: log-odds of every symbol at every position.
+
+    Takes the dict from :func:`rna_lexis.statistical.unit_profile`.  Rows are the
+    symbols (grouped, for codons, by the amino acid they code for), columns are the
+    positions from ``-flank`` to the end of the motif plus ``flank``, and the colour
+    is ``log2(frequency at that position / frequency in the whole text)``: red where
+    a symbol is enriched next to the motif, blue where it is depleted, white where it
+    is as common as anywhere.  The motif's own columns are labelled with its units.
+    Only cells whose count is surprising given the text's own background are
+    colored (binomial p at most ``profile['alpha']``, default 0.01); the rest stay
+    white, because with few occurrences a symbol seen once or never says nothing.
+    With ``annotate``, a ring marks the strongest enriched symbol of a column when it
+    also passes a Bonferroni correction over all cells.
+
+    This replaces a sequence logo for alphabets of about 20 symbols or more, where a
+    logo's stacks (capped at ``log2(K)`` bits, measured against a uniform
+    background) are too small to read and common symbols look informative.
+
+    Args:
+        profile:  Dict from ``unit_profile``.
+        title:    Plot title (default: the motif and the number of windows).
+        file:     Output path (.png/.svg/.pdf); empty = display only.
+        scale:    DPI multiplier for raster export.
+        annotate: Ring the strongest enriched symbol in each column.
+    """
+    full = np.array(profile['log_odds'], dtype=float)
+    sig = np.array(profile['significant'], dtype=bool)
+    lo = np.where(sig, full, 0.0)            # only cells the counts support are colored
+    counts = np.array(profile['counts'])
+    n_rows, n_cols = lo.shape
+    vmax = max(1.0, float(np.max(np.abs(lo)))) if lo.size else 1.0
+    fig, ax = plt.subplots(figsize=(max(6.0, 0.5 * n_cols + 3.5), max(3.5, min(0.2 * n_rows + 1.8, 18.0))))
+    image = ax.imshow(lo, aspect='auto', cmap='RdBu_r', vmin=-vmax, vmax=vmax, interpolation='nearest')
+
+    m0, m1 = profile['motif_columns']
+    ticks = []
+    for j, col in enumerate(profile['columns']):
+        if m0 <= j < m1:
+            ticks.append(profile['motif_labels'][j - m0])
+        elif j < m0:
+            ticks.append(f'{col}')
+        else:
+            ticks.append(f'+{j - m1 + 1}')
+    ax.set_xticks(range(n_cols))
+    ax.set_xticklabels(ticks, rotation=90 if max(len(t) for t in ticks) > 2 else 0,
+                       fontsize=8)
+    ax.set_yticks(range(n_rows))
+    ax.set_yticklabels([lab.upper() for lab in profile['labels']],
+                       fontsize=7 if n_rows <= 30 else 5.5)
+    ax.axvline(m0 - 0.5, color='black', lw=0.8)
+    ax.axvline(m1 - 0.5, color='black', lw=0.8)
+    for label, start, end in profile.get('groups', []):
+        if start:
+            ax.axhline(start - 0.5, color='gray', lw=0.4, ls=':')
+        ax.text(n_cols - 0.35, (start + end - 1) / 2, label.upper(), va='center', ha='left',
+                fontsize=6, color='dimgray', clip_on=False)
+    if annotate:
+        p = np.array(profile['p_value'], dtype=float)
+        for j in range(n_cols):
+            i = int(np.argmax(np.where(sig[:, j], full[:, j], -np.inf)))
+            if (sig[i, j] and full[i, j] > 0 and p[i, j] <= 0.05 / (n_rows * n_cols)
+                    and not (m0 <= j < m1)):
+                ax.plot(j, i, marker='o', mfc='none', mec='black', ms=7, mew=0.9)
+    ax.set_xlabel('position relative to the motif (units)')
+    n_win, left_out = profile['n'], profile['skipped']
+    default_title = (f"Around {' '.join(profile['motif_labels']).upper()} "
+                     f"({n_win} occurrence{'s' if n_win != 1 else ''}"
+                     + (f", {left_out} left out" if left_out else "") + ")")
+    ax.set_title(title or default_title, fontsize=10)
+    fig.colorbar(image, ax=ax, label='log2 (frequency here / frequency in the text)',
+                 pad=0.12 if profile.get('groups') else 0.02, shrink=0.5, aspect=25)
+    fig.tight_layout()
+    if file:
+        try:
+            plt.savefig(file, bbox_inches='tight', dpi=150 * scale)
+            open_file_with_default_software(file)
+        except Exception as e:
+            print(f'Could not save plot: {file}\n{e}')
+    plt.show()
+
+
 def plotzscore(cnt, zmin=1.96, robust=True, file='', scale=1, alphabet=None):
     """Plot normalised k-mer frequencies as z-scores with outlier labels.
 

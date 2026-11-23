@@ -35,7 +35,7 @@ from rna_lexis.plots import (
     plot_seq_nbrs, plot_nbrs_condensed, export_nbrs_condensed,
     plot_coverage, plot_sequence_hits, plot_sequence_hits_detailed,
     plot_self_similarity_arcs, plot_shared_motif_diagram,
-    plot_coverage_comparison,
+    plot_coverage_comparison, plot_unit_profile,
 )
 from rna_lexis.io import (
     read_text, save_session, load_session, init_summary, is_valid_session,
@@ -51,6 +51,8 @@ from rna_lexis.statistical import (
     score_gapped_motif,
     shared_exact_motifs,
     spacing_periodicity_test,
+    unit_profile,
+    write_unit_profile_csv,
     write_rows_csv,
 )
 
@@ -1261,6 +1263,66 @@ def logo_input(txt, strs, file_path=''):
     elif not os.path.isabs(fn):
         fn = os.path.join(session_dir or os.getcwd(), fn)
     plot_logo(s0, k, txt, muts=nmut, outfile=fn, fmt=fmt)
+
+
+def profile_input(txt, strs, file_path='', alphabet=None):
+    """Interactive handler for the unit profile: what surrounds a motif.
+
+    For text read over an alphabet this takes the place of the sequence logo.  A
+    logo cannot be read with about 20 symbols or more (its height is capped at
+    log2(K) bits and measured against a uniform background), so the positions
+    around the motif are drawn as a heatmap of log-odds against the text's own
+    background, with only the cells the counts support colored.  Codons are
+    grouped by the amino acid they code for.
+
+    Args:
+        txt:       Full source text (an internal string).
+        strs:      Session strings dict (unused; present for consistency).
+        file_path: Session file path; anchors relative output names.
+        alphabet:  The session's Alphabet.
+    """
+    raw = safe_input(fmttxt(["Enter the motif to analyze: "], ['bold'], ['yellow']))
+    motif = _query_to_internal(raw.strip().lower(), alphabet)
+    if not motif or len(find_all_matches(motif, txt)) < 1:
+        print(fmttxt(["\nSequence not found."], ['bold'], ['red']))
+        safe_input(fmttxt(["Press any key to continue"], [''], ['white']))
+        return None
+
+    def ask_int(prompt, default, low):
+        while True:
+            value = safe_input(fmttxt([prompt, f"[Default: {default}]"], ['bold', ''], ['yellow', 'cyan']) + " ")
+            if value == '':
+                return default
+            try:
+                if int(value) >= low:
+                    return int(value)
+            except ValueError:
+                pass
+            print(fmttxt([f"\nPlease enter an integer greater than or equal to {low}.\n"], ['bold'], ['red']))
+
+    flank = ask_int(f"Enter the number of {_unit(alphabet)} on both sides", 5, 0)
+    mismatches = ask_int("Enter the maximum number of mismatches in the motif", 0, 0)
+    group_by = codon_to_amino_acid() if alphabet is not None and alphabet.name == 'codon' else None
+    profile = unit_profile(txt, motif, flank=flank, mismatches=mismatches,
+                           alphabet=alphabet, group_by=group_by)
+    if profile['n'] == 0:
+        print(fmttxt(["\nNo occurrence has a complete window of that size inside the text."],
+                     ['bold'], ['red']))
+        safe_input(fmttxt(["Press any key to continue"], [''], ['white']))
+        return None
+    print(fmttxt([f"{profile['n']} occurrence(s) used, {profile['skipped']} left out; "
+                  f"{sum(map(sum, profile['significant']))} cell(s) differ from the background "
+                  f"(p <= {profile['alpha']})."], [''], ['cyan']))
+    session_dir = os.path.dirname(os.path.abspath(file_path)) if file_path else ''
+    fn_out, scale = _prompt_save(plotly=False, session_dir=session_dir)
+    ans = safe_input(fmttxt(["Also save the numbers as a CSV file?", "[y/N]: "],
+                            ['bold', ''], ['yellow', 'cyan']) + " ")
+    if ans.strip().lower() in ('y', 'yes'):
+        base = os.path.splitext(os.path.abspath(file_path))[0] if file_path else os.path.join(os.getcwd(), 'sequence')
+        out_csv = f"{base}_profile_{_slug(motif, alphabet)}.csv"
+        write_unit_profile_csv(out_csv, profile)
+        print(fmttxt([f"Saved to {out_csv}"], [''], ['green']))
+    _spawn_plot(plot_unit_profile, profile, file=fn_out, scale=scale)
 
 
 def coverage_input(txt, strs, file_path='', alphabet=None):
@@ -2922,7 +2984,8 @@ def menus():
     menu_ttl = ["Main Menu", "Plots", "Sequence operations"]
     submenu = [["Plots", "Sequence operations", "Open Core file", "Summary statistics",
                "Show settings", "Change setting", "Open User Guide", "Clear workspace", "Load new input", "Quit"],
-               ["Core neighbors (detailed)", "Core neighbors (condensed)", "K-mers", "Logo", "Coverage", "Motif Match/Mutation",
+               ["Core neighbors (detailed)", "Core neighbors (condensed)", "K-mers",
+                "Logo (nucleotides) / unit profile (other alphabets)", "Coverage", "Motif Match/Mutation",
                 "Self-similarity arc plot", "Shared-motif diagram (vs. another sequence)",
                 "Compare with another transcript (motif coverage)",
                 "Compare motif coverage vs. GC-content",
@@ -3129,7 +3192,9 @@ def menus():
                             case 3:
                                 kmers_input(file_path, txt, defvals, alphabet)
                             case 4:
-                                if _nucleotide_ok(alphabet, is_rna, 'The sequence logo'):
+                                if alphabet is not None:
+                                    profile_input(txt, strs, file_path, alphabet)
+                                elif _nucleotide_ok(alphabet, is_rna, 'The sequence logo'):
                                     logo_input(txt, strs, file_path)
                             case 5:
                                 coverage_input(txt, strs, file_path, alphabet)

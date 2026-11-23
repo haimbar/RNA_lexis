@@ -335,6 +335,19 @@ class MenuOverCodonsTests(MenuCase):
         out, files = self.run_fn(lambda: M.batch_spacing_test_input(self.fp, self.txt, self.strs, A), ["", "", ""])
         self.check(out, files)
 
+    def test_unit_profile_replaces_the_logo(self):
+        out, files = self.run_fn(lambda: M.profile_input(self.txt, self.strs, self.fp, A),
+                                 [CORE_NT[:12], "2", "", "prof", "", "y"])
+        self.check(out, files, "occurrence(s) used")
+        self.assertIn("prof.png", files)
+        name = next(n for n in files if "_profile_" in n)
+        self.assertEqual(private_use(files[name]), [])
+        self.assertIn("count@-2", files[name])
+        # a motif that is not in the text
+        out, files = self.run_fn(lambda: M.profile_input(self.txt, self.strs, self.fp, A), ["gggggggggggg", ""])
+        self.assertIn("not found", out)
+        self.assertEqual(files, {})
+
     def test_session_summary(self):
         with contextlib.redirect_stdout(io.StringIO()):
             path = IO.init_summary(self.fp, self.strs["xmotifs"], self.strs["corelist"], self.txt, alphabet=A)

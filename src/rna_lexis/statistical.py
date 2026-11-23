@@ -908,6 +908,147 @@ def score_gapped_motif(
     }
 
 
+def unit_profile(
+    txt: str,
+    motif: str,
+    *,
+    flank: int = 5,
+    mismatches: int = 0,
+    alphabet=None,
+    group_by=None,
+    alpha: float = 0.01,
+) -> dict:
+    """What surrounds a motif: how often each symbol occurs at every position around its occurrences.
+
+    The windows are the occurrences of ``motif`` (exact, or within ``mismatches``
+    substitutions) with ``flank`` units on each side.  A window that would run off
+    the text or span a segment boundary is left out.  For each position and symbol
+    the result holds the count, the frequency, and the **log-odds against the
+    text's own background**: ``log2(f / b)`` where ``b`` is the symbol's frequency
+    in the whole text (the order-0 background the statistics use, with its
+    pseudocount) and ``f`` is its frequency at that position, shrunk toward ``b``
+    by one pseudo-observation so that a few occurrences cannot give extreme values.
+
+    Log-odds alone would mislead with few windows: a symbol expected 0.1 times that
+    appears once looks ninefold enriched, and one that never appears looks depleted,
+    though neither is evidence of anything.  So every cell also gets a two-sided
+    binomial p-value (the count against ``n`` windows at the background
+    frequency), and ``significant`` marks the cells with ``p <= alpha``; the plot
+    colors only those.  Depletion shows up only where a symbol was expected often
+    enough to notice its absence.
+
+    This is the view that replaces a sequence logo for alphabets of about 20 symbols
+    or more: a logo measures information against a uniform background, so common
+    symbols look informative when they are only common, and its height is capped at
+    ``log2(K)`` bits, too little to read.  Log-odds against the background shows
+    only what is enriched or depleted next to the motif, and scales to any size.
+
+    Args:
+        txt:        The text (an internal string when ``alphabet`` is given).
+        motif:      The motif.
+        flank:      Units on each side of the motif.
+        mismatches: Hamming radius for the occurrences (0 = exact).
+        alphabet:   ``None`` (nucleotides) or an :class:`Alphabet`.
+        group_by:   Optional :class:`Projection` of the alphabet (for codons,
+                    ``codon_to_amino_acid()``); rows are ordered by group, so
+                    synonymous codons sit together.
+        alpha:      A cell is ``significant`` when its p-value is at most this
+                    (default 0.01).  The plot rings the strongest enriched cell of a
+                    column only if it also passes a Bonferroni correction over all
+                    cells.
+
+    Returns:
+        A dict with ``chars`` (the symbol rows, internal characters), ``labels``
+        (the same for display), ``columns`` (position relative to the motif start,
+        ``-flank`` to ``len(motif) + flank - 1``), ``motif_columns`` (the slice of
+        columns that is the motif), ``counts``, ``frequency``, ``log_odds``,
+        ``p_value`` and ``significant`` (lists of rows, one per symbol),
+        ``alpha``, ``background``, ``n`` (windows used),
+        ``skipped`` (occurrences left out), ``groups`` (``(label, first row, end row)``)
+        and ``motif`` / ``motif_labels`` (the motif, internal and for display).
+    """
+
+    txt_n = normalize_sequence(txt, alphabet)
+    motif_n = normalize_sequence(motif, alphabet)
+    if not motif_n or BOUNDARY in motif_n:
+        raise ValueError("the motif must be non-empty and cannot contain the segment boundary")
+    L = len(motif_n)
+    bg = MarkovBackground(txt_n, order=0, alphabet=alphabet if alphabet is not None else ALPHABET)
+    chars = list(bg.alphabet)
+    if group_by is not None and alphabet is not None:
+        by_target = group_by.groups()
+        labels_in_order = [lab for tgt in sorted(by_target) for lab in sorted(by_target[tgt])]
+        chars = [alphabet.char(lab) for lab in labels_in_order]
+    index = {c: i for i, c in enumerate(chars)}
+    W = flank + L + flank
+    counts = [[0] * W for _ in chars]
+
+    starts = [p for p, _, _ in hamming_family_positions(motif_n, txt_n, mismatches, alphabet)]
+    used = skipped = 0
+    for p in starts:
+        a, b = p - flank, p + L + flank
+        if a < 0 or b > len(txt_n) or BOUNDARY in txt_n[a:b]:
+            skipped += 1
+            continue
+        used += 1
+        for j, c in enumerate(txt_n[a:b]):
+            counts[index[c]][j] += 1
+
+    background = [bg.probability(c) for c in chars]
+    total = sum(background)
+    background = [x / total for x in background]
+    frequency, log_odds, p_value, significant = [], [], [], []
+    for i in range(len(chars)):
+        frow = [(counts[i][j] + background[i]) / (used + 1) for j in range(W)]
+        frequency.append(frow)
+        log_odds.append([math.log2(f / background[i]) for f in frow])
+        prow = []
+        for j in range(W):
+            c, b = counts[i][j], background[i]
+            if used == 0:
+                prow.append(1.0)
+            elif c >= used * b:
+                prow.append(float(binom.sf(c - 1, used, b)))      # at least this many
+            else:
+                prow.append(float(binom.cdf(c, used, b)))         # at most this many
+        p_value.append(prow)
+        significant.append([p <= alpha for p in prow])
+
+    groups = []
+    if group_by is not None and alphabet is not None:
+        start = 0
+        for tgt in sorted(group_by.groups()):
+            n = len(group_by.groups()[tgt])
+            groups.append((tgt, start, start + n))
+            start += n
+    labels = [alphabet.show(c) if alphabet is not None else c for c in chars]
+    return {"chars": chars, "labels": labels, "columns": list(range(-flank, L + flank)),
+            "motif_columns": (flank, flank + L), "counts": counts, "frequency": frequency,
+            "log_odds": log_odds, "p_value": p_value, "significant": significant, "alpha": alpha,
+            "background": background, "n": used, "skipped": skipped,
+            "groups": groups, "motif": motif_n,
+            "motif_labels": [alphabet.show(c) if alphabet is not None else c for c in motif_n]}
+
+
+def write_unit_profile_csv(path: str, profile: dict) -> str:
+    """Write a :func:`unit_profile` as a table: one row per symbol, and for every
+    position its count and its log-odds against the background."""
+
+    header = ["symbol", "background"]
+    for col in profile["columns"]:
+        header += [f"count@{col}", f"log2_odds@{col}", f"p@{col}"]
+    with open(path, "w", newline="", encoding="utf-8") as handle:
+        writer = csv.writer(handle)
+        writer.writerow(header)
+        for i, label in enumerate(profile["labels"]):
+            row = [label.upper(), f"{profile['background'][i]:.6g}"]
+            for j in range(len(profile["columns"])):
+                row += [profile["counts"][i][j], f"{profile['log_odds'][i][j]:.3f}",
+                        f"{profile['p_value'][i][j]:.3g}"]
+            writer.writerow(row)
+    return path
+
+
 def union_coverage_variable(positions: Sequence[int], lengths: Sequence[int]) -> int:
     """Coverage for intervals with different lengths."""
 
