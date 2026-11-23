@@ -9,14 +9,17 @@ API reference) — this file is about *working on* the repo, not using it.
 
 - Tests: `python3 -m pytest -q` (plain `python` may resolve to a Python
   without pytest installed in some environments — use `python3` explicitly).
-  67 tests: `test_statistical.py`, `test_algorithms.py`, `test_io.py`,
+  122 tests: `test_statistical.py`, `test_algorithms.py`, `test_io.py`,
   `test_alignment.py`, `test_batch_cli.py` (all synthetic-data
   unit/end-to-end, no real biological data or network calls), plus
   `test_norad_integration.py` (8 tests — real biology, no network calls
   either, since it reads the bundled NORAD data rather than fetching it).
-  `menu.py` and `plots.py` still have **no automated tests**
-  (interactive/visual) — changes there need manual/smoke verification (e.g.
-  `python3 -c "from rna_lexis.X import Y; ..."`, or rendering a menu with
+  `test_plots.py` covers only the arc, shared-motif and coverage-comparison
+  figures; `menu.py` and the rest of `plots.py` still have **no automated
+  tests** (interactive/visual) — changes there need manual/smoke
+  verification (e.g. comparing the Plotly figure JSON or terminal output
+  before and after the change, `python3 -c "from rna_lexis.X import Y; ..."`,
+  or rendering a menu with
   `gen_menu(..., clr=False)` to inspect ANSI output directly).
 - No linter/formatter/type-checker is configured (no flake8/mypy/ruff/
   pre-commit config, no `[tool.*]` sections in `pyproject.toml`). Match

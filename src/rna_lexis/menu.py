@@ -19,7 +19,7 @@ except Exception:
 from rna_lexis.algorithms import (
     count_kgrams, contains_only_rna, cover, find_boundary, cores,
     find_all_matches, print_core, find_with_mutations, extend_match_pair,
-    find_longest_extensions, gen_hairpins, extendRNA,
+    find_longest_extensions, gen_hairpins, extendRNA, mark_case,
     markov_kmer_pvalues,
     compute_default_wd,
     binary_coverage, gc_content_indicator, homopolymer_indicator,
@@ -1293,7 +1293,7 @@ def search_input(txt, mutr=1/6, M=4):
             print(fmttxt([f'  Approximate ≤{maxmut} mut ({len(approx)}):'], ['bold'], ['yellow']))
             for pos, matched, d in approx:
                 highlighted = ''.join(
-                    f'{RED}{mc.upper()}{RESET}' if mc != sc else mc
+                    f'{RED}{mark_case(mc, True)}{RESET}' if mc != sc else mc
                     for sc, mc in zip(seq, matched)
                 )
                 print(f'    pos {pos:5d}  "{highlighted}"  dist={d}')
@@ -1417,7 +1417,7 @@ def motif_extensions_input(txt, file_path=''):
         for i, (rc, qc) in enumerate(zip(ref, qry)):
             in_seed  = (left <= i < left + sl)
             mismatch = (rc != qc)
-            ch = qc.upper() if (in_seed or mismatch) else qc
+            ch = mark_case(qc, in_seed or mismatch)
             if mismatch:
                 ch = f"{RED}{ch}{RESET}"
             elif in_seed:
