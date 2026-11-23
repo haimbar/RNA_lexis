@@ -163,8 +163,18 @@ workaround.
   CDS. Trailing 1-2 nucleotides that do not form a codon are dropped, with a
   report of how many.
 - **Extra symbols inside a nucleotide stream:** in the codon tokenizer, an
-  extra symbol is its own unit. Whether codon reading restarts after it, or
-  continues across it, needs a decision (section 9).
+  extra symbol is its own unit and also a unit boundary. Codon reading
+  restarts after it. A stretch between two extras whose length is not a
+  multiple of 3 is reported with a warning, and its partial codon is
+  dropped. A user who wants the frame to continue across a symbol strips
+  it before loading. Formatting characters (line breaks, the spaces and
+  numbers of a GenBank-style listing) are removed by the reader and never
+  reach the tokenizer.
+- **Ambiguity codes (`N`, `R`, `Y`, ...) are handled at codon level, not
+  nucleotide level.** The whole triple that contains one becomes a single
+  unknown unit, which `on_unknown` then skips or rejects. Skipping a lone
+  nucleotide would shift the frame for every codon after it, so the
+  tokenizer never does that.
 - **CDS input:** a new Ensembl fetch for `type=cds`, alongside the existing
   cDNA fetch. `fetch_enst_cdna()` is human-`ENST` only today; the CLAUDE.md
   note about generalizing it applies here too.
@@ -348,9 +358,13 @@ above; otherwise the section 3.4 recommendation is revised.
 3. ~~Where `eng2rna` lives~~ Decided: it stays in GeneDB. The package gets
    a generalized codec instead (section 3.8). Remaining detail: which
    assignment rules (explicit, seeded permutation, balanced) ship first.
-4. **Extra symbols in a raw nucleotide stream:** does codon reading restart
-   after each one, or continue across it? With a codebook this does not
-   arise, since every unit is already a token.
+4. ~~Extra symbols in a raw nucleotide stream~~ Decided: codon reading
+   restarts at each extra symbol, with a warning for a partial codon
+   (section 3.7). The question only arises for the built-in codon alphabet
+   reading raw nucleotide text. Codebook-defined alphabets work on
+   pre-tokenized input, so every symbol is already a unit and there is no
+   frame. Ambiguity codes are an unknown-symbol case handled at codon
+   level, so the frame is kept (question 5, section 3.7).
 5. ~~Unknown symbols~~ Decided: both options exist (`on_unknown='skip'` or
    `'error'`), and the default is skip with a warning (section 3.2).
 6. ~~Naming on the CLI and menu~~ Decided: named alphabets. Built-ins are
