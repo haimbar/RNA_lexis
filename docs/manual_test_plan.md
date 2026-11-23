@@ -54,6 +54,12 @@ which weblogo                                               # nucleotide logo on
   notes.md       the log (template in section 6)
 ```
 
+Nothing creates these folders for you. Make them once with
+`mkdir -p ~/lexis-testing/{inputs,alphabets,runs}` (`controls/` is already there, with ready-made alphabet files),
+and make each run folder before you start the test, for example
+`mkdir ~/lexis-testing/runs/T16-synonymous && cp ~/lexis-testing/controls/planted/synonymous_demo.fa ~/lexis-testing/runs/T16-synonymous/`.
+`script` will not create a missing folder for its log.
+
 The menu writes its session file, tables and plots **next to the input and changes into that folder**. So
 for each test, make a run folder and put a *copy* of the input in it before loading. Then everything one
 test produced is in one place, and the originals stay clean.
