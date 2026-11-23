@@ -289,6 +289,19 @@ tokenize(["bout one", "bout two"], latin())   # segments joined by "_" boundarie
   text of each unit), `.skipped`, `.dropped`, `.removal_points`,
   `.spans_removal(start, length)`, `.decode(...)`.
 
+Showing results. Results hold internal strings; decode them where they are shown:
+`alphabet.show(internal, mask=None, sep=None, upper=False, pad=False)` returns the
+labels joined by `alphabet.sep` (a space for codons, nothing for letters); `mask`
+(one bool per unit) shows the flagged units in upper case, the convention for "this
+unit differs". `alphabet.unit_name` / `units_label` (`nt`, `codon(s)`, `letter(s)`) is
+what axis and legend text says. These functions take `alphabet=None` and decode
+what they show: `plots.plot_seq_nbrs`, `plot_nbrs_condensed`, `export_nbrs_condensed`,
+`plot_sequence_hits`, `plot_sequence_hits_detailed`, `plot_self_similarity_arcs`,
+`plot_shared_motif_diagram`, `plotzscore`, `plot_coverage`, and `print_core`,
+`print_alignment`, `write_rows_csv`. Without an alphabet they behave exactly as before.
+Not for other alphabets: `plot_logo`, hairpins, GC content and `extendRNA`, which
+need nucleotides.
+
 A codebook maps each symbol to a fixed-width nucleotide code:
 `Alphabet.from_codebook(name, make_codebook(symbols, width=3, seed=1))`;
 `encode_nt(t, alphabet)` and `decode_nt(nt, alphabet, frame=0)` convert between
@@ -482,9 +495,11 @@ its occurrence set).
 Extend `wd` left (`'L'`), right (`'R'`), or both (`'b'`) until bounded.
 Returns `None` when `wd` occurs fewer than twice.
 
-### `print_core(txt, core, xm) -> list[str]`
+### `print_core(txt, core, xm, alphabet=None) -> list[str]`
 
-Return an aligned, count-annotated list of xmotifs containing `core`.
+Return an aligned, count-annotated list of xmotifs containing `core`. With an
+`Alphabet` the strings are internal strings; each xmotif is shown as its labels
+(padded so units line up) and the padding is in whole units.
 
 ---
 
@@ -501,11 +516,13 @@ Local (Smith–Waterman) alignment with affine gap penalties.  Populates
 which portion of each input sequence was aligned (`a[start_a:end_a]`,
 `b[start_b:end_b]`).
 
-### `print_alignment(res, width=80) -> None`
+### `print_alignment(res, width=80, alphabet=None) -> None`
 
 Print a formatted alignment to stdout.  For local alignments, also prints
 `"Best local region: seq1[X:Y] (N bp), seq2[Z:W] (M bp)"` before the
-alignment block.
+alignment block. With an `Alphabet` each unit is shown as its label (a gap as
+dashes of the same width) with the markers centered under it, `width` counts
+characters of output, and "bp" becomes the alphabet's unit name.
 
 ### `make_markers(aligned_a, aligned_b) -> tuple[str, int, int, int]`
 
@@ -685,9 +702,13 @@ with a hit in `txt_b`.
 shared = shared_exact_motifs(gene_txt, enhancer_txt, cores_a=gene_corelist, n_top=6)
 ```
 
-### `write_rows_csv(path, rows) -> str`
+### `write_rows_csv(path, rows, alphabet=None) -> str`
 
-Write a list of dicts to a CSV file. Returns the path written.
+Write a list of dicts to a CSV file. Returns the path written. With an `Alphabet`
+the sequence columns (`motif`, `left_anchor`, `right_anchor`, `gap_sequence`,
+`matched_sequence`, `core`, and the `pattern` of a gapped motif) are decoded from
+internal strings to the alphabet's labels in upper case (`ATG AAA TTT`). Result rows
+from the statistical functions keep the internal string, so they can be fed back in.
 
 ---
 

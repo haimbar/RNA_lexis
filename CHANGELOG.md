@@ -19,6 +19,22 @@
 
 ### Added
 
+- **Results can be shown as codons, letters or syllables (phase 3 of the codon-level
+  work).** `Alphabet.show(internal, mask=None, sep=None, upper=False, pad=False)` turns
+  an internal string into readable text, with a mask for "this unit differs" (upper
+  case), and `Alphabet` has `unit_name` (`nt`, `codon`, `letter`) and `display_sep`
+  (default: nothing for single characters, a space for longer labels, so codons read
+  `atg aaa ttt`). These take `alphabet=` and decode what they show, with "nt" in axis
+  and legend text replaced by the unit name: `plot_seq_nbrs`, `plot_nbrs_condensed`,
+  `export_nbrs_condensed`, `plot_sequence_hits`, `plot_sequence_hits_detailed`
+  (fewer units per line when labels are wider), `plot_self_similarity_arcs`,
+  `plot_shared_motif_diagram`, `plotzscore`, `plot_coverage`, `print_core` (padding in
+  whole units), `print_alignment` (label columns, gaps as dashes) and `write_rows_csv`
+  (sequence columns decoded, upper case). With an alphabet, result rows from the
+  statistical functions keep the internal string instead of an upper-cased copy, so
+  they can be fed back in. Without `alphabet=`, all of these behave exactly as before:
+  20 display outputs (Plotly figures, the detail HTML, PNG hashes, CSV and console
+  text) and the 36 statistical outputs of phase 2 are unchanged. 20 new tests.
 - **The statistical functions take an alphabet (phase 2 of the codon-level work).**
   `normalize_sequence`, `MarkovBackground`, `literal_positions`,
   `score_exact_motifs`, `rank_core_candidates`, `enumerate_core_candidates`,

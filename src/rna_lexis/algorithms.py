@@ -386,7 +386,7 @@ def cores(txt, xmotifs, minclen=6):
     return list({_extend_core_in_xmotifs(xmotifs, c) for c in cores_found})
 
 
-def print_core(txt, core, xm):
+def print_core(txt, core, xm, alphabet=None):
     """Return an aligned, count-annotated list of xmotifs that contain core.
 
     All xmotifs in xm that contain core as a substring are padded on the left
@@ -397,6 +397,10 @@ def print_core(txt, core, xm):
         txt:  Source text (used to count occurrences of each xmotif).
         core: Core sequence to align around (case-insensitive).
         xm:   List of extended motif strings to filter and align.
+        alphabet: Optional :class:`rna_lexis.alphabet.Alphabet`.  When given,
+              the strings are internal strings; each xmotif is shown as its
+              labels (padded to the longest label so units line up, e.g.
+              ``atg aaa ttt``) and the padding is in whole units.
 
     Returns:
         Sorted list of strings, each of the form ``' <count> <padded_xmotif>'``.
@@ -410,6 +414,14 @@ def print_core(txt, core, xm):
         if core in xm[i]:
             xmmatch[xm[i]] = find_all_matches(core, xm[i])[0]
             maxLeft = max(maxLeft, xmmatch[xm[i]])
+    if alphabet is not None:
+        cell = alphabet.label_width + len(alphabet.sep)
+        entries = [(maxLeft - left, key) for key, left in xmmatch.items()]
+        shown = [' ' * (pad * cell) + alphabet.show(key, pad=True) for pad, key in entries]
+        if len(shown) > 1:
+            shown = [f'{len(find_all_matches(key, txt)):6d} {text}'
+                     for (_, key), text in zip(entries, shown)]
+        return sorted(shown)
     xmpadded = []
     for i in range(len(xmmatch)):
         adjkey = list(xmmatch.keys())[i]

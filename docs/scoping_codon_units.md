@@ -502,6 +502,33 @@ Left for phases 3 and 4: decoding results for display (plots, CSV columns,
 console), the menu and CLI, the nucleotide-only gating, and `algorithms.py` pieces
 that assume nucleotides (`extendRNA`, `gen_hairpins`, GC content).
 
+### Phase 3 status
+
+Phase 3 is implemented: results are decoded where they are shown, with 20 new tests.
+Without `alphabet=` every function behaves exactly as before; 20 display outputs and the
+36 statistical outputs of phase 2 are identical to the code before the change.
+
+- **Decoding happens at the edge.** Results hold internal strings;
+  `Alphabet.show(internal, mask, sep, upper, pad)` turns them into text, and
+  `Alphabet.unit_name` / `display_sep` set what axis text says and what goes between
+  units. The plot functions, `print_core`, `print_alignment` and `write_rows_csv` take
+  `alphabet=`.
+- **The "upper case means this unit differs" convention carries over** to codons and
+  letters by upper-casing the label of the flagged unit (`atg AAA ttt`); for a
+  case-sensitive alphabet, where that would change the symbol, brackets are used.
+- **Result rows over an alphabet keep the internal string** instead of the upper-cased
+  copy nucleotide rows carry, so they can be fed back into the statistical functions;
+  the CSV writer decodes them.
+- **Layout follows the label width:** the right margin of the neighbor plot is sized
+  from the displayed text, and the detail HTML shows fewer units per line when labels
+  are wider (15 codons for a line that holds 60 nucleotides).
+- Not done here: `plot_logo`, hairpins, GC content and `extendRNA` stay nucleotide-only
+  (phase 4 gates them in the menu), and a unit-level logo is on the wishlist.
+
+Left for phase 4: the menu and CLI (choosing an alphabet, loading a codebook, `--alphabet`,
+`--frame`, `--on-unknown`), hiding or warning on the nucleotide-only items, session files
+that remember the alphabet, and the user-facing documentation.
+
 ## 11. Risks
 
 - The discovery defaults (section 7) are still uncalibrated, and the

@@ -58,24 +58,44 @@ def make_markers(aligned_a: str, aligned_b: str) -> Tuple[str, int, int, int]:
     return "".join(marks), matches, mismatches, gaps
 
 
-def print_alignment(res: AlignmentResult, width: int = 80) -> None:
+def print_alignment(res: AlignmentResult, width: int = 80, alphabet=None) -> None:
     """Print a formatted alignment to stdout.
 
     Outputs the mode header, score summary, and the two aligned sequences
     with their marker line in blocks of width columns.
 
     Args:
-        res:   AlignmentResult from gotoh_global() or gotoh_local().
-        width: Number of alignment columns per printed block (default 80).
+        res:      AlignmentResult from gotoh_global() or gotoh_local().
+        width:    Number of alignment columns per printed block (default 80).
+        alphabet: Optional :class:`rna_lexis.alphabet.Alphabet`.  When given,
+                  the aligned strings are internal strings, each unit is shown
+                  as its label (a gap as dashes of the same width) with the
+                  markers centered under it, and ``width`` is in characters of
+                  output, so a block holds fewer units.
     """
     print(f"{res.mode.upper()} ALIGNMENT (affine gaps)")
     print(f"Score: {res.score} | matches: {res.matches} | mismatches: {res.mismatches} | gaps: {res.gaps}")
     if res.mode == "local" and res.start_a is not None:
         len_a = res.end_a - res.start_a
         len_b = res.end_b - res.start_b
-        print(f"Best local region: seq1[{res.start_a}:{res.end_a}] ({len_a} bp), "
-              f"seq2[{res.start_b}:{res.end_b}] ({len_b} bp)")
+        unit = "bp" if alphabet is None else alphabet.units_label
+        print(f"Best local region: seq1[{res.start_a}:{res.end_a}] ({len_a} {unit}), "
+              f"seq2[{res.start_b}:{res.end_b}] ({len_b} {unit})")
     print()
+    if alphabet is not None:
+        w, sep = alphabet.label_width, alphabet.sep
+
+        def cells(aligned):
+            return ["-" * w if c == "-" else alphabet.show(c, pad=True) for c in aligned]
+        rows_a, rows_b = cells(res.aligned_a), cells(res.aligned_b)
+        marks = [m.center(w) for m in res.markers]
+        per_block = max(1, width // (w + len(sep)))
+        for i in range(0, len(rows_a), per_block):
+            print(sep.join(rows_a[i:i + per_block]))
+            print(sep.join(marks[i:i + per_block]))
+            print(sep.join(rows_b[i:i + per_block]))
+            print()
+        return
     for i in range(0, len(res.aligned_a), width):
         print(res.aligned_a[i:i+width])
         print(res.markers[i:i+width])

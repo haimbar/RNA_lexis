@@ -1,0 +1,10 @@
+unit-level logo (phase 5) only looks reasonable with a small alphabet. With 26 letters and low entropy it would probably not be informative. For such cases (including amino-acids) we probably need a better visualization. We can tackle it later and make a note of it for now
+Agreed, and I think the problem is deeper than too many symbols. A logo draws each position as a stack of letters scaled by information content, and that content is capped at log₂(K) bits. That is about 4.7 bits for 26 letters, 4.3 for 20 amino acids and 6 for 64 codons. In language or protein text, the positions around a motif are usually close to the background. The stacks come out as short bars of tiny letters, and the eye can't read 26 stacked glyphs. There is a second issue for skewed alphabets. A standard logo measures information against a uniform background, but English letters and amino acids are far from uniform, so common symbols like e or L can look "informative" when they are only common.
+
+Some directions for the later work, which aren't decisions:
+
+Relative-entropy logos: measure each symbol against the text's own background (the one the statistics already use), so only enriched symbols stand out.
+A heatmap or matrix view: rows are symbols, columns are positions, and colour is log-odds against the background. This scales to 26 or 64 symbols and shows depleted symbols as well as enriched ones.
+Top-k per position: show the few strongest symbols with the rest grouped as "other", plus counts, so small samples are visible.
+Collapsed alphabets: group symbols into classes (vowels and consonants, amino-acid chemistry classes) and draw a logo over the classes. For codons, group by amino acid with codons as a second level, which connects to the synonymous-codon item already on the wishlist.
+I can't edit files from this side channel, so I haven't recorded it. In the main conversation, ask for it to be added to the scoping doc. The natural place is wishlist item 4 (the unit-level logo plot), with a note that it needs a different visualization for alphabets of about 20 or more symbols, amino acids included.

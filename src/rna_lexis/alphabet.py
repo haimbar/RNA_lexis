@@ -81,6 +81,12 @@ class Alphabet:
         defaults:       Analysis defaults that belong to this alphabet
                         (background order, minimum motif length, ...).  Kept
                         as given; the analysis code decides how to use them.
+        unit_name:      What one symbol is called in axis labels and titles
+                        (``"nt"``, ``"codon"``, ``"letter"``, ...).
+        display_sep:    What goes between symbols when a motif is shown.
+                        ``None`` (default) means nothing for single-character
+                        symbols and a space for longer ones, so codons read as
+                        ``atg aaa ttt``.
     """
 
     name: str
@@ -92,6 +98,8 @@ class Alphabet:
     case_sensitive: bool = False
     aliases: Mapping = field(default_factory=dict)
     defaults: Mapping = field(default_factory=dict)
+    unit_name: str = "unit"
+    display_sep: Optional[str] = None
 
     def __post_init__(self):
         object.__setattr__(self, "symbols", tuple(self.symbols))
@@ -239,6 +247,59 @@ class Alphabet:
         return [BOUNDARY if c == BOUNDARY else self.label(c) for c in internal]
 
     # ------------------------------------------------------------------
+    # display
+    # ------------------------------------------------------------------
+    @property
+    def sep(self) -> str:
+        """What goes between symbols when a motif is shown."""
+        if self.display_sep is not None:
+            return self.display_sep
+        return "" if self.mode == "chars" else " "
+
+    @property
+    def label_width(self) -> int:
+        """Length of the longest symbol label."""
+        return max(len(x) for x in self.labels)
+
+    @property
+    def units_label(self) -> str:
+        """Plural of ``unit_name`` for axis labels (``nt`` stays ``nt``)."""
+        return self.unit_name if self.unit_name == "nt" else f"{self.unit_name}s"
+
+    def show(self, internal: str, mask=None, sep: Optional[str] = None, upper: bool = False,
+             pad: bool = False, boundary: str = "|") -> str:
+        """An internal string as text a person can read.
+
+        Args:
+            internal: Internal string (or a slice of one).
+            mask:     Optional sequence of bools, one per symbol; the flagged
+                      symbols are shown in upper case ("this one differs from
+                      the reference").  For a case-sensitive alphabet, where
+                      upper case would change the symbol, they are shown in
+                      square brackets instead.
+            sep:      Between symbols; default :attr:`sep`.
+            upper:    Show every symbol in upper case (the convention for
+                      motif columns in result files).
+            pad:      Pad every label to the longest label so columns line up.
+            boundary: How a segment boundary is shown.
+        """
+        sep = self.sep if sep is None else sep
+        if mask is not None and len(mask) != len(internal):
+            raise ValueError("mask must have one entry per symbol")
+        width = self.label_width
+        parts = []
+        for i, c in enumerate(internal):
+            if c == BOUNDARY:
+                parts.append(boundary)
+                continue
+            label = self.label(c)
+            flagged = upper or (mask is not None and bool(mask[i]))
+            if flagged:
+                label = f"[{label}]" if self.case_sensitive else label.upper()
+            parts.append(label.ljust(width) if pad else label)
+        return sep.join(parts)
+
+    # ------------------------------------------------------------------
     # variations
     # ------------------------------------------------------------------
     def with_extras(self, extras: Iterable[str], name: Optional[str] = None) -> "Alphabet":
@@ -251,7 +312,8 @@ class Alphabet:
         fields = dict(name=self.name, symbols=self.symbols, extras=self.extras,
                       codes=self.codes, mode=self.mode, width=self.width,
                       case_sensitive=self.case_sensitive, aliases=self.aliases,
-                      defaults=self.defaults)
+                      defaults=self.defaults, unit_name=self.unit_name,
+                      display_sep=self.display_sep)
         fields.update(changes)
         return Alphabet(**fields)
 
@@ -269,6 +331,8 @@ class Alphabet:
             "extras": list(self.extras),
             "aliases": dict(self.aliases),
             "defaults": dict(self.defaults),
+            "unit_name": self.unit_name,
+            "display_sep": self.display_sep,
         }
 
     @classmethod
@@ -284,7 +348,8 @@ class Alphabet:
         return cls(name=d["name"], symbols=symbols, extras=d.get("extras", ()),
                    codes=codes, mode=d.get("mode", "chars"), width=d.get("width", 1),
                    case_sensitive=d.get("case_sensitive", False),
-                   aliases=d.get("aliases", {}), defaults=d.get("defaults", {}))
+                   aliases=d.get("aliases", {}), defaults=d.get("defaults", {}),
+                   unit_name=d.get("unit_name", "unit"), display_sep=d.get("display_sep"))
 
     def save(self, path: str) -> str:
         """Write the alphabet as a JSON file and return the path."""
@@ -318,7 +383,7 @@ class Alphabet:
 def nucleotide() -> Alphabet:
     """a, c, g, t; ``u`` is read as ``t``."""
     return Alphabet(name="nucleotide", symbols=tuple("acgt"), mode="chars",
-                    aliases={"u": "t"})
+                    aliases={"u": "t"}, unit_name="nt")
 
 
 def codon() -> Alphabet:
@@ -329,13 +394,13 @@ def codon() -> Alphabet:
     """
     codons = ["".join(p) for p in itertools.product("acgt", repeat=3)]
     return Alphabet(name="codon", symbols=tuple(codons), codes={x: x for x in codons},
-                    mode="fixed", width=3, aliases={"u": "t"})
+                    mode="fixed", width=3, aliases={"u": "t"}, unit_name="codon")
 
 
 def latin() -> Alphabet:
     """The 26 lower-case Latin letters."""
     return Alphabet(name="Latin letters", symbols=tuple("abcdefghijklmnopqrstuvwxyz"),
-                    mode="chars")
+                    mode="chars", unit_name="letter")
 
 
 BUILTIN_ALPHABETS = {

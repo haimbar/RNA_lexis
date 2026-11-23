@@ -22,8 +22,23 @@ from rna_lexis.algorithms import (
 from rna_lexis.io import open_file_with_default_software, open_pdf
 
 
+def _display(alphabet):
+    """Functions that turn internal strings into text for the screen.
+
+    Returns ``(show, show_marked, uname, sep)``: ``show(s)`` is the text of an
+    internal string, ``show_marked(s, mask)`` the same with the flagged units
+    in upper case, ``uname`` the plural noun for axis and legend text
+    (``"nt"`` for nucleotides, ``"codons"`` for the codon alphabet, ...) and
+    ``sep`` what goes between units.
+    Without an alphabet strings are shown as they are, exactly as before.
+    """
+    if alphabet is None:
+        return (lambda s: s), (lambda s, mask: mark_case(s, mask)), 'nt', ''
+    return alphabet.show, (lambda s, mask: alphabet.show(s, mask)), alphabet.units_label, alphabet.sep
+
+
 def plot_seq_nbrs(s0, s, txt, sortby='CP', wd=20, title='', file='',
-                  xrange=[], scale=1, hairpins=[], min_occ=2):
+                  xrange=[], scale=1, hairpins=[], min_occ=2, alphabet=None):
     """Plot the genomic positions of a core sequence together with its
     neighbouring cores and single-nucleotide mutants.
 
@@ -65,7 +80,14 @@ def plot_seq_nbrs(s0, s, txt, sortby='CP', wd=20, title='', file='',
         min_occ:  Minimum number of global occurrences in the full sequence
                   required to include a neighbour.  Mutations are always kept
                   regardless of this threshold (default 2).
+        alphabet: Optional :class:`rna_lexis.alphabet.Alphabet`.  When given,
+                  ``s0``, ``s`` and ``txt`` are internal strings and every
+                  sequence shown (labels, hover text, legend) is decoded to
+                  the alphabet's labels; a mutated position is shown in upper
+                  case.  Left out, nucleotide text is shown as it is.
     """
+    show, show_marked, uname, sep = _display(alphabet)
+    lbl0 = show(s0)
     L = len(txt)
     lc = len(s0)
     maxlenstr = 0
@@ -135,7 +157,7 @@ def plot_seq_nbrs(s0, s, txt, sortby='CP', wd=20, title='', file='',
                            layer='below', line=dict(width=0)))
         traces.append(go.Scatter(
             x=[p0 + lc / 2], y=[0.5],
-            hovertemplate=f'{s0} {p0}', showlegend=False, mode='markers',
+            hovertemplate=f'{lbl0} {p0}', showlegend=False, mode='markers',
             marker=dict(size=6, color='darkblue', symbol='x')))
 
     # hairpins
@@ -155,12 +177,13 @@ def plot_seq_nbrs(s0, s, txt, sortby='CP', wd=20, title='', file='',
             hovertemplate='%{customdata}<extra>Hairpin</extra>',
             showlegend=False))
 
-    annotations.append(dict(x=plotxrange[1] * 1.001, y=0.35, text=s0,
+    annotations.append(dict(x=plotxrange[1] * 1.001, y=0.35, text=lbl0,
                              showarrow=False, xanchor='left',
                              font=dict(family='courier', size=16, color='darkblue')))
 
     # related cores
     for i, seq in enumerate(related):
+        lbl = show(seq)
         is_cont = (seq in s0) or (s0 in seq)
         col  = 'rgb(0,140,50)'      if is_cont else 'rgb(140,45,140)'
         colt = 'rgba(0,255,0,0.3)'  if is_cont else 'rgba(218,112,214,0.3)'
@@ -172,14 +195,14 @@ def plot_seq_nbrs(s0, s, txt, sortby='CP', wd=20, title='', file='',
                     if (p0 < p) and (p < p0 + lc < p + len(seq)):
                         traces.append(go.Scatter(
                             x=[p + len(seq) / 2], y=[i + 1.5],
-                            hovertemplate=f'{seq} {p}',
+                            hovertemplate=f'{lbl} {p}',
                             showlegend=False, mode='markers',
                             marker=dict(size=8, color='green', symbol='triangle-right')))
                         mrk, sz, colm = 'triangle-right', 12, 'green'
                     if (p < p0) and (p0 < p + len(seq) < p0 + lc):
                         traces.append(go.Scatter(
                             x=[p + len(seq) / 2], y=[i + 1.5],
-                            hovertemplate=f'{seq} {p}',
+                            hovertemplate=f'{lbl} {p}',
                             showlegend=False, mode='markers',
                             marker=dict(size=6, color='green', symbol='triangle-left')))
                         mrk, sz, colm = 'triangle-left', 12, 'green'
@@ -188,18 +211,18 @@ def plot_seq_nbrs(s0, s, txt, sortby='CP', wd=20, title='', file='',
                                fillcolor=colt, line=dict(color=col, width=1)))
             traces.append(go.Scatter(
                 x=[p + len(seq) / 2], y=[i + 1.5],
-                hovertemplate=f'{seq} {p}',
+                hovertemplate=f'{lbl} {p}',
                 showlegend=False, mode='markers',
                 marker=dict(size=sz, color=colm, symbol=mrk)))
-        if len(seq) > maxlenstr:
-            maxlenstr = len(seq)
-        annotations.append(dict(x=plotxrange[1] * 1.001, y=i + 1.35, text=seq,
+        if len(lbl) > maxlenstr:
+            maxlenstr = len(lbl)
+        annotations.append(dict(x=plotxrange[1] * 1.001, y=i + 1.35, text=lbl,
                                  showarrow=False, xanchor='left',
                                  font=dict(family='courier', size=16, color=col)))
 
     # mutations — one shape+trace per occurrence, display string computed once per mutation
     for j, mut in enumerate(arrmut):
-        display = mark_case(
+        display = show_marked(
             mut, [idx < lc and c != s0[idx] for idx, c in enumerate(mut)])
         arr = [p for p in mut_positions[mut] if plotxrange[0] <= p < plotxrange[1]]
         for p in arr:
@@ -218,8 +241,8 @@ def plot_seq_nbrs(s0, s, txt, sortby='CP', wd=20, title='', file='',
                 hovertemplate=f'{display} {p}',
                 showlegend=False, mode='markers',
                 marker=dict(size=sz, color=colm, symbol=mrk)))
-        if len(mut) > maxlenstr:
-            maxlenstr = len(mut)
+        if len(display) > maxlenstr:
+            maxlenstr = len(display)
         annotations.append(dict(x=plotxrange[1] * 1.001, y=-0.55 - j, text=display,
                                  showarrow=False, xanchor='left',
                                  font=dict(family='courier', size=16, color='crimson')))
@@ -230,7 +253,7 @@ def plot_seq_nbrs(s0, s, txt, sortby='CP', wd=20, title='', file='',
                           marker=dict(size=size, color=color, symbol=symbol))
 
     traces += [
-        _leg(s0,                                       'darkblue',         'x',              8),
+        _leg(lbl0,                                     'darkblue',         'x',              8),
         _leg('Neighboring core',                       'rgb(218,112,214)', 'square',         8),
         _leg('Complete overlap with s0',               'rgb(0,200,0)',     'square',         8),
     ]
@@ -344,7 +367,7 @@ def _save_fig(fig, file, scale):
 
 
 def plot_nbrs_condensed(s0, s, txt, sortby='CP', wd=20, title='', file='',
-                        xrange=[], scale=1, hairpins=[], min_occ=2):
+                        xrange=[], scale=1, hairpins=[], min_occ=2, alphabet=None):
     """Condensed neighbour plot: three bands — s0, all-neighbour density strip, mutations.
 
     Shows the query s0 at row 0, all neighbouring sequences collapsed into a
@@ -366,7 +389,13 @@ def plot_nbrs_condensed(s0, s, txt, sortby='CP', wd=20, title='', file='',
         hairpins: List of hairpin dicts (keys: start, end, stem_seq, loop_seq).
         min_occ:  Minimum number of global occurrences in the full sequence
                   required to include a neighbour (default 2).
+        alphabet: Optional :class:`rna_lexis.alphabet.Alphabet`.  When given,
+                  ``s0``, ``s`` and ``txt`` are internal strings and every
+                  sequence shown (labels, hover text, legend) is decoded to
+                  the alphabet's labels; a mutated position is shown in upper
+                  case.  Left out, nucleotide text is shown as it is.
     """
+    show, show_marked, uname, sep = _display(alphabet)
     L = len(txt)
     lc = len(s0)
     txtl = txt.lower()  # compute once; reused everywhere below
@@ -431,7 +460,7 @@ def plot_nbrs_condensed(s0, s, txt, sortby='CP', wd=20, title='', file='',
                            line=dict(color='blue', width=1)))
         traces.append(go.Scatter(
             x=[p0 + lc / 2], y=[0.5],
-            hovertemplate=f'{s0} {p0}', showlegend=False, mode='markers',
+            hovertemplate=f'{show(s0)} {p0}', showlegend=False, mode='markers',
             marker=dict(size=6, color='darkblue', symbol='x')))
 
     # hairpins
@@ -457,6 +486,7 @@ def plot_nbrs_condensed(s0, s, txt, sortby='CP', wd=20, title='', file='',
         # dense regions don't saturate; n_related fully-overlapping → ~90% opacity
         alpha = max(0.15, min(0.5, 1 - 0.1 ** (1 / n_related)))
         for seq in related:
+            lbl = show(seq)
             is_cont = (seq in s0) or (s0 in seq)
             a_fill   = f'{alpha:.3f}'
             a_border = f'{min(1.0, alpha * 2):.3f}'
@@ -474,7 +504,7 @@ def plot_nbrs_condensed(s0, s, txt, sortby='CP', wd=20, title='', file='',
                 traces.append(go.Scatter(
                     x=[p + len(seq) / 2 for p in occ],
                     y=[density_row + 0.5] * len(occ),
-                    hovertemplate=f'{seq} %{{x:.0f}}<extra></extra>',
+                    hovertemplate=f'{lbl} %{{x:.0f}}<extra></extra>',
                     showlegend=False, mode='markers',
                     marker=dict(size=6, color='rgba(0,0,0,0)')))
 
@@ -489,7 +519,7 @@ def plot_nbrs_condensed(s0, s, txt, sortby='CP', wd=20, title='', file='',
         a_fill_mut   = f'{alpha_mut:.3f}'
         a_border_mut = f'{min(1.0, alpha_mut * 2):.3f}'
         for mut in arrmut:
-            display = mark_case(
+            display = show_marked(
                 mut, [i < lc and c != s0[i] for i, c in enumerate(mut)])
             occ = [p for p in mut_positions[mut] if plotxrange[0] <= p < plotxrange[1]]
             for p in occ:
@@ -516,7 +546,7 @@ def plot_nbrs_condensed(s0, s, txt, sortby='CP', wd=20, title='', file='',
                           marker=dict(size=size, color=color, symbol=symbol))
 
     traces += [
-        _leg(s0,                                    'darkblue',         'x',      8),
+        _leg(show(s0),                              'darkblue',         'x',      8),
         _leg('Neighbors (non-overlapping with s0)', 'rgb(140,45,140)',  'square', 8),
         _leg('Neighbors (overlapping with s0)',     'rgb(0,140,50)',    'square', 8),
     ]
@@ -544,7 +574,7 @@ def plot_nbrs_condensed(s0, s, txt, sortby='CP', wd=20, title='', file='',
         _save_fig(fig, f'{root}_condensed{ext or ".png"}', scale)
 
 
-def export_nbrs_condensed(s0, s, txt, sortby='CP', wd=20, xrange=[], file=''):
+def export_nbrs_condensed(s0, s, txt, sortby='CP', wd=20, xrange=[], file='', alphabet=None):
     """Export context windows around s0 occurrences and its neighbours as CSV.
 
     Uses the same logic as the condensed plot: finds neighbours via CP/IOU,
@@ -561,10 +591,13 @@ def export_nbrs_condensed(s0, s, txt, sortby='CP', wd=20, xrange=[], file=''):
         wd:     Half-window size in nt (default 20).
         xrange: Optional [start, end] positional limits.
         file:   Output CSV path. Always prints to stdout; also saves if given.
+        alphabet: Optional Alphabet; when given the ``seq`` column holds the
+                labels of the units (e.g. ``atg aaa``), not the internal string.
 
     Returns:
         Path of the written CSV, or None if no file path was given.
     """
+    show = _display(alphabet)[0]
     L = len(txt)
     lc = len(s0)
     txtl = txt.lower()
@@ -613,7 +646,7 @@ def export_nbrs_condensed(s0, s, txt, sortby='CP', wd=20, xrange=[], file=''):
             merged.append([ws, we])
 
     header = ['start', 'end', 'seq']
-    rows = [[ws, we, txt[ws:we + 1]] for ws, we in merged]
+    rows = [[ws, we, show(txt[ws:we + 1])] for ws, we in merged]
 
     print(','.join(header))
     for row in rows:
@@ -718,7 +751,7 @@ def plot_logo(wd, k, txt, outfile, fmt='pdf', muts=0):
     open_pdf(out_plot)
 
 
-def plotzscore(cnt, zmin=1.96, robust=True, file='', scale=1):
+def plotzscore(cnt, zmin=1.96, robust=True, file='', scale=1, alphabet=None):
     """Plot normalised k-mer frequencies as z-scores with outlier labels.
 
     Each k-mer's frequency is normalised by the total count and then
@@ -734,7 +767,10 @@ def plotzscore(cnt, zmin=1.96, robust=True, file='', scale=1):
         file:   Output path for saving the figure.  When empty the figure is
                 only displayed.
         scale:  DPI multiplier for raster export (default 1).
+        alphabet: Optional Alphabet; when given the k-mer keys are internal
+                strings and the outlier labels show their decoded labels.
     """
+    show = _display(alphabet)[0]
     cnt1 = {k: v for k, v in sorted(cnt.items(),
                                     key=lambda item: item[1], reverse=True)}
     x0 = np.array(list(cnt1.values()))
@@ -766,9 +802,9 @@ def plotzscore(cnt, zmin=1.96, robust=True, file='', scale=1):
             if last_ty is not None and abs(ty - last_ty) < y_nudge:
                 ty = last_ty + direction * y_nudge
             arrow = dict(arrowstyle='-', color='gray', lw=0.5) if rank > 0 else None
-            ax.annotate(keys[xi], xy=(xi, yi), xytext=(tx, ty),
+            ax.annotate(show(keys[xi]), xy=(xi, yi), xytext=(tx, ty),
                         fontsize=8, arrowprops=arrow)
-            print(keys[xi], yi)
+            print(show(keys[xi]), yi)
             last_ty = ty
             max_tx = max(max_tx, tx)
 
@@ -843,7 +879,7 @@ def plot_frequency_rank(freq_dict, k, file='', scale=1):
     plt.show()
 
 
-def plot_coverage(txt, cvrs, pwr, file='', scale=1):
+def plot_coverage(txt, cvrs, pwr, file='', scale=1, alphabet=None):
     """Plot weighted coverage scores for a collection of sequences as a bar chart.
 
     Sequences are sorted by ascending coverage so the highest-scoring
@@ -857,10 +893,13 @@ def plot_coverage(txt, cvrs, pwr, file='', scale=1):
         file:  Output path for saving the figure.  When empty the figure is
                only displayed.
         scale: DPI multiplier for raster export (default 1).
+        alphabet: Optional Alphabet; when given the sequence keys are internal
+               strings and the bar labels show their decoded labels.
     """
+    show = _display(alphabet)[0]
     cvrs = {k: v for k, v in sorted(cvrs.items(), key=lambda item: item[1])}
     plt.figure(figsize=(8, 5))
-    plt.bar(cvrs.keys(), cvrs.values(), color='skyblue')
+    plt.bar([show(k) for k in cvrs.keys()], cvrs.values(), color='skyblue')
     plt.xlabel('Sequence')
     plt.xticks(rotation='vertical')
     plt.ylabel('Weighted coverage')
@@ -975,7 +1014,7 @@ def _compress_positions(all_intervals, txt_len, padding=50, stub_width=80,
 
 
 def plot_sequence_hits(seq_data, txt_len, title='', file='', scale=1,
-                       condense=False, min_gap=1000, hairpins=[]):
+                       condense=False, min_gap=1000, hairpins=[], alphabet=None):
     """Plot occurrences of up to 3 sequences as stacked colored lanes.
 
     Each sequence occupies its own horizontal lane (seq 1 at bottom, seq 3 at
@@ -991,7 +1030,11 @@ def plot_sequence_hits(seq_data, txt_len, title='', file='', scale=1,
         scale     - pixel scale for raster export (3 = high-res)
         condense  - if True, compress gaps larger than min_gap on the x-axis
         min_gap   - minimum gap size (in source positions) to compress
+        alphabet  - optional Alphabet; when given, sequences are internal
+                    strings shown as the alphabet's labels, and "nt" in the
+                    text becomes the alphabet's unit name
     """
+    show, show_marked, uname, sep = _display(alphabet)
     # ── coordinate transform ──────────────────────────────────────────────
     if condense:
         all_ivs = [(pos, pos + d['L'])
@@ -1035,6 +1078,7 @@ def plot_sequence_hits(seq_data, txt_len, title='', file='', scale=1,
     for i, d in enumerate(seq_data):
         line_col, fill = _HIT_PALETTE[i % len(_HIT_PALETTE)]
         seq = d['seq']
+        lbl = show(seq)
         L = d['L']
         lane_y0 = i + 0.05
         lane_y1 = i + 0.95
@@ -1068,7 +1112,7 @@ def plot_sequence_hits(seq_data, txt_len, title='', file='', scale=1,
                 y=[lane_mid] * len(d['exact']),
                 mode='markers',
                 marker=dict(size=max(6, L // 2), color=line_col, opacity=0),
-                customdata=[f'{seq}<br>pos={pos} (exact)' for pos in d['exact']],
+                customdata=[f'{lbl}<br>pos={pos} (exact)' for pos in d['exact']],
                 hovertemplate='%{customdata}<extra></extra>',
                 showlegend=False,
             ))
@@ -1081,9 +1125,9 @@ def plot_sequence_hits(seq_data, txt_len, title='', file='', scale=1,
                 mode='markers',
                 marker=dict(size=max(6, L // 2), color=line_col, opacity=0),
                 customdata=[
-                    ''.join(
-                        f'<span style="color:red"><b>{mark_case(mc, True)}</b></span>'
-                        if mc != sc else mc
+                    sep.join(
+                        f'<span style="color:red"><b>{show_marked(mc, [True])}</b></span>'
+                        if mc != sc else show(mc)
                         for sc, mc in zip(seq, matched)
                     ) + f'<br>pos={pos}  dist={dist}'
                     for pos, matched, dist in d['approx']
@@ -1097,7 +1141,7 @@ def plot_sequence_hits(seq_data, txt_len, title='', file='', scale=1,
             x=[None], y=[None],
             mode='markers',
             marker=dict(size=14, color=line_col, symbol='square'),
-            name=f'{seq}   exact={len(d["exact"])}  ≈{len(d["approx"])}',
+            name=f'{lbl}   exact={len(d["exact"])}  ≈{len(d["approx"])}',
         ))
 
     # Fixed legend entries explaining visual markers
@@ -1144,7 +1188,7 @@ def plot_sequence_hits(seq_data, txt_len, title='', file='', scale=1,
         _save_fig(fig, file, scale)
 
 
-def plot_sequence_hits_detailed(seq_data, txt, start, end, title='', file=''):
+def plot_sequence_hits_detailed(seq_data, txt, start, end, title='', file='', alphabet=None):
     """Nucleotide-level view of sequence hits within a specified range.
 
     Each character in txt[start:end] is shown as monospace text. Hit regions
@@ -1160,14 +1204,20 @@ def plot_sequence_hits_detailed(seq_data, txt, start, end, title='', file=''):
         start/end - 0-based slice of txt to display
         title     - page title
         file      - output HTML path (required; opens after saving)
+        alphabet  - optional Alphabet; when given, txt and the sequences are
+                    internal strings and every unit is shown as its label
+                    (a codon takes three characters), with fewer units per line
     """
+    show, show_marked, uname, sep = _display(alphabet)
+    unit_txt = (lambda c: c) if alphabet is None else (lambda c: alphabet.show(c, pad=True))
+    unit_mut = (lambda c: mark_case(c, True)) if alphabet is None else (lambda c: alphabet.show(c, [True], pad=True))
     start = max(start, 0)
     end   = min(end, len(txt))
     n     = end - start
     region = txt[start:end].lower()
 
     # Per-character state: set of sequence indices covering it, and mutation flag
-    chars  = list(region)
+    chars  = [unit_txt(c) for c in region]
     bg     = [set() for _ in range(n)]   # set of seq_data indices
     is_mut = [False] * n                  # True → red uppercase
 
@@ -1187,11 +1237,11 @@ def plot_sequence_hits_detailed(seq_data, txt, start, end, title='', file=''):
                 if 0 <= abs_k < n:
                     bg[abs_k].add(i)
                     if seq[k] != matched[k]:
-                        chars[abs_k] = mark_case(matched[k], True)
+                        chars[abs_k] = unit_mut(matched[k])
                         is_mut[abs_k] = True
 
     # Build rows of LINE characters each, prefixed with the genomic position
-    LINE = 60
+    LINE = 60 if alphabet is None else max(10, 60 // (alphabet.label_width + len(sep)))
     pw   = len(str(end - 1))
     rows = []
     for row_s in range(0, n, LINE):
@@ -1199,7 +1249,7 @@ def plot_sequence_hits_detailed(seq_data, txt, start, end, title='', file=''):
         label = str(start + row_s).rjust(pw)
         spans = []
         for k in range(row_s, row_e):
-            c        = chars[k]
+            c        = chars[k] + sep
             indices  = sorted(bg[k])
             mut_sty  = 'color:red;font-weight:bold' if is_mut[k] else ''
 
@@ -1224,7 +1274,7 @@ def plot_sequence_hits_detailed(seq_data, txt, start, end, title='', file=''):
                   f'background:{fill};border:1px solid {line_col};'
                   f'vertical-align:middle;margin-right:4px"></span>')
         legend_items.append(
-            f'<li>{swatch}<code>{d["seq"]}</code> &nbsp; '
+            f'<li>{swatch}<code>{show(d["seq"])}</code> &nbsp; '
             f'exact: {len(d["exact"])}, &nbsp; approx: {len(d["approx"])}</li>'
         )
     legend_items.append(
@@ -1252,7 +1302,7 @@ def plot_sequence_hits_detailed(seq_data, txt, start, end, title='', file=''):
 <body>
 <h2>{title or 'Sequence detail'}</h2>
 <p style="color:#555;font-size:0.9em">
-  Positions {start}&ndash;{end-1} &nbsp;|&nbsp; {n} nucleotides
+  Positions {start}&ndash;{end-1} &nbsp;|&nbsp; {n} {'nucleotides' if alphabet is None else uname}
 </p>
 {legend_html}
 <pre>{'<br>'.join(rows)}</pre>
@@ -1283,7 +1333,7 @@ _HOP_ARC_DEFAULT_COLOR = "#888888"  # hop >= 5 (beyond the 4-bucket legend)
 
 def plot_self_similarity_arcs(seed, results, positions, unit=None,
                                spacing_stats=None, arcs='consecutive',
-                               label_threshold=15, file='', scale=1):
+                               label_threshold=15, file='', scale=1, alphabet=None):
     """Semicircular arc diagram of pairwise Hamming-bounded extensions.
 
     Visualises the output of find_longest_extensions() for a single seed
@@ -1334,7 +1384,12 @@ def plot_self_similarity_arcs(seed, results, positions, unit=None,
         file:      Output path for saving the figure (PNG/SVG/PDF). When
                    empty the figure is only displayed.
         scale:     DPI multiplier for raster export (default 1).
+        alphabet:  Optional Alphabet; when given, ``seed`` is an internal
+                   string shown as the alphabet's labels, and "nt" in the axis,
+                   legend and title text becomes the alphabet's unit name (for
+                   example "codons").
     """
+    show, show_marked, uname, sep = _display(alphabet)
     if not results or len(positions) < 2:
         print('Need at least 2 occurrences with computed extensions to plot.')
         return
@@ -1384,7 +1439,7 @@ def plot_self_similarity_arcs(seed, results, positions, unit=None,
             mid_y = ys.max()
             fontsize = 7.5 if spacing <= unit * 1.1 else 6.5
             ax.text((p0 + p1) / 2, mid_y + 2,
-                    f"{spacing} nt  h={r['hamming']}  ({identity:.1f}%)",
+                    f"{spacing} {uname}  h={r['hamming']}  ({identity:.1f}%)",
                     ha="center", va="bottom", fontsize=fontsize, color="#444")
 
     for n, nr in zip(positions, node_r):
@@ -1395,7 +1450,7 @@ def plot_self_similarity_arcs(seed, results, positions, unit=None,
     max_hop = max(hop_distance(r['pos2'] - r['pos1'], unit) for r in drawn)
     for hops in range(1, min(max_hop, 4) + 1):
         ax.plot([], [], color=_HOP_ARC_COLORS[hops], lw=2.5,
-                label=f"{hops} hop{'s' if hops > 1 else ''} (~{round(hops * unit)} nt)")
+                label=f"{hops} hop{'s' if hops > 1 else ''} (~{round(hops * unit)} {uname})")
     if max_hop > 4:
         ax.plot([], [], color=_HOP_ARC_DEFAULT_COLOR, lw=2.5, label="≥ 5 hops")
     # Node-size key: real circle markers at the same radii as the plotted
@@ -1421,9 +1476,9 @@ def plot_self_similarity_arcs(seed, results, positions, unit=None,
     ax.axhline(0, color="#cccccc", lw=0.8, zorder=1)
     ax.set_xlim(min(positions) - 150, max(positions) + 150)
     ax.set_ylim(-55, max((r['pos2'] - r['pos1']) / 2 for r in drawn) * 1.25)
-    ax.set_xlabel("Position (nt)", fontsize=11)
-    ax.set_ylabel("Arc height = spacing / 2 (nt)", fontsize=10)
-    title = f"Pairwise Hamming extensions — seed: '{seed}'"
+    ax.set_xlabel(f"Position ({uname})", fontsize=11)
+    ax.set_ylabel(f"Arc height = spacing / 2 ({uname})", fontsize=10)
+    title = f"Pairwise Hamming extensions — seed: '{show(seed)}'"
     if arcs == 'consecutive' and len(drawn) < len(results):
         title += f"  ({len(drawn)} of {len(results)} pairs shown — consecutive-neighbor only)"
     title_lines = [title]
@@ -1431,7 +1486,7 @@ def plot_self_similarity_arcs(seed, results, positions, unit=None,
         def _p(v):
             return f"{v:.4f}" if v >= 0.0001 else "<0.0001"
         title_lines.append(
-            f"Spacing test (n={spacing_stats['m']}): T={spacing_stats['period']} nt  ·  "
+            f"Spacing test (n={spacing_stats['m']}): T={spacing_stats['period']} {uname}  ·  "
             f"cluster p={_p(spacing_stats['p_cluster'])}  ·  "
             f"Rayleigh p={_p(spacing_stats['p_rayleigh'])}"
         )
@@ -1473,7 +1528,7 @@ def _nice_tick_step(n):
 
 
 def plot_shared_motif_diagram(txt_a, txt_b, label_a, label_b, shared_motifs,
-                               title='', file='', scale=1):
+                               title='', file='', scale=1, alphabet=None):
     """Two-row arc diagram connecting shared exact-motif positions between
     two sequences (e.g. a transcript and a candidate regulatory element).
 
@@ -1500,7 +1555,11 @@ def plot_shared_motif_diagram(txt_a, txt_b, label_a, label_b, shared_motifs,
         file:          Output path for saving the figure (PNG/SVG/PDF). When
                        empty the figure is only displayed.
         scale:         DPI multiplier for raster export (default 1).
+        alphabet:      Optional Alphabet; when given, the sequences and
+                       motifs are internal strings shown as the alphabet's
+                       labels, and "nt" in the text becomes its unit name.
     """
+    show, show_marked, uname, sep = _display(alphabet)
     len_a, len_b = len(txt_a), len(txt_b)
 
     selected = []
@@ -1530,7 +1589,7 @@ def plot_shared_motif_diagram(txt_a, txt_b, label_a, label_b, shared_motifs,
                                     lw=0.8, zorder=2))
         ax.text(-0.01, y_ctr, label, ha='right', va='center',
                 fontsize=9, fontweight='bold')
-        ax.text(1.01, y_ctr, f'{seqlen:,} nt', ha='left', va='center',
+        ax.text(1.01, y_ctr, f'{seqlen:,} {uname}', ha='left', va='center',
                 fontsize=8, color='#555555')
 
     for y_ctr, seqlen, above in [(Y_A, len_a, True), (Y_B, len_b, False)]:
@@ -1575,7 +1634,7 @@ def plot_shared_motif_diagram(txt_a, txt_b, label_a, label_b, shared_motifs,
 
         legend_handles.append(mpatches.Patch(
             color=color, alpha=0.85,
-            label=f'{m}  ({n_a}× {label_a}, {n_b}× {label_b})'))
+            label=f'{show(m)}  ({n_a}× {label_a}, {n_b}× {label_b})'))
 
     ax.legend(handles=legend_handles, loc='upper center',
               bbox_to_anchor=(0.5, -0.10), ncol=min(3, len(legend_handles)),
@@ -1585,7 +1644,7 @@ def plot_shared_motif_diagram(txt_a, txt_b, label_a, label_b, shared_motifs,
     ax.set_title(title or f'Shared-motif connections: {label_a}  ↔  {label_b}',
                  fontsize=11, pad=6)
     fig.text(0.5, 0.01,
-              'Both sequences are scaled to unit width; x-axis labels show actual nucleotide positions.',
+              f'Both sequences are scaled to unit width; x-axis labels show actual {"nucleotide" if alphabet is None else alphabet.unit_name} positions.',
               ha='center', fontsize=7, color='#666666', style='italic')
 
     plt.tight_layout(rect=[0, 0.09, 1, 1])

@@ -397,7 +397,7 @@ def score_exact_motifs(
         outside = observed - inside
 
         rows.append({
-            "motif": motif.upper(),
+            "motif": _shown(motif, alphabet),
             "length": L,
             "exact_count": observed,
             "nonoverlap_count": nonoverlap_count(positions, L),
@@ -508,6 +508,17 @@ def rank_core_candidates(
         alphabet=alphabet,
         **score_kwargs,
     )
+
+
+def _shown(s: str, alphabet) -> str:
+    """Text of a motif in a result row.
+
+    Nucleotide strings are upper-cased, as they always have been.  Over an
+    :class:`Alphabet` the internal string is kept as it is, so a row can be fed
+    back into the functions here; :func:`write_rows_csv` decodes it for the file.
+    """
+
+    return s.upper() if alphabet is None else s
 
 
 def _chars_of(alphabet) -> str:
@@ -631,7 +642,7 @@ def mutation_family_tests(
 
             pvalues.append(pvalue)
             rows.append({
-                "motif": motif.upper(),
+                "motif": _shown(motif, alphabet),
                 "length": L,
                 "radius": radius,
                 "exact_count": exact_count,
@@ -676,6 +687,17 @@ def mutation_family_tests(
     return rows
 
 
+def _decoded_row(row: dict, alphabet) -> dict:
+    out = dict(row)
+    for key in _TEXT_COLUMNS:
+        if isinstance(out.get(key), str):
+            out[key] = alphabet.show(out[key], upper=True)
+    if "pattern" in out and "left_anchor" in row and "right_anchor" in row:
+        out["pattern"] = (f"{out['left_anchor']}[gap:{row.get('min_gap')}-{row.get('max_gap')}]"
+                          f"{out['right_anchor']}")
+    return out
+
+
 def best_mutation_family_per_motif(rows: Iterable[dict]) -> list[dict]:
     """Select the strongest accepted radius per motif for compact reporting."""
 
@@ -697,9 +719,21 @@ def best_mutation_family_per_motif(rows: Iterable[dict]) -> list[dict]:
     return best
 
 
-def write_rows_csv(path: str, rows: Sequence[dict]) -> str:
-    """Write dict rows to CSV and return the path."""
+_TEXT_COLUMNS = ("motif", "left_anchor", "right_anchor", "gap_sequence", "matched_sequence", "core")
 
+
+def write_rows_csv(path: str, rows: Sequence[dict], alphabet=None) -> str:
+    """Write dict rows to CSV and return the path.
+
+    With an :class:`Alphabet` the columns that hold sequences (``motif``,
+    ``left_anchor``, ``right_anchor``, ``gap_sequence``, ``matched_sequence``,
+    ``core`` and the ``pattern`` of a gapped motif) are decoded from internal
+    strings to the alphabet's labels in upper case, e.g. ``ATG AAA TTT`` for
+    codons.  Without one the rows are written as they are.
+    """
+
+    if alphabet is not None:
+        rows = [_decoded_row(r, alphabet) for r in rows]
     if not rows:
         with open(path, "w", newline="", encoding="utf-8") as handle:
             handle.write("")
@@ -812,11 +846,11 @@ def find_gapped_motif_hits(
                 hits.append({
                     "start": start,
                     "end": right_end,
-                    "left_anchor": left.upper(),
-                    "right_anchor": right.upper(),
+                    "left_anchor": _shown(left, alphabet),
+                    "right_anchor": _shown(right, alphabet),
                     "gap_length": gap,
-                    "gap_sequence": txt[start + len(left):right_start].upper(),
-                    "matched_sequence": txt[start:right_end].upper(),
+                    "gap_sequence": _shown(txt[start + len(left):right_start], alphabet),
+                    "matched_sequence": _shown(txt[start:right_end], alphabet),
                 })
     return hits
 
@@ -859,9 +893,9 @@ def score_gapped_motif(
     lengths = [hit["end"] - hit["start"] for hit in hits]
     coverage = union_coverage_variable(positions, lengths)
     return {
-        "pattern": f"{left.upper()}[gap:{min_gap}-{max_gap}]{right.upper()}",
-        "left_anchor": left.upper(),
-        "right_anchor": right.upper(),
+        "pattern": f"{_shown(left, alphabet)}[gap:{min_gap}-{max_gap}]{_shown(right, alphabet)}",
+        "left_anchor": _shown(left, alphabet),
+        "right_anchor": _shown(right, alphabet),
         "min_gap": min_gap,
         "max_gap": max_gap,
         "observed_count": observed,

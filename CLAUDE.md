@@ -9,7 +9,7 @@ API reference) — this file is about *working on* the repo, not using it.
 
 - Tests: `python3 -m pytest -q` (plain `python` may resolve to a Python
   without pytest installed in some environments — use `python3` explicitly).
-  210 tests: `test_statistical.py`, `test_algorithms.py`, `test_io.py`,
+  230 tests: `test_statistical.py`, `test_algorithms.py`, `test_io.py`,
   `test_alignment.py`, `test_batch_cli.py` (all synthetic-data
   unit/end-to-end, no real biological data or network calls), plus
   `test_norad_integration.py` (8 tests — real biology, no network calls
@@ -95,8 +95,10 @@ Three self-contained modules sit beside the engine and import nothing from it:
 `alphabet.py` (the declared symbol set and its internal one-character-per-unit
 mapping), `tokenizers.py` (text → internal string, with unknown-symbol and
 frame handling) and `codec.py` (units ↔ nucleotide text, codebook files).
-`statistical.py` now takes `alphabet=` throughout (phase 2); `algorithms.py`,
-`plots.py`, `menu.py` and the CLI do not use alphabets yet (phases 3 and 4).
+`statistical.py` takes `alphabet=` throughout (phase 2) and the display code decodes
+results for it (phase 3: `Alphabet.show`, the plot functions, `print_core`,
+`print_alignment`, `write_rows_csv`); `menu.py` and the CLI do not use alphabets yet
+(phase 4).
 
 ## Known gotchas / established conventions
 
