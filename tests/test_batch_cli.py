@@ -304,6 +304,51 @@ class AlphabetCliTests(BatchCliTestCase):
         with self.assertRaises(SystemExit):
             self._run(["score-exact", "--input", fasta, "--motifs", other, "--output", out, "--alphabet", "codon"])
 
+    def test_translate_reads_codons_and_analyzes_amino_acids(self):
+        from rna_lexis.genetic_code import STANDARD
+        rnd = random.Random(5)
+        units = [rnd.choice(CODONS) for _ in range(300)]
+        peptide = list("mkvlay")
+        # the same peptide three times, each time spelled with different synonymous codons
+        for s in (20, 100, 200):
+            alts = [rnd.choice([c for c in CODONS if STANDARD[c] == aa]) for aa in peptide]
+            units[s:s + 6] = alts
+        fasta = self._write("cds.fasta", ">cds\n" + "".join(units) + "\n")
+        motifs = self._write("motifs.txt", "MKVLAY\n")
+        out = self._path("aa.csv")
+        stdout, _ = self._run(["score-exact", "--input", fasta, "--motifs", motifs, "--output", out,
+                               "--alphabet", "codon", "--translate", "--enrichment-threshold", "1.0"])
+        self.assertIn("translated to residues", stdout)
+        row = self._read_csv(out)[0]
+        self.assertEqual(row["motif"], "MKVLAY")
+        self.assertEqual(row["exact_count"], "3")
+        # read as codons, the same three copies are different words (synonymous codons differ)
+        out2 = self._path("codons.csv")
+        self._run(["score-exact", "--input", fasta, "--motifs", self._write("m2.txt", "".join(units[20:26]) + "\n"),
+                   "--output", out2, "--alphabet", "codon", "--enrichment-threshold", "1.0"])
+        self.assertEqual(self._read_csv(out2)[0]["exact_count"], "1")
+
+    def test_translate_needs_codons(self):
+        fasta = self._write("p.fasta", ">p\nMKVLAY\n")
+        motifs = self._write("m.txt", "MKV\n")
+        with self.assertRaises(SystemExit) as cm:
+            self._run(["score-exact", "--input", fasta, "--motifs", motifs, "--output", self._path("o.csv"),
+                       "--alphabet", "latin", "--translate"])
+        self.assertIn("--translate needs --alphabet codon", str(cm.exception))
+
+    def test_protein_text_over_the_amino_acid_alphabet(self):
+        protein = "MKVLAYGHDESTWQPNRCFI" * 3
+        fasta = self._write("p.fasta", ">p\n" + protein + "\n")
+        motifs = self._write("m.txt", "MKVLAY\n")
+        out = self._path("p.csv")
+        self._run(["score-exact", "--input", fasta, "--motifs", motifs, "--output", out,
+                   "--alphabet", "amino-acid", "--enrichment-threshold", "1.0"])
+        row = self._read_csv(out)[0]
+        self.assertEqual(row["exact_count"], "3")
+        self.assertEqual(row["motif"], "MKVLAY")
+        # 21 declared symbols: q is p times 21**6 (not 26**6)
+        self.assertAlmostEqual(float(row["q_markov"]), min(1.0, float(row["p_markov"]) * 21 ** 6), delta=1e-9)
+
     def test_unknown_alphabet_is_an_error(self):
         fasta = self._write("cds.fasta", ">cds\n" + _codon_fasta() + "\n")
         motifs = self._write("motifs.txt", "".join(CORE) + "\n")

@@ -11,7 +11,8 @@ import warnings
 from pathlib import Path
 
 from rna_lexis.algorithms import cores, find_boundary
-from rna_lexis.alphabet import get_alphabet
+from rna_lexis.alphabet import codon, get_alphabet
+from rna_lexis.genetic_code import amino_acid, codon_to_amino_acid
 from rna_lexis.tokenizers import UnknownSymbolError, tokenize
 from rna_lexis.statistical import (
     best_mutation_family_per_motif,
@@ -25,12 +26,22 @@ from rna_lexis.statistical import (
 )
 
 
-_BUILTIN_ALPHABETS = ("nucleotide", "codon", "Latin letters")
+_BUILTIN_ALPHABETS = ("nucleotide", "codon", "Latin letters", "amino acid")
 
 
 def _alphabet(args):
-    """The Alphabet named by --alphabet (a built-in name or an alphabet file), or None for nucleotides."""
-    return get_alphabet(args.alphabet) if getattr(args, "alphabet", None) else None
+    """The Alphabet the analysis runs over, or None for nucleotides.
+
+    ``--alphabet`` names it (a built-in name or an alphabet file); with ``--translate`` the text is read as
+    codons and the analysis is over the amino acids they code for.
+    """
+    name = getattr(args, "alphabet", None)
+    translate = getattr(args, "translate", False)
+    if translate:
+        if not name or get_alphabet(name).name != "codon":
+            sys.exit("error: --translate needs --alphabet codon")
+        return amino_acid()
+    return get_alphabet(name) if name else None
 
 
 def _tokenize(text, alphabet, args, frame=0):
@@ -57,12 +68,17 @@ def _read_sequence(path: str, alphabet=None, args=None) -> str:
         records = [r for r in re.split(r"^>.*$", text, flags=re.M) if r.strip()]
     else:
         records = [text]
-    if alphabet.name in _BUILTIN_ALPHABETS:        # letters only, as when the menu loads text
+    reading = codon() if getattr(args, "translate", False) else alphabet   # translated text is read as codons
+    if reading.name in _BUILTIN_ALPHABETS:         # letters only, as when the menu loads text
         records = [re.sub(r"[^A-Za-z]+", "", r).lower() for r in records]
-    tok = _tokenize(records, alphabet, args, frame=args.frame)
+    tok = _tokenize(records, reading, args, frame=args.frame)
     if tok.n_units == 0:
-        sys.exit(f"error: no {alphabet.units_label} could be read from {path} with the alphabet {alphabet.name!r}")
-    print(f"Read {tok.n_units:,} {alphabet.units_label} over {alphabet.name!r} from {path}"
+        sys.exit(f"error: no {reading.units_label} could be read from {path} with the alphabet {reading.name!r}")
+    note = f"{reading.name!r}"
+    if reading is not alphabet:
+        tok = tok.project(codon_to_amino_acid())
+        note += f", translated to {alphabet.units_label}"
+    print(f"Read {tok.n_units:,} {reading.units_label} over {note} from {path}"
           f" ({len(tok.skipped)} skipped, {sum(len(d.text) for d in tok.dropped)} characters dropped)")
     return tok.text
 
@@ -229,13 +245,17 @@ def build_parser() -> argparse.ArgumentParser:
 
     def add_alphabet_options(p: argparse.ArgumentParser) -> None:
         p.add_argument("--alphabet", default=None,
-                       help="Read the text over an alphabet: nucleotide, codon, latin, or the path of an "
+                       help="Read the text over an alphabet: nucleotide, codon, latin, amino-acid, or the path of an "
                             "alphabet file (JSON). Default: nucleotides, as always. Motifs, anchors and "
                             "queries are then read the same way (for codons, as nucleotides), and "
                             "results are shown as the alphabet's labels.")
         p.add_argument("--frame", type=int, default=0,
                        help="Characters to skip at the start of each sequence for a fixed-width alphabet "
                             "such as codon (the reading frame; default 0).")
+        p.add_argument("--translate", action="store_true",
+                       help="With --alphabet codon: read the text as codons and analyze the amino acids "
+                            "they code for (standard genetic code). Motifs, anchors and queries are then "
+                            "amino-acid letters.")
         p.add_argument("--on-unknown", choices=["skip", "error"], default="skip",
                        help="What to do with a symbol that is not in the alphabet: skip it with a warning "
                             "(default), or stop with an error.")

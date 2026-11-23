@@ -28,6 +28,7 @@ from rna_lexis.algorithms import (
 )
 from rna_lexis.alignment import gotoh_global, gotoh_local, print_alignment
 from rna_lexis.alphabet import Alphabet, BOUNDARY, latin, codon, get_alphabet
+from rna_lexis.genetic_code import amino_acid, codon_to_amino_acid
 from rna_lexis.tokenizers import tokenize
 from rna_lexis.plots import (
     plot_logo, plotzscore, plotkmerhist, plot_frequency_rank,
@@ -364,6 +365,8 @@ def _choose_reading(data):
         return data
     options = ["Automatic (nucleotides if only A, C, G, T or U; otherwise Latin letters)",
                "Codons (read 3 nucleotides at a time)",
+               "Codons translated to amino acids (standard genetic code)",
+               "Amino acids (a protein written in one-letter codes)",
                "Latin letters (a-z)",
                "An alphabet from a file (e.g. Greek letters, syllables)",
                "Cancel"]
@@ -375,7 +378,7 @@ def _choose_reading(data):
         if data.get('is_rna') or contains_only_rna(base):
             return data
         alphabet, frame, text = latin(), 0, base
-    elif choice == 2:
+    elif choice in (2, 3):
         alphabet, text = codon(), base
         if not (data.get('is_rna') or contains_only_rna(base)):
             print(fmttxt(["This text has letters other than A, C, G, T, U; codons "
@@ -383,7 +386,9 @@ def _choose_reading(data):
         fr = safe_input(fmttxt(["Reading frame (characters to skip at the start)", "[0, 1 or 2; default 0]: "],
                                ['bold', ''], ['yellow', 'cyan']) + ' ').strip()
         frame = int(fr) if fr in ('0', '1', '2') else 0
-    elif choice == 3:
+    elif choice == 4:
+        alphabet, frame, text = amino_acid(), 0, base
+    elif choice == 5:
         alphabet, frame, text = latin(), 0, base
     else:
         path = openFile(initial_dir=data.get('dir') or None)
@@ -403,6 +408,11 @@ def _choose_reading(data):
     internal, reading = _read_text_as(text, alphabet, frame=frame)
     if internal is None:
         return None
+    if choice == 3:        # read as codons, then translate: the analysis is over amino acids
+        projection = codon_to_amino_acid()
+        internal = projection.apply(internal)
+        alphabet = projection.target
+        reading.update({'alphabet': alphabet.name, 'mode': alphabet.mode, 'translated': 'standard'})
     print(fmttxt([f"Read {reading['units']:,} {alphabet.units_label} over the alphabet '{alphabet.name}' "
                   f"({alphabet.size} symbols)."], ['bold'], ['green']))
     data = dict(data)
@@ -739,12 +749,16 @@ def _comparison_in_alphabet(data, alphabet, reading):
             return None
         return data
     frame = (reading or {}).get('frame', 0)
+    translated = (reading or {}).get('translated')
     # built-in alphabets read the letters-only text; an alphabet from a file needs the full text
-    builtin = alphabet.name in ('codon', 'Latin letters', 'nucleotide')
+    builtin = alphabet.name in ('codon', 'Latin letters', 'nucleotide', 'amino acid') or translated
     text = data['txt'] if builtin else data.get('raw', data['txt'])
-    internal, comp_reading = _read_text_as(text, alphabet, frame=frame)
+    internal, comp_reading = _read_text_as(text, codon() if translated else alphabet, frame=frame)
     if internal is None:
         return None
+    if translated:
+        internal = codon_to_amino_acid(translated).apply(internal)
+        comp_reading.update({'alphabet': alphabet.name, 'mode': alphabet.mode, 'translated': translated})
     data = dict(data)
     data.update({'txt': internal, 'txtb': '', 'is_rna': False, 'alphabet': alphabet, 'reading': comp_reading})
     return data

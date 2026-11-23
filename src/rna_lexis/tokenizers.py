@@ -126,6 +126,20 @@ class Tokenized:
         """The labels of ``text[start:stop]`` joined by ``sep``."""
         return self.alphabet.decode(self.text[start:stop], sep=sep)
 
+    def project(self, projection) -> "Tokenized":
+        """The same text over the projection's target alphabet (e.g. codons -> amino acids).
+
+        Positions, segments, offsets and the record of what was skipped or dropped
+        are unchanged: unit ``i`` of the result is unit ``i`` of this text.
+        """
+        if projection.source.to_dict() != self.alphabet.to_dict():
+            raise ValueError(f"the projection is from {projection.source.name!r}, "
+                             f"not from {self.alphabet.name!r}")
+        return Tokenized(alphabet=projection.target, text=projection.apply(self.text),
+                         segments=list(self.segments), offsets=list(self.offsets),
+                         skipped=list(self.skipped), dropped=list(self.dropped),
+                         removal_points=list(self.removal_points))
+
 
 # ----------------------------------------------------------------------
 # one segment

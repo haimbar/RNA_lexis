@@ -174,17 +174,35 @@ class ReadingTests(unittest.TestCase):
         self.assertEqual(out["alphabet"].decode_list(out["txt"]), ["atg", "aaa", "ttt"])
         self.assertEqual(out["reading"]["skipped"], 1)
 
+    def test_codons_translated_to_amino_acids(self):
+        out = self.choose(self.data("atggcctaaggg"), 3, answers=[""])
+        self.assertEqual(out["alphabet"].name, "amino acid")
+        self.assertEqual(out["alphabet"].decode(out["txt"]), "ma*g")
+        self.assertEqual(out["reading"]["translated"], "standard")
+        self.assertEqual(out["reading"]["units"], 4)
+        # the frame is applied before translating
+        out = self.choose(self.data("catggcc"), 3, answers=["1"])
+        self.assertEqual(out["alphabet"].decode(out["txt"]), "ma")
+
+    def test_amino_acids_and_letters(self):
+        out = self.choose(self.data("mkvlaxyg"), 4)           # x is not an amino acid
+        self.assertEqual(out["alphabet"].name, "amino acid")
+        self.assertEqual(out["alphabet"].decode(out["txt"]), "mkvlayg")
+        self.assertEqual(out["reading"]["skipped"], 1)
+        out = self.choose(self.data("thequick"), 5)
+        self.assertEqual(out["alphabet"].name, "Latin letters")
+
     def test_alphabet_from_a_file(self):
         greek = Alphabet(name="Greek", symbols=tuple("αβγδ"))
         with tempfile.TemporaryDirectory() as d:
             path = greek.save(os.path.join(d, "greek.json"))
             M.openFile = lambda **k: path
-            out = self.choose(self.data("abcd", raw="αβγδα βγ"), 4)
+            out = self.choose(self.data("abcd", raw="αβγδα βγ"), 6)
         self.assertEqual(out["alphabet"].name, "Greek")
         self.assertEqual(out["alphabet"].decode(out["txt"]), "αβγδαβγ")
 
     def test_cancel_and_sessions(self):
-        self.assertIsNone(self.choose(self.data("acgt"), 5))
+        self.assertIsNone(self.choose(self.data("acgt"), 7))
         self.assertIsNone(self.choose(self.data("acgt"), 0))
         session = self.data("acgt", corelist=["acg"], xmotifs=["acg"])
         self.assertIs(self.choose(session, 2), session)             # a saved session keeps its reading
@@ -341,6 +359,14 @@ class ComparisonTests(MenuCase):
             out = M._comparison_in_alphabet(data, A, {'frame': 0})
         self.assertEqual(out['alphabet'].name, "codon")
         self.assertEqual(out['alphabet'].decode_list(out['txt'])[:3], ["atg", "aaa", "ttt"])
+
+    def test_a_translated_session_reads_the_comparison_text_the_same_way(self):
+        aa = M.amino_acid()
+        data = {'file_path': 'b.fa', 'txt': "atggcctaa", 'is_rna': True, 'dir': ''}
+        with contextlib.redirect_stdout(io.StringIO()):
+            out = M._comparison_in_alphabet(data, aa, {'frame': 0, 'translated': 'standard'})
+        self.assertEqual(aa.decode(out['txt']), "ma*")
+        self.assertEqual(out['reading']['translated'], 'standard')
 
     def test_a_session_with_another_alphabet_is_refused(self):
         other = {'file_path': 'b', 'txt': 'abc', 'corelist': ['ab'], 'xmotifs': ['ab'],

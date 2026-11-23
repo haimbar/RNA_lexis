@@ -378,6 +378,61 @@ class Alphabet:
 
 
 # ----------------------------------------------------------------------
+# projections: many-to-one maps between alphabets
+# ----------------------------------------------------------------------
+@dataclass(frozen=True)
+class Projection:
+    """A many-to-one map from one alphabet onto another.
+
+    Translating codons to amino acids is one; reading a methylated cytosine
+    (``m``) as an ordinary one (``c``) is another.  Analyzing the projected text
+    asks the question with some distinctions removed.
+
+    Attributes:
+        source:  The alphabet of the text to project.
+        target:  The alphabet of the result.
+        mapping: ``{source label: target label}``.  Every main symbol of the
+                 source must be mapped; an extra symbol that is not mapped is
+                 kept if the target declares it too, and is an error otherwise.
+        name:    Display name.
+    """
+
+    source: Alphabet
+    target: Alphabet
+    mapping: Mapping
+    name: str = "projection"
+
+    def __post_init__(self):
+        table = {}
+        for label in self.source.labels:
+            if label in self.mapping:
+                dst = self.mapping[label]
+            elif label in self.source.extras and label in self.target:
+                dst = label
+            else:
+                raise ValueError(f"symbol {label!r} of {self.source.name!r} is not mapped")
+            if dst not in self.target:
+                raise ValueError(f"{label!r} maps to {dst!r}, which is not a symbol of {self.target.name!r}")
+            table[self.source.char(label)] = self.target.char(dst)
+        table[BOUNDARY] = BOUNDARY
+        object.__setattr__(self, "table", table)
+
+    def apply(self, internal: str) -> str:
+        """Project an internal string of the source alphabet onto the target alphabet."""
+        try:
+            return "".join(self.table[c] for c in internal)
+        except KeyError as exc:
+            raise ValueError(f"{exc.args[0]!r} is not an internal character of {self.source.name!r}") from None
+
+    def groups(self) -> dict:
+        """``{target label: [source labels that map to it]}``."""
+        out: dict = {}
+        for src, dst in self.mapping.items():
+            out.setdefault(dst, []).append(src)
+        return out
+
+
+# ----------------------------------------------------------------------
 # built-in alphabets
 # ----------------------------------------------------------------------
 def nucleotide() -> Alphabet:
@@ -403,10 +458,16 @@ def latin() -> Alphabet:
                     mode="chars", unit_name="letter")
 
 
+def _amino_acid() -> Alphabet:
+    from rna_lexis.genetic_code import amino_acid      # imported here: genetic_code imports this module
+    return amino_acid()
+
+
 BUILTIN_ALPHABETS = {
     "nucleotide": nucleotide,
     "codon": codon,
     "latin": latin,
+    "amino-acid": _amino_acid,
 }
 
 
