@@ -275,9 +275,10 @@ Markov tables, so that tier would need its own statistical defaults.
 |---|---|
 | xmotifs, cores, `score_exact_motifs`, FDR, mutation families, gapped motifs, spacing periodicity, self-similarity arcs, neighbor plots, coverage and coverage comparison, shared motifs, k-mer p-values, alignment | hairpins, reverse complement, GC-content indicator, logo plot (for now), `ENST` fetch as it stands |
 
-The logo plot is the one to revisit: a unit-level logo (64 symbols, or 20
-after projection to amino acids) is meaningful and would need its own
-renderer, since WebLogo does not take a 64-symbol alphabet.
+The logo plot is the one to revisit, and a plain unit-level logo is not the
+answer for alphabets of about 20 or more symbols (see section 12, item 4, and
+`docs/TODO-unit-level-logo.txt`): the picture needs a different visualization,
+and WebLogo does not take a 64-symbol alphabet in any case.
 
 ## 6. Packaging and the alias question
 
@@ -437,8 +438,13 @@ Each phase should be shippable and leave nucleotide behavior unchanged.
 3. Display decoding: plots, CSV columns and console output.
 4. Menu, batch CLI and documentation (`user_guide.md`, `README.md`,
    `llms.txt` cross-links kept intact).
-5. Alphabet-aware defaults and calibration; amino-acid projection; unit-level
-   logo.
+5. Finish the alphabet-aware defaults and calibration (discovery parameters
+   on planted families, codon text above 1,500 codons, amino-acid alphabets,
+   smoother estimators for letters at order 2 and above); the amino-acid
+   projection; and a unit-level view of the positions around a motif. That
+   last item is **not** a plain logo: for alphabets of about 20 or more symbols
+   a logo cannot be read, so the visualization needs choosing first (section 12,
+   item 4).
 6. Wishlist items (section 12), starting with the synonymous-codon test.
 
 ### Phase 1 status
@@ -582,8 +588,31 @@ Not part of the first release. Listed so the design leaves room for them.
 3. **Unit distance matrices:** partial credit for near-synonymous codons,
    and amino-acid substitution matrices (BLOSUM) for the alignment code
    (section 3.7).
-4. **Unit-level logo plot:** its own renderer for 64 or more symbols
-   (section 5).
+4. **Unit-level view of the positions around a motif** (replaces the earlier
+   "unit-level logo plot" item; background in `docs/TODO-unit-level-logo.txt`). A
+   logo draws each position as a stack of symbols scaled by information content,
+   which is capped at log2(K) bits: about 4.7 for 26 letters, 4.3 for 20 amino
+   acids and 6 for 64 codons. In language or protein text the positions around a
+   motif are usually close to the background, so the stacks come out as short bars
+   of tiny letters that cannot be read. A second problem for skewed alphabets: a
+   standard logo measures information against a uniform background, so common
+   symbols (e, L) look informative when they are only common. A plain logo is
+   reasonable only for a small alphabet. For about 20 symbols or more, directions
+   (none chosen):
+   - *relative-entropy logo:* measure each symbol against the text's own
+     background, the one the statistics already use (sections 3.4 and 7), so only
+     enriched symbols stand out;
+   - *heatmap:* rows are symbols, columns are positions, colour is log-odds
+     against the background; scales to 26 or 64 symbols and shows depleted symbols
+     as well as enriched ones;
+   - *top-k per position:* the few strongest symbols with the rest grouped as
+     "other", plus counts so small samples are visible;
+   - *collapsed alphabets:* a logo over symbol classes (vowels and consonants,
+     amino-acid chemistry classes); for codons, group by amino acid with the codons
+     as a second level, which connects to item 1.
+   My leaning, for discussion: the log-odds heatmap against the statistical
+   background as the general view, since it works for any alphabet size and uses
+   the same null as the tests, with the relative-entropy logo for small alphabets.
 5. **Codon-level reverse complement and stop-codon splitting** of segments
    (section 3.7).
 6. **Arbitrary token vocabularies,** such as whole words (section 4).
