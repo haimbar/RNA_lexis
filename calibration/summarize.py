@@ -56,9 +56,10 @@ def main():
         return [x for x in nul if x["null"] == k and int(x["N"]) == N and x["background"] == bg and x["family"] == fam][0]["fp_rate"]
     L.append("## Codons: false positives per null text, by multiple-testing family\n")
     L.append("Strict rule (q <= 0.05, enrichment >= 10). `candidates` = BH over the repeated words only, as score_exact_motifs does; "
-             "`observed` = over every word seen; `possible` = over all 64^k words of each length.\n")
+             "`observed` = over every word seen; `possible` = over all 64^k words of the lengths 2 to 6 taken together; "
+             "`bylength` = within each length k over that length's 64^k words (the family implemented for new alphabets).\n")
     rows = []
-    for fam in ("candidates", "observed", "possible"):
+    for fam in ("candidates", "observed", "possible", "bylength"):
         for bg in ("order0_flat_pc1", "hybrid_s64", "order1_flat_pc1", "oracle"):
             rows.append([fam, bg] + [f(FP(k, N, bg, fam), 2) for k, N in cols])
     L.append(table(["family", "background"] + [f"{k}{N}" for k, N in cols], rows))
@@ -66,10 +67,16 @@ def main():
     # ---- codon: power ----------------------------------------------------------------
     pw = rd("scoring_power.csv")
 
-    def P(N, Lp, r, bg):
+    def P(N, Lp, r, bg, fam="possible"):
         return [x for x in pw if int(x["N"]) == N and int(x["phrase_codons"]) == Lp and int(x["copies"]) == r
-                and x["background"] == bg and x["family"] == "possible"][0]["recall"]
-    L.append("## Codons: recall of a planted phrase (family = possible)\n")
+                and x["background"] == bg and x["family"] == fam][0]["recall"]
+    L.append("## Codons: recall of a planted phrase\n")
+    L.append("Families `possible` (lengths taken together) and `bylength` (within each length), flat order 0 background.\n")
+    cells0 = [(3, 4), (4, 3), (4, 4), (6, 2), (6, 3)]
+    L.append(table(["N", "family"] + [f"{a}/{b}" for a, b in cells0],
+                   [[N, fam] + [f(P(N, Lp, r, "order0_flat_pc1", fam), 2) for Lp, r in cells0]
+                    for N in (100, 300, 1500) for fam in ("possible", "bylength")]))
+    L.append("All backgrounds, family = possible:\n")
     L.append("Phrase length in codons / number of copies.\n")
     cells = [(3, 4), (4, 3), (4, 4), (6, 2), (6, 3)]
     rows = []
@@ -107,6 +114,13 @@ def main():
             for N in Ns:
                 rows.append([m, N] + [f"{sum(G(c, m, N, o, col) for c in corp) / 4:.2f} ({max(G(c, m, N, o, col) for c in corp):.2f})" for o in (0, 1, 2, 3)])
         L.append(table(["true order", "N letters", "order 0", "order 1", "order 2", "order 3"], rows))
+    L.append("## Letters: strict false-positive rate at order 1, correction within each word length\n")
+    rows = []
+    for m in (0, 1, 2):
+        for N in Ns:
+            rows.append([m, N, f"{sum(G(c, m, N, 1, 'fp_strict_bylength') for c in corp) / 4:.3f}",
+                         f"{max(G(c, m, N, 1, 'fp_strict_bylength') for c in corp):.3f}"])
+    L.append(table(["true order", "N letters", "mean over corpora", "worst corpus"], rows))
     L.append("## Letters: KL per 3-letter word (mean over corpora)\n")
     L.append("Order 3 equals order 0 on 3-letter words by construction (as in MarkovBackground, the first `order` symbols of a word use the marginal).\n")
     rows = []

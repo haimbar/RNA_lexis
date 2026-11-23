@@ -213,7 +213,13 @@ def score(units, K, model, tab=None):
         pos += len(c)
     q = H.bh_vec(p, m=float(sum(K ** k for k in KS)))
     rep = cnt >= 2
-    return {"strict": rep & (q <= 0.05) & (en >= 10.0), "loose": rep & (q <= 0.5) & (en >= 3.0)}, tab
+    qk = np.empty(len(cnt))
+    pos = 0
+    for k, W, c in tab:                     # corrected within each word length over that length's K**k words
+        qk[pos:pos + len(c)] = H.bh_vec(p[pos:pos + len(c)], m=float(K ** k))
+        pos += len(c)
+    return {"strict": rep & (q <= 0.05) & (en >= 10.0), "loose": rep & (q <= 0.5) & (en >= 3.0),
+            "strict_bylength": rep & (qk <= 0.05) & (en >= 10.0), "loose_bylength": rep & (qk <= 0.5) & (en >= 3.0)}, tab
 
 
 def chosen_order(K, N, c=5):
@@ -263,6 +269,7 @@ def null_task(args):
                 u2 += (d < -np.log(2)).sum()
                 nn += ok.sum()
         out[r] = {"strict": int(res["strict"].sum()), "loose": int(res["loose"].sum()),
+                  "strict_bl": int(res["strict_bylength"].sum()), "loose_bl": int(res["loose_bylength"].sum()),
                   "kl": kl, "t5": t5, "lr": lr, "u2": u2, "n": nn}
     return ("null", (name, m, N), out)
 
@@ -344,6 +351,8 @@ def summarize(results, a):
                 c["n"] += 1
                 c["strict"] += d["strict"] > 0
                 c["loose"] += d["loose"] > 0
+                c["strict_bl"] += d["strict_bl"] > 0
+                c["loose_bl"] += d["loose_bl"] > 0
                 c["kl"] += d["kl"]
                 c["t5"] += d["t5"]
                 c["lr"] += d["lr"]
@@ -351,12 +360,12 @@ def summarize(results, a):
                 c["nn"] += d["n"]
     with open(out / f"{tag}letters_null.csv", "w", newline="", encoding="utf-8") as fh:
         w = csv.writer(fh)
-        w.writerow(["corpus", "true_order", "N", "background_order", "texts", "fp_strict", "fp_loose", "kl_per_word",
+        w.writerow(["corpus", "true_order", "N", "background_order", "texts", "fp_strict", "fp_loose", "fp_strict_bylength", "fp_loose_bylength", "kl_per_word",
                     "mass_underestimated_5x", "repeated_mean_log_ratio", "repeated_frac_underestimated_2x"])
         for (name, m, N, o), c in sorted(agg.items()):
             nn = max(c["nn"], 1)
             w.writerow([name, m, N, o, int(c["n"]), round(c["strict"] / c["n"], 4), round(c["loose"] / c["n"], 4),
-                        round(c["kl"] / c["n"], 4), round(c["t5"] / c["n"], 4), round(c["lr"] / nn, 4), round(c["u2"] / nn, 4)])
+                        round(c["strict_bl"] / c["n"], 4), round(c["loose_bl"] / c["n"], 4), round(c["kl"] / c["n"], 4), round(c["t5"] / c["n"], 4), round(c["lr"] / nn, 4), round(c["u2"] / nn, 4)])
     pw = defaultdict(lambda: defaultdict(float))
     for r in results:
         if r[0] == "power":

@@ -59,9 +59,13 @@ defined on them.
 `score_exact_motifs` runs Benjamini-Hochberg over the candidate list it is given, and that list is already
 selected for being repeated. On codon null text this flags chance repeats in 84-100% of texts for the order-0
 backgrounds, **even when the true generating model is the background** (SUMMARY, "false positives per null text, by family").
-Counting every word seen at least once does not fix it. Correcting over all 64^k possible words does:
-the false-positive rate is 0.00 for every sound background. The same correction is what makes each
-background's error visible, so it is the family to use for codons and letters.
+Counting every word seen at least once does not fix it. Correcting over the possible words does.
+Two versions were run. Over the lengths 2 to 6 taken together (`possible`) the false-positive rate is 0.00
+for every sound background, but the total is dominated by the longest length (64^6 words) and short words
+are almost never called: a 4-codon phrase with 3 copies is recovered in 39% of texts at 100 codons.
+**Correcting within each word length k, over that length's K^k possible words (`bylength`),** has a false-positive
+rate of at most 2.5% per null text even with the true model as the background (under the nominal 5%), and
+recovers the same phrase in 99%. That is the family to use for codons and letters, and the one implemented.
 
 For the existing nucleotide pipeline the discovery step hides most of this when it is strict.
 `nucleotide_cli_check.py` runs the CLI's own two calls (`_discover_xmotifs`, `rank_core_candidates`) on iid

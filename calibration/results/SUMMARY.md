@@ -46,7 +46,7 @@ Fraction of those words whose expected count is at least 2x too small:
 
 ## Codons: false positives per null text, by multiple-testing family
 
-Strict rule (q <= 0.05, enrichment >= 10). `candidates` = BH over the repeated words only, as score_exact_motifs does; `observed` = over every word seen; `possible` = over all 64^k words of each length.
+Strict rule (q <= 0.05, enrichment >= 10). `candidates` = BH over the repeated words only, as score_exact_motifs does; `observed` = over every word seen; `possible` = over all 64^k words of the lengths 2 to 6 taken together; `bylength` = within each length k over that length's 64^k words (the family implemented for new alphabets).
 
 | family | background | A100 | A300 | A1500 | B100 | B300 | B1500 |
 |---|---|---|---|---|---|---|---|
@@ -62,8 +62,25 @@ Strict rule (q <= 0.05, enrichment >= 10). `candidates` = BH over the repeated w
 | possible | hybrid_s64 | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 |
 | possible | order1_flat_pc1 | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 |
 | possible | oracle | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 |
+| bylength | order0_flat_pc1 | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 | 0.02 |
+| bylength | hybrid_s64 | 0.00 | 0.01 | 0.01 | 0.00 | 0.00 | 0.02 |
+| bylength | order1_flat_pc1 | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 |
+| bylength | oracle | 0.02 | 0.01 | 0.02 | 0.01 | 0.01 | 0.03 |
 
-## Codons: recall of a planted phrase (family = possible)
+## Codons: recall of a planted phrase
+
+Families `possible` (lengths taken together) and `bylength` (within each length), flat order 0 background.
+
+| N | family | 3/4 | 4/3 | 4/4 | 6/2 | 6/3 |
+|---|---|---|---|---|---|---|
+| 100 | possible | 0.00 | 0.39 | 0.97 | 0.97 | 1.00 |
+| 100 | bylength | 0.98 | 0.99 | 1.00 | 0.97 | 1.00 |
+| 300 | possible | 0.02 | 0.35 | 0.93 | 0.94 | 1.00 |
+| 300 | bylength | 0.93 | 0.97 | 0.99 | 0.94 | 1.00 |
+| 1500 | possible | 0.01 | 0.16 | 0.84 | 0.80 | 1.00 |
+| 1500 | bylength | 0.77 | 0.90 | 0.97 | 0.80 | 1.00 |
+
+All backgrounds, family = possible:
 
 Phrase length in codons / number of copies.
 
@@ -121,6 +138,26 @@ True order = order of the Markov chain the null text is drawn from. Background o
 | 2 | 8000 | 1.00 (1.00) | 0.78 (1.00) | 0.37 (1.00) | 1.00 (1.00) |
 | 2 | 20000 | 1.00 (1.00) | 1.00 (1.00) | 0.37 (0.97) | 1.00 (1.00) |
 | 2 | 50000 | 1.00 (1.00) | 1.00 (1.00) | 0.41 (0.91) | 1.00 (1.00) |
+
+## Letters: strict false-positive rate at order 1, correction within each word length
+
+| true order | N letters | mean over corpora | worst corpus |
+|---|---|---|---|
+| 0 | 1000 | 0.000 | 0.000 |
+| 0 | 3000 | 0.002 | 0.008 |
+| 0 | 8000 | 0.002 | 0.008 |
+| 0 | 20000 | 0.010 | 0.017 |
+| 0 | 50000 | 0.004 | 0.008 |
+| 1 | 1000 | 0.002 | 0.008 |
+| 1 | 3000 | 0.000 | 0.000 |
+| 1 | 8000 | 0.002 | 0.008 |
+| 1 | 20000 | 0.010 | 0.017 |
+| 1 | 50000 | 0.004 | 0.008 |
+| 2 | 1000 | 0.271 | 0.750 |
+| 2 | 3000 | 0.760 | 1.000 |
+| 2 | 8000 | 0.996 | 1.000 |
+| 2 | 20000 | 1.000 | 1.000 |
+| 2 | 50000 | 1.000 | 1.000 |
 
 ## Letters: KL per 3-letter word (mean over corpora)
 

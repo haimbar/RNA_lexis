@@ -325,7 +325,7 @@ def bh_vec(p, m=None):
     return out
 
 
-FAMILIES = ("candidates", "observed", "possible", "possible_loose")
+FAMILIES = ("candidates", "observed", "possible", "possible_loose", "bylength", "bylength_loose")
 
 
 def scoring_stage(units, model, alpha=0.05, enrichment=10.0, min_count=2, ks=KS):
@@ -366,6 +366,14 @@ def scoring_stage(units, model, alpha=0.05, enrichment=10.0, min_count=2, ks=KS)
     res["possible"] = rep & (q <= alpha) & (enrich >= enrichment)
     # a looser operating point, where a biased background shows up as false positives
     res["possible_loose"] = rep & (q <= 0.5) & (enrich >= 3.0)
+    # corrected within each word length over that length's 64**k possible words
+    qk = np.empty(len(cnt))
+    pos = 0
+    for k, W, c in tab:
+        qk[pos:pos + len(c)] = bh_vec(p[pos:pos + len(c)], m=float(NCOD ** k))
+        pos += len(c)
+    res["bylength"] = rep & (qk <= alpha) & (enrich >= enrichment)
+    res["bylength_loose"] = rep & (qk <= 0.5) & (enrich >= 3.0)
     words = [(k, W, c) for k, W, c in tab]
     return res, ks_, cnt, words
 

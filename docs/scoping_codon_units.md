@@ -154,14 +154,16 @@ pattern wildcards. Raw symbols reappear only on output, escaped as needed.
   - Nucleotide mode keeps order 1 as the default, so existing results do
     not change.
 - **Multiple-testing family: every possible word of each length.** The
-  Benjamini-Hochberg correction must run over all K^k words of each tested
-  length k (the sum over the lengths tested), not over the repeated words
-  only. `score_exact_motifs` corrects over the candidate list it is given,
+  Benjamini-Hochberg correction runs within each tested length k over that
+  length's K^k possible words, not over the repeated words only. (Taking
+  all lengths together as one family was also measured; it is dominated by
+  the longest length and loses nearly all power on short words, so the
+  per-length family is the one used.) `score_exact_motifs` corrects over the candidate list it is given,
   and that list is already selected for being repeated; on codon null text
   that flags chance repeats in 84 to 100% of texts even with the true model
   as the background. Counting every word seen at least once does not fix
-  it. The correction over all K^k words gives 0.00 false positives for
-  every sound background. Nucleotide mode is left as it is (section 9,
+  it. The per-length correction over all K^k words gives at most 2.5% false
+  positives per null text, even with the true model as the background. Nucleotide mode is left as it is (section 9,
   question 9); the new family applies to the new alphabets.
 - `hamming_variants` and `_variant_count` take the declared alphabet, and
   the `max_variants` guard needs a unit-level default.
