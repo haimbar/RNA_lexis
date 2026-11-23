@@ -1,3 +1,7 @@
+import itertools
+import math
+import random
+import re
 import unittest
 
 import numpy as np
@@ -23,6 +27,7 @@ from rna_lexis.algorithms import (
     homopolymer_indicator,
     hop_distance,
     is_bounded,
+    mark_case,
     markov_kmer_pvalues,
     sliding_coverage_fraction,
     zscore,
@@ -405,3 +410,82 @@ class HairpinEquivalenceTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def _legacy_allow_mutation(s0, n=1):
+    """The pre-refactor implementation, which marked mutation positions by
+    upper-casing them.  Kept here as the reference the explicit version must
+    agree with on lower-case letters."""
+    s0 = s0.lower()
+    if len(s0) <= 6:
+        return s0
+    if n > len(s0) / 6:
+        n = math.floor(len(s0) / 6)
+    out = []
+    for comb in itertools.combinations(range(len(s0)), n):
+        stmp = s0
+        for k in comb:
+            stmp = stmp[:k] + stmp[k].upper() + stmp[k + 1:]
+        for j in range(len(stmp) - 1, -1, -1):
+            x = stmp[j]
+            if x.upper() == x:
+                x = f"[^{stmp[j].lower()}]"
+            stmp = stmp[:j] + x + stmp[j + 1:]
+        out.append(stmp)
+    return "|".join(out)
+
+
+class AllowMutationMarkerTests(unittest.TestCase):
+    """allow_mutation() must not depend on letter case."""
+
+    def test_matches_the_case_based_version_on_lower_case_letters(self):
+        rnd = random.Random(3)
+        for _ in range(40):
+            s0 = "".join(rnd.choice("acgtu") for _ in range(rnd.randint(1, 20)))
+            for n in (0, 1, 2):
+                self.assertEqual(allow_mutation(s0, n=n),
+                                 _legacy_allow_mutation(s0, n=n), (s0, n))
+
+    def test_non_letters_are_copied_literally_not_mutated(self):
+        # The case-based version turned every non-letter (here "_") into
+        # "[^_]" even when no mutation was requested.
+        self.assertEqual(allow_mutation("acg_tacg", n=0), "acg_tacg")
+        pattern = allow_mutation("acg_tacgtacg", n=1)
+        self.assertIn("[^a]cg_tacgtacg", pattern)
+        self.assertIn("acg[^_]tacgtacg", pattern)
+        self.assertEqual(pattern.count("|"), len("acg_tacgtacg") - 1)
+
+    def test_regex_special_symbols_are_escaped(self):
+        s0 = "a.c*t?g[a]c"
+        pattern = allow_mutation(s0, n=1)
+        self.assertIsNone(re.fullmatch(pattern, s0))                  # the query itself
+        self.assertTrue(re.fullmatch(pattern, "axc*t?g[a]c"))         # "." substituted
+        self.assertTrue(re.fullmatch(pattern, "a.c*t?g[a]x"))         # last char substituted
+        # Two substitutions are not allowed.  If "." or "*" were not escaped
+        # they would act as a wildcard / quantifier and this would match.
+        self.assertIsNone(re.fullmatch(pattern, "axcxt?g[a]c"))
+
+    def test_works_for_symbols_with_no_case(self):
+        # Private-use code points have no upper/lower case, as would be the
+        # case for an internal one-character-per-unit alphabet.
+        a, b, c = "\ue000", "\ue001", "\ue002"
+        s0 = a + b + c + a + b + c + a
+        pattern = allow_mutation(s0, n=1)
+        self.assertIsNone(re.fullmatch(pattern, s0))                  # the query itself
+        self.assertTrue(re.fullmatch(pattern, s0[:2] + a + s0[3:]))   # one substitution
+        self.assertIsNone(re.fullmatch(pattern, s0[:2] + a + b + s0[4:]))  # two
+
+
+class MarkCaseTests(unittest.TestCase):
+    def test_marks_masked_positions(self):
+        self.assertEqual(mark_case("gattaca", [0, 0, 0, 1, 0, 0, 1]), "gatTacA")
+
+    def test_scalar_mask_applies_to_every_character(self):
+        self.assertEqual(mark_case("acg", True), "ACG")
+        self.assertEqual(mark_case("acg", False), "acg")
+
+    def test_unmasked_text_is_unchanged(self):
+        self.assertEqual(mark_case("acgt", [False] * 4), "acgt")
+
+    def test_caseless_symbols_pass_through(self):
+        self.assertEqual(mark_case("\ue000\ue001", [True, True]), "\ue000\ue001")

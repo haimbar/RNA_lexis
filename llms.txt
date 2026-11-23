@@ -301,7 +301,16 @@ exact_pos, approx, maxmut = find_with_mutations(seq, txt)
 ### `allow_mutation(s0, n=1) -> str`
 
 Build a regex matching `s0` with up to `n` substitutions. The number of mutations
-is capped at `floor(len(s0)/6)`.
+is capped at `floor(len(s0)/6)`. Only the substituted positions become `[^x]`
+groups; every other character is copied literally (escaped with `re.escape`).
+Nothing depends on letter case.
+
+### `mark_case(text, mask) -> str`
+
+Display helper: upper-case the characters of `text` where `mask` is true
+(`mask` is a bool, or one bool per character). Used for the on-screen
+convention "upper case means this position differs from the reference"; never
+read back by any computation.
 
 ### `extend_match_pair(s, txt, pos1, pos2, mutr=1/6) -> tuple`
 

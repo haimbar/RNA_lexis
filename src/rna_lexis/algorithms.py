@@ -653,11 +653,33 @@ def _expand_right(wd, txt, positions):
     return wd, positions
 
 
-def add_mut(s0, idx):
-    """Upper-case the character at position idx in s0 to mark it as a mutation site.
+def mark_case(text, mask):
+    """Upper-case the characters of text where mask is true (display only).
 
-    Used internally by allow_mutation() to flag positions that will later be
-    converted to ``[^x]`` wildcard groups in a regex.
+    This is the one place that implements the on-screen convention "upper
+    case means this position differs from the reference".  It is for output
+    shown to people and is never read back: no computation may depend on the
+    case of a string (see allow_mutation()).
+
+    Args:
+        text: String to mark.
+        mask: Either a bool (applied to every character) or a sequence of
+              bools, one per character of text.
+
+    Returns:
+        text with the masked characters upper-cased.
+    """
+    if isinstance(mask, bool):
+        return text.upper() if mask else text
+    return ''.join(c.upper() if m else c for c, m in zip(text, mask))
+
+
+def add_mut(s0, idx):
+    """Upper-case the character at position idx in s0.
+
+    Kept for backward compatibility only: allow_mutation() no longer uses it
+    (it marks mutation positions explicitly, not by letter case).  Not
+    meaningful for alphabets whose symbols have no upper-case form.
 
     Args:
         s0:  Input string (lower-case).
@@ -666,8 +688,6 @@ def add_mut(s0, idx):
     Returns:
         Copy of s0 with s0[idx] replaced by its upper-case equivalent.
     """
-#    if not (0 <= idx < len(s0)):
-#        raise ValueError("Invalid start or end index for string replacement.")
     return s0[:idx] + s0[idx].upper() + s0[idx+1:]
 
 
@@ -678,6 +698,11 @@ def allow_mutation(s0, n=1):
     chosen position is replaced by ``[^x]`` (any character except the original),
     and all resulting patterns are joined with ``|``.  The number of mutations is
     capped at floor(len(s0)/6).  Strings of length <= 6 are returned unchanged.
+
+    Only the chosen positions are turned into ``[^x]`` groups; every other
+    character is copied literally, whatever it is.  Characters are escaped
+    with re.escape(), so symbols with a meaning in a regular expression are
+    safe.  Nothing depends on letter case, so this works for any alphabet.
 
     Args:
         s0: Query string (lower-case).
@@ -692,18 +717,14 @@ def allow_mutation(s0, n=1):
         return(s0)
     if n > len(s0)/6:
         n = math.floor(len(s0)/6)
+    literal = [re.escape(c) for c in s0]
     s1 = []
-    combs = list(itertools.combinations(range(len(s0)), n))
-    for comb in combs:
-        stmp = s0
-        for k in range(len(comb)):
-            stmp = add_mut(stmp, comb[k])
-        for j in range(len(stmp)-1, -1, -1):
-            x = stmp[j]
-            if x.upper() == x:
-                x = f'[^{stmp[j].lower()}]'
-            stmp = stmp[:j] + x + stmp[j+1:]
-        s1.append(stmp)
+    for comb in itertools.combinations(range(len(s0)), n):
+        chosen = set(comb)
+        s1.append(''.join(
+            f'[^{literal[j]}]' if j in chosen else literal[j]
+            for j in range(len(s0))
+        ))
     return('|'.join(s1))
 
 

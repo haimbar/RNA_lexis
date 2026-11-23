@@ -16,7 +16,7 @@ import plotly.graph_objs as go
 from collections import Counter, defaultdict
 
 from rna_lexis.algorithms import (
-    cond_prob_core, core_nbrs, allow_mutation, find_all_matches,
+    cond_prob_core, core_nbrs, allow_mutation, find_all_matches, mark_case,
     zscore, contains_only_rna, hop_distance,
 )
 from rna_lexis.io import open_file_with_default_software, open_pdf
@@ -199,10 +199,8 @@ def plot_seq_nbrs(s0, s, txt, sortby='CP', wd=20, title='', file='',
 
     # mutations — one shape+trace per occurrence, display string computed once per mutation
     for j, mut in enumerate(arrmut):
-        display = ''.join(
-            c.upper() if (idx < lc and c != s0[idx]) else c
-            for idx, c in enumerate(mut)
-        )
+        display = mark_case(
+            mut, [idx < lc and c != s0[idx] for idx, c in enumerate(mut)])
         arr = [p for p in mut_positions[mut] if plotxrange[0] <= p < plotxrange[1]]
         for p in arr:
             mrk, sz, colm = 'square', 6, 'blue'
@@ -491,10 +489,8 @@ def plot_nbrs_condensed(s0, s, txt, sortby='CP', wd=20, title='', file='',
         a_fill_mut   = f'{alpha_mut:.3f}'
         a_border_mut = f'{min(1.0, alpha_mut * 2):.3f}'
         for mut in arrmut:
-            display = ''.join(
-                c.upper() if (i < lc and c != s0[i]) else c
-                for i, c in enumerate(mut)
-            )
+            display = mark_case(
+                mut, [i < lc and c != s0[i] for i, c in enumerate(mut)])
             occ = [p for p in mut_positions[mut] if plotxrange[0] <= p < plotxrange[1]]
             for p in occ:
                 shapes.append(dict(type='rect', x0=p, x1=p + len(mut),
@@ -1086,7 +1082,7 @@ def plot_sequence_hits(seq_data, txt_len, title='', file='', scale=1,
                 marker=dict(size=max(6, L // 2), color=line_col, opacity=0),
                 customdata=[
                     ''.join(
-                        f'<span style="color:red"><b>{mc.upper()}</b></span>'
+                        f'<span style="color:red"><b>{mark_case(mc, True)}</b></span>'
                         if mc != sc else mc
                         for sc, mc in zip(seq, matched)
                     ) + f'<br>pos={pos}  dist={dist}'
@@ -1191,7 +1187,7 @@ def plot_sequence_hits_detailed(seq_data, txt, start, end, title='', file=''):
                 if 0 <= abs_k < n:
                     bg[abs_k].add(i)
                     if seq[k] != matched[k]:
-                        chars[abs_k] = matched[k].upper()
+                        chars[abs_k] = mark_case(matched[k], True)
                         is_mut[abs_k] = True
 
     # Build rows of LINE characters each, prefixed with the genomic position

@@ -1,5 +1,35 @@
 # Changelog
 
+## [Unreleased]
+
+### Changed
+
+- **Mutation positions are no longer marked by letter case.**
+  `allow_mutation` used to upper-case the chosen positions and then turn every
+  upper-case character into a `[^x]` group; it now builds each variant from
+  the chosen positions directly. For lower-case letters the regexes are
+  identical to before. This removes the dependence on case that would have
+  broken any alphabet with more than 26 symbols or symbols with no case.
+  Characters are now escaped with `re.escape`, so symbols that mean something
+  in a regular expression are safe.
+- New `algorithms.mark_case(text, mask)`: the single place that implements the
+  on-screen convention "upper case means this position differs from the
+  reference". The plot labels, the HTML detail view and the terminal output
+  (approximate matches, motif extensions) all go through it. Output is
+  unchanged. `add_mut` is kept for backward compatibility but is no longer used
+  internally.
+
+### Fixed
+
+- **`allow_mutation` no longer turns non-letters into mutation slots.** Any
+  character that is its own upper-case form, such as the `_` that separates
+  bouts or segments, became `[^_]` even when no mutation was requested, so a
+  query containing `_` could never match a literal `_`. Only the chosen
+  positions are now substituted.
+- New tests: the explicit version agrees with the old case-based one on
+  lower-case letters; non-letters are copied literally; regex-special symbols
+  are escaped; symbols with no case work; `mark_case`.
+
 ## [0.2.7] - 2026-11-22
 
 ### Fixed
