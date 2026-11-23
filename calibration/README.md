@@ -128,13 +128,47 @@ in at most 0.7% of codon null texts for xmotif minimum length 2 to 4, N = 100 to
 rate there is essentially zero for any background. The discovery parameters were not calibrated beyond
 this; that needs planted *families* (a core with variable extensions), which exact repeats do not make.
 
+### 6. Discovery settings per alphabet (phase 5)
+
+`run_pipeline_defaults.py` runs the whole CLI pipeline (`find_boundary`, then `rank_core_candidates` with
+`min_xmotif_type_support=2`) on null texts and on planted core families, for codons, Latin letters and amino
+acids, over a grid of (shortest xmotif, shortest core candidate, fewest occurrences). Planted families are a core
+of 3 to 8 units with 4 or 6 copies, each followed by one of two different 2-unit extensions (the pipeline needs two
+distinct xmotifs that share a core). Results (full table in `results/SUMMARY.md`):
+
+* **False positives are zero in every setting, alphabet and null model** (80 texts per cell, per length). They do not
+  limit the choice. This is the pipeline's strictness: two distinct repeated words that share a core, scored against
+  all `K**L` possible words, essentially never arise by chance in these nulls.
+* **Recall is what the settings change**, and it falls in two ways. A minimum core length above the planted core, or a
+  minimum xmotif length above the core plus its extension, cannot find the family. And **a minimum of 3 occurrences
+  halves recall**: a family with 4 copies split between two extensions has only 2 copies of each xmotif.
+* **The defaults** follow from that. The shortest core candidate is the shortest core one wants to find, the shortest
+  xmotif is that plus 2, and the minimum count stays at 2: **codon and amino acid 5, 3, 2; Latin letters 6, 4, 2**
+  (shortest xmotif, shortest core, fewest occurrences). Settings above these lose recall; settings below them recover
+  at most about 1% more here (0.981 against 0.974 for codons) and would mostly add short repeats in real text. Any alphabet without calibrated values gets 5, 3, 3, 2
+  if it has more than 8 symbols and the nucleotide values otherwise.
+* **Caveat.** The null texts have no real repeats. Real text has many, and the pipeline reports them (that is its
+  purpose), so zero false positives here does not mean few supported cores in a real document.
+
+### 7. The order rule, beyond the first calibration
+
+`run_order_rule_checks.py` closes two gaps (table in `results/SUMMARY.md`).
+
+* **Codon text above 4,096 codons**, where the rule switches to order 1. On text with amino-acid structure, order 0
+  starts to under-estimate (bias -0.05 to -0.07, and 5% of texts had a supported word at 8,000 codons), while order 1
+  is conservative (positive bias, no false positives) and its bias shrinks as the text grows. The rule holds.
+* **Amino acids** (K = 21, switch at 441 residues). Both orders are calibrated: order 0 is unbiased on independent
+  residues and within 2% on a residue Markov chain, and order 1 is slightly conservative. Following the rule never
+  costs safety, only a little power.
+
 ## What was not tested
 
-* Codon text longer than 1,500 codons, and real coding sequence as a null (real genes contain real
-  repeats; on the 177 genes, 9% have a word called significant at order 0, 3% at order 1).
+* Real coding sequence as a null (real genes contain real repeats; on the 177 genes, 9% have a word
+  called significant at order 0, 3% at order 1).
 * Smoother estimators for order 2 and above on letters (for example shrinking each context toward the next
   lower order). The flat-pseudocount order 2 is not recommended; an interpolated one might be.
-* The full discovery pipeline on planted families, and mutation-tolerant (Hamming) families.
+* Mutation-tolerant (Hamming) families through the full pipeline, and planted families with more than two
+  distinct extensions or with mutated copies.
 * Languages with spaces or punctuation as symbols, and amino-acid alphabets.
 
 ## Data and provenance
@@ -162,6 +196,8 @@ python3 calibration/harness.py                         # self-check against the 
 python3 calibration/run_codon_background.py            # about 45 s
 RNA_LEXIS_TEXTS=/path/to/texts python3 calibration/run_letters_background.py --reps 120 --power-reps 60   # about 3 min
 python3 calibration/nucleotide_cli_check.py            # about 1 min
+python3 calibration/run_pipeline_defaults.py           # about 35 s; needs the texts folder
+python3 calibration/run_order_rule_checks.py           # a few seconds
 python3 calibration/summarize.py
 ```
 

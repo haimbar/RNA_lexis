@@ -204,3 +204,109 @@ Order 3 equals order 0 on 3-letter words by construction (as in MarkovBackground
 | homer | 943 | 261 | 128 | 231 |
 | genesis | 1521 | 749 | 504 | 921 |
 | constitution | 6522 | 3316 | 1827 | 2741 |
+
+## Discovery settings per alphabet (run_pipeline_defaults.py)
+
+The whole CLI pipeline (xmotifs, shared substrings, scoring) on null texts and on planted core families. `FP` = share of null texts with at least one statistically supported core (worst over all null models and lengths); `recall` = share of planted cores recovered (mean over core lengths, copies, text lengths and null models). Settings are (shortest xmotif, shortest core candidate, fewest occurrences).
+
+| alphabet | setting | FP (worst) | recall (mean) |
+|---|---|---|---|
+| codon | 3, 2, 2 | 0.000 | 0.981 |
+| codon | 3, 2, 3 | 0.000 | 0.491 |
+| codon | 3, 3, 2 | 0.000 | 0.981 |
+| codon | 3, 3, 3 | 0.000 | 0.491 |
+| codon | 4, 3, 2 | 0.000 | 0.980 |
+| codon | 4, 3, 3 | 0.000 | 0.491 |
+| codon | 4, 4, 2 | 0.000 | 0.661 |
+| codon | 4, 4, 3 | 0.000 | 0.328 |
+| codon | 5, 3, 2 | 0.000 | 0.974 |
+| codon | 5, 3, 3 | 0.000 | 0.491 |
+| codon | 5, 4, 2 | 0.000 | 0.656 |
+| codon | 5, 4, 3 | 0.000 | 0.328 |
+| codon | 5, 5, 2 | 0.000 | 0.335 |
+| codon | 5, 5, 3 | 0.000 | 0.162 |
+| codon | 6, 4, 2 | 0.000 | 0.653 |
+| codon | 6, 4, 3 | 0.000 | 0.328 |
+| codon | 6, 5, 2 | 0.000 | 0.333 |
+| codon | 6, 5, 3 | 0.000 | 0.162 |
+| codon | 6, 6, 2 | 0.000 | 0.333 |
+| codon | 6, 6, 3 | 0.000 | 0.162 |
+| amino acid | 3, 2, 2 | 0.000 | 0.797 |
+| amino acid | 3, 2, 3 | 0.000 | 0.420 |
+| amino acid | 3, 3, 2 | 0.000 | 0.797 |
+| amino acid | 3, 3, 3 | 0.000 | 0.420 |
+| amino acid | 4, 3, 2 | 0.000 | 0.797 |
+| amino acid | 4, 3, 3 | 0.000 | 0.420 |
+| amino acid | 4, 4, 2 | 0.000 | 0.611 |
+| amino acid | 4, 4, 3 | 0.000 | 0.315 |
+| amino acid | 5, 3, 2 | 0.000 | 0.793 |
+| amino acid | 5, 3, 3 | 0.000 | 0.420 |
+| amino acid | 5, 4, 2 | 0.000 | 0.607 |
+| amino acid | 5, 4, 3 | 0.000 | 0.315 |
+| amino acid | 5, 5, 2 | 0.000 | 0.332 |
+| amino acid | 5, 5, 3 | 0.000 | 0.160 |
+| amino acid | 6, 4, 2 | 0.000 | 0.603 |
+| amino acid | 6, 4, 3 | 0.000 | 0.315 |
+| amino acid | 6, 5, 2 | 0.000 | 0.328 |
+| amino acid | 6, 5, 3 | 0.000 | 0.160 |
+| amino acid | 6, 6, 2 | 0.000 | 0.328 |
+| amino acid | 6, 6, 3 | 0.000 | 0.160 |
+| Latin letters | 3, 2, 2 | 0.000 | 0.921 |
+| Latin letters | 3, 2, 3 | 0.000 | 0.467 |
+| Latin letters | 3, 3, 2 | 0.000 | 0.921 |
+| Latin letters | 3, 3, 3 | 0.000 | 0.467 |
+| Latin letters | 4, 3, 2 | 0.000 | 0.921 |
+| Latin letters | 4, 3, 3 | 0.000 | 0.467 |
+| Latin letters | 4, 4, 2 | 0.000 | 0.919 |
+| Latin letters | 4, 4, 3 | 0.000 | 0.467 |
+| Latin letters | 5, 3, 2 | 0.000 | 0.921 |
+| Latin letters | 5, 3, 3 | 0.000 | 0.467 |
+| Latin letters | 5, 4, 2 | 0.000 | 0.919 |
+| Latin letters | 5, 4, 3 | 0.000 | 0.467 |
+| Latin letters | 5, 5, 2 | 0.000 | 0.653 |
+| Latin letters | 5, 5, 3 | 0.000 | 0.310 |
+| Latin letters | 6, 4, 2 | 0.000 | 0.915 |
+| Latin letters | 6, 4, 3 | 0.000 | 0.467 |
+| Latin letters | 6, 5, 2 | 0.000 | 0.649 |
+| Latin letters | 6, 5, 3 | 0.000 | 0.310 |
+| Latin letters | 6, 6, 2 | 0.000 | 0.649 |
+| Latin letters | 6, 6, 3 | 0.000 | 0.310 |
+
+## Order rule, beyond the first calibration (run_order_rule_checks.py)
+
+Codon text from 4,000 to 20,000 codons (the rule switches to order 1 at 4,096) and amino acids (K = 21, switch at 441 residues). Bias = mean log(expected / true expected) on the words seen at least twice (negative = anti-conservative); FP = share of null texts with a supported word.
+
+| null | N | order | bias | frac under-estimated 2x | FP |
+|---|---|---|---|---|---|
+| aminoA | 100 | 0 | 0.546 | 0.0 | 0.0 |
+| aminoA | 100 | 1 | 1.438 | 0.0 | 0.0 |
+| aminoA | 300 | 0 | 0.169 | 0.018 | 0.0 |
+| aminoA | 300 | 1 | 1.028 | 0.0 | 0.0 |
+| aminoA | 1000 | 0 | 0.052 | 0.002 | 0.0 |
+| aminoA | 1000 | 1 | 0.492 | 0.003 | 0.0 |
+| aminoA | 3000 | 0 | 0.017 | 0.0 | 0.025 |
+| aminoA | 3000 | 1 | 0.187 | 0.013 | 0.0 |
+| aminoA | 8000 | 0 | 0.005 | 0.0 | 0.025 |
+| aminoA | 8000 | 1 | 0.064 | 0.004 | 0.0 |
+| aminoB | 100 | 0 | 0.424 | 0.0 | 0.0 |
+| aminoB | 100 | 1 | 1.294 | 0.0 | 0.0 |
+| aminoB | 300 | 0 | 0.105 | 0.039 | 0.0 |
+| aminoB | 300 | 1 | 0.971 | 0.002 | 0.0 |
+| aminoB | 1000 | 0 | -0.021 | 0.019 | 0.0 |
+| aminoB | 1000 | 1 | 0.448 | 0.008 | 0.0 |
+| aminoB | 3000 | 0 | -0.049 | 0.015 | 0.0 |
+| aminoB | 3000 | 1 | 0.18 | 0.012 | 0.0 |
+| aminoB | 8000 | 0 | -0.041 | 0.009 | 0.0 |
+| aminoB | 8000 | 1 | 0.063 | 0.004 | 0.0 |
+| codonA | 4000 | 0 | 0.015 | 0.0 | 0.0 |
+| codonA | 4000 | 1 | 0.241 | 0.036 | 0.0 |
+| codonA | 8000 | 0 | 0.008 | 0.0 | 0.0 |
+| codonA | 8000 | 1 | 0.115 | 0.025 | 0.0 |
+| codonA | 20000 | 0 | 0.005 | 0.0 | 0.05 |
+| codonA | 20000 | 1 | 0.098 | 0.01 | 0.0 |
+| codonB | 4000 | 0 | -0.047 | 0.016 | 0.025 |
+| codonB | 4000 | 1 | 0.397 | 0.025 | 0.0 |
+| codonB | 8000 | 0 | -0.07 | 0.011 | 0.05 |
+| codonB | 8000 | 1 | 0.238 | 0.02 | 0.0 |
+| codonB | 20000 | 0 | -0.062 | 0.008 | 0.0 |
+| codonB | 20000 | 1 | 0.134 | 0.01 | 0.0 |

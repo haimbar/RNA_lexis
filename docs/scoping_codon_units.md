@@ -136,8 +136,9 @@ pattern wildcards. Raw symbols reappear only on output, escaped as needed.
     order 0; never above 1 by default. It matches every case tested:
     codons (K^2 = 4,096, N up to 1,500: order 0), letters (K^2 = 576 to
     676, N >= 1,000: order 1) and nucleotides (K^2 = 16: order 1, as
-    today). Codon text with N >= 4,096, where the rule would switch to
-    order 1, was not tested.
+    today). Codon text above 4,096 codons, where the rule switches to order 1,
+    and amino acids (K = 21, switch at 441 residues) were checked in phase 5 (see
+    "Phase 5 status"): the rule holds.
   - **Rejected alternatives,** each measured: shrinking the counts toward a
     nucleotide-by-codon-position model (no better than the flat
     pseudocount, and strong shrinkage is worse); estimating the background
@@ -337,16 +338,16 @@ codons, order 1 for letters, a flat pseudocount of 1, and a correction over
 all possible words. The simulation also checks its own scoring against the
 package's on nucleotide text.
 
+Done in phase 5: the discovery parameters were calibrated on planted core
+families for codons, Latin letters and amino acids, and the order rule was
+checked for codon text above 4,096 codons and for amino acids (section
+"Phase 5 status").
+
 Still open in this section:
 
-- **Discovery parameters** (`minlen`, `minclen`, the permitted mismatches)
-  were not calibrated. On codon null text the discovery step produced
-  candidates in at most 0.7% of texts for an xmotif minimum length of 2 to
-  4, so false positives from it are negligible, but the power of the full
-  pipeline needs planted *families* (a core with variable extensions), not
-  exact repeats.
-- Codon text longer than 1,500 codons, amino-acid alphabets, and smoother
-  estimators for letters at order 2 and above.
+- The permitted mismatches (Hamming families through the full pipeline), and
+  planted families with more than two extensions or with mutated copies.
+- Smoother estimators for letters at order 2 and above (wishlist item 8).
 
 ## 8. Testing
 
@@ -438,13 +439,12 @@ Each phase should be shippable and leave nucleotide behavior unchanged.
 3. Display decoding: plots, CSV columns and console output.
 4. Menu, batch CLI and documentation (`user_guide.md`, `README.md`,
    `llms.txt` cross-links kept intact).
-5. Finish the alphabet-aware defaults and calibration (discovery parameters
-   on planted families, codon text above 1,500 codons, amino-acid alphabets,
-   smoother estimators for letters at order 2 and above); the amino-acid
-   projection; and a unit-level view of the positions around a motif. That
-   last item is **not** a plain logo: for alphabets of about 20 or more symbols
-   a logo cannot be read, so the visualization needs choosing first (section 12,
-   item 4).
+5. The alphabet-aware defaults and calibration (discovery parameters on planted
+   families, codon text above 4,096 codons, amino-acid alphabets); the
+   amino-acid projection; and a unit-level view of the positions around a motif,
+   which is **not** a plain logo (for about 20 or more symbols a logo cannot be
+   read; section 12, item 4). Done; see "Phase 5 status". Smoother estimators
+   for letters at order 2 and above stay on the wishlist.
 6. Wishlist items (section 12), starting with the synonymous-codon test.
 
 ### Phase 1 status
@@ -549,17 +549,58 @@ and CLI calls behave exactly as before (23 menu outputs compared before and afte
   this is in the changelog.
 - **Typed queries are read like the text**, so codon motifs are typed as nucleotides; `.`
   stays a one-unit wildcard where the prompt allows it.
-- **Per-alphabet defaults are not wired in yet.** The Markov order and the multiple-testing
-  family follow the calibration, but the length defaults (minimum xmotif, core and candidate
-  lengths) are still the nucleotide ones; the user guide says so and gives codon starting
-  points that are not calibrated. Calibrating them, and letting an alphabet file carry its own
-  `defaults`, is the remaining phase 5 work.
+- **Per-alphabet length defaults** were not wired in at this point; phase 5 did it (see
+  "Phase 5 status").
 - **Mixed-up answers in a scripted run are not an error in the menu.** The menu has no
   automated terminal tests; the new tests replace `safe_input` with a script and check the
   handlers directly, including that nothing private-use reaches the console or a file.
 - **Not done:** the interactive "Change setting" prompts do not offer per-alphabet defaults,
   the ENST fetch still returns the full transcript (use a CDS file for codon work), and
   `plot_logo`, hairpins and GC content remain nucleotide-only.
+
+### Phase 5 status
+
+Phase 5 is implemented and tested (319 tests in all). Nucleotide behavior is unchanged: 23 menu
+outputs, 20 display outputs and 36 statistical outputs were compared before and after.
+
+- **Projection and amino acids.** `alphabet.Projection` is a general many-to-one map between
+  alphabets; `genetic_code` adds the standard code as a replaceable table, the amino-acid
+  alphabet (20 residues and stop) and `codon_to_amino_acid`. The menu offers "codons translated
+  to amino acids" and "amino acids (protein text)", and the CLI `--alphabet amino-acid` and
+  `--translate`. Translating makes synonymous codons one unit, so running the codon and the
+  amino-acid reading side by side shows whether the choice among synonymous codons matters (the
+  CLI test builds one peptide spelled with three different sets of synonymous codons: three
+  copies as amino acids, one each as codons). The same mechanism reads a methylated cytosine as a
+  cytosine, the first version of wishlist item 12; the pattern that matches either symbol is not
+  built.
+- **The unit profile replaces the logo for large alphabets** (wishlist item 4, from
+  `docs/TODO-unit-level-logo.txt`). I took the log-odds heatmap against the text's own
+  background, as the leaning in item 4 suggested, and made one change that the first rendering
+  forced: with a few occurrences nearly every cell was either a deep-blue "depleted" (a symbol
+  that never appears) or a scattered "enriched" (seen once), which are artifacts of tiny counts, so
+  a cell is colored only when a two-sided binomial test against the background gives p <= 0.01, and
+  the strongest enriched symbol of a column is ringed only if it survives a Bonferroni correction
+  over all cells. Codons are grouped by amino acid. Not built: the relative-entropy logo for small
+  alphabets, the top-k view and collapsed-alphabet views (all still item 4).
+- **Calibrated discovery settings per alphabet.** `calibration/run_pipeline_defaults.py` runs the
+  whole pipeline on null texts and planted core families. False positives are zero for every
+  setting, so they do not constrain the choice; recall does (a minimum core above the planted core
+  fails, and a minimum of 3 occurrences halves recall). Defaults follow a principle: the shortest
+  core to find, the shortest xmotif that plus 2, the fewest occurrences 2. Codons and amino acids
+  5, 3, 2; Latin letters 6, 4, 2; other alphabets with more than 8 symbols 5, 3, 3, 2; nucleotides
+  7, 6, 5, 2 as before. They live on the alphabet (`Alphabet.defaults`, `default_settings`), an
+  alphabet file may override them, the menu applies them when a session is loaded (a setting the
+  user changed is kept), and the CLI uses them for any length option left out.
+- **The order rule** was checked above its earlier range: codon text of 4,000 to 20,000 codons (order 0
+  starts to under-estimate and reached 5% false positives at 8,000; order 1 is conservative) and
+  amino acids (both orders calibrated, order 1 slightly conservative). The rule holds.
+- **Caveats.** The calibration nulls contain no real repeats, so zero false positives there does not
+  mean few supported cores in a real document. The planted families have two extensions and 4 or 6
+  copies; other family shapes were not tested.
+
+Not done in phase 5: per-alphabet length defaults in the interactive prompts beyond *Rank core
+motifs* and *Change setting*; smoother estimators for letters at order 2 and above; the other
+wishlist items.
 
 ## 11. Risks
 

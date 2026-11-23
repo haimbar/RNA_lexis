@@ -132,7 +132,7 @@ class Tokenized:
         Positions, segments, offsets and the record of what was skipped or dropped
         are unchanged: unit ``i`` of the result is unit ``i`` of this text.
         """
-        if projection.source.to_dict() != self.alphabet.to_dict():
+        if not projection.source.same_symbols(self.alphabet):
             raise ValueError(f"the projection is from {projection.source.name!r}, "
                              f"not from {self.alphabet.name!r}")
         return Tokenized(alphabet=projection.target, text=projection.apply(self.text),

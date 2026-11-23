@@ -721,23 +721,36 @@ are different units, and results are written as `ATG AAA TTT`. Run on a toy 400-
 with a planted 7-codon core family it reports 15 supported motifs, all pieces of that core.
 
 ```python
-from rna_lexis.alphabet import codon
+from rna_lexis.alphabet import codon, default_settings
 from rna_lexis.tokenizers import tokenize
 from rna_lexis.algorithms import find_boundary
 from rna_lexis.statistical import rank_core_candidates, write_rows_csv
 
 A = codon()                                            # 64 codons, read three nucleotides at a time
+s = default_settings(A)                                # calibrated for codons: shortest xmotif 5, core 3, fewest 2
 seq = "".join(l.strip() for l in open("cds.fasta") if not l.startswith(">"))
 tok = tokenize(seq, A, frame=0)                        # tok.text: one character per codon
-xmotifs = sorted(set(find_boundary(tok.text, minlen=4, maxlen=60, at_least=2)))
-rows = rank_core_candidates(tok.text, xmotifs, candidate_min_len=3, alphabet=A)
+xmotifs = sorted(set(find_boundary(tok.text, minlen=s["minxmlen"], maxlen=60, at_least=s["mincount"])))
+rows = rank_core_candidates(tok.text, xmotifs, candidate_min_len=s["candidate_min_len"], alphabet=A)
 write_rows_csv("ranked_cores.csv", rows, alphabet=A)   # motifs decoded: ATG AAA TTT
 ```
 
 The same from the shell: `rna_lexis_stat_cli rank-cores --input cds.fasta --output ranked_cores.csv
---alphabet codon --min-xmotif-len 4 --candidate-min-len 3`. In the interactive menu the choice is
-made when new text is loaded. Lengths are in units; the nucleotide defaults (7, 6, 5) are long
-for codons (these starting points are not calibrated).
+--alphabet codon` (the lengths default to the alphabet's). In the interactive menu the choice is
+made when new text is loaded. Lengths are in units. `default_settings(alphabet)` returns the settings an
+alphabet starts with (`minxmlen`, `mincorelen`, `candidate_min_len`, `mincount`): the nucleotide ones (7, 6, 5, 2)
+for no alphabet, calibrated values for `codon`, `amino acid` and `Latin letters`, an alphabet file's own
+`defaults`, and 5, 3, 3, 2 for any other alphabet with more than 8 symbols.
+
+Other alphabet tools. `rna_lexis.genetic_code` has the standard code (`STANDARD`, a replaceable table in
+`TABLES`), `amino_acid()` (20 residues and stop) and `codon_to_amino_acid()`, a `Projection`; any
+many-to-one map between alphabets is a `rna_lexis.alphabet.Projection(source, target, mapping)` with
+`apply(internal)`, and `Tokenized.project(projection)` keeps positions, segments and what was skipped.
+`statistical.unit_profile(txt, motif, flank=5, mismatches=0, alphabet=A, group_by=None)` counts every symbol at
+every position around a motif's occurrences and returns log-odds against the text's own background with a
+binomial p-value per cell; `plots.plot_unit_profile(profile)` draws it as a heatmap that colors only the cells the
+counts support (the replacement for a sequence logo when an alphabet has about 20 symbols or more), and
+`statistical.write_unit_profile_csv` writes the numbers.
 
 ### 1 — Standard pipeline: load → discover → save
 

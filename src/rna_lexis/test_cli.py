@@ -11,7 +11,7 @@ import warnings
 from pathlib import Path
 
 from rna_lexis.algorithms import cores, find_boundary
-from rna_lexis.alphabet import codon, get_alphabet
+from rna_lexis.alphabet import codon, default_settings, get_alphabet
 from rna_lexis.genetic_code import amino_acid, codon_to_amino_acid
 from rna_lexis.tokenizers import UnknownSymbolError, tokenize
 from rna_lexis.statistical import (
@@ -42,6 +42,15 @@ def _alphabet(args):
             sys.exit("error: --translate needs --alphabet codon")
         return amino_acid()
     return get_alphabet(name) if name else None
+
+
+def _resolve_settings(args):
+    """Fill the discovery settings the user left out from the alphabet (nucleotides: as always)."""
+    s = default_settings(_alphabet(args))
+    for attr, key in (("min_xmotif_len", "minxmlen"), ("candidate_min_len", "candidate_min_len"),
+                      ("min_count", "mincount")):
+        if hasattr(args, attr) and getattr(args, attr) is None:
+            setattr(args, attr, s[key])
 
 
 def _tokenize(text, alphabet, args, frame=0):
@@ -267,7 +276,9 @@ def build_parser() -> argparse.ArgumentParser:
                             "(length >= K**2), otherwise order 0.")
         p.add_argument("--alpha", type=float, default=0.05)
         p.add_argument("--enrichment-threshold", type=float, default=10.0)
-        p.add_argument("--min-count", type=int, default=2)
+        p.add_argument("--min-count", type=int, default=None,
+                       help="Fewest occurrences, for discovery and scoring. Default 2 for nucleotides and "
+                            "for the built-in alphabets.")
 
     exact = sub.add_parser("score-exact", help="Score provided exact motifs with Markov/FDR statistics.")
     exact.add_argument("--input", required=True, help="FASTA or plain sequence file.")
@@ -284,10 +295,14 @@ def build_parser() -> argparse.ArgumentParser:
     rank.add_argument("--input", required=True, help="FASTA or plain sequence file.")
     rank.add_argument("--xmotifs", default=None, help="Optional xmotif list/CSV/TSV/session JSON.")
     rank.add_argument("--xmotif-column", default=None)
-    rank.add_argument("--candidate-min-len", type=int, default=5)
+    rank.add_argument("--candidate-min-len", type=int, default=None,
+                      help="Shortest core candidate. Default: 5 for nucleotides; with --alphabet, calibrated "
+                           "for codon (3), amino-acid (3) and latin (4), and 3 for other large alphabets.")
     rank.add_argument("--candidate-max-len", type=int, default=18)
     rank.add_argument("--min-xmotif-type-support", type=int, default=2)
-    rank.add_argument("--min-xmotif-len", type=int, default=7)
+    rank.add_argument("--min-xmotif-len", type=int, default=None,
+                      help="Shortest xmotif. Default: 7 for nucleotides; with --alphabet, calibrated for "
+                           "codon (5), amino-acid (5) and latin (6), and 5 for other large alphabets.")
     rank.add_argument("--max-xmotif-len", type=int, default=60)
     rank.add_argument("--output", required=True)
     rank.add_argument("--legacy-cores-output", default=None)
@@ -330,6 +345,7 @@ def main(argv: list[str] | None = None) -> None:
     args = parser.parse_args(argv)
     os.makedirs(os.path.dirname(os.path.abspath(args.output)), exist_ok=True)
     try:
+        _resolve_settings(args)
         args.func(args)
     except UnknownSymbolError as exc:
         sys.exit(f"error: {exc}")

@@ -41,7 +41,8 @@ def amino_acid() -> Alphabet:
     codon-to-amino-acid projection.
     """
     return Alphabet(name="amino acid", symbols=tuple(AMINO_ACIDS) + (STOP,), mode="chars",
-                    unit_name="residue")
+                    unit_name="residue",
+                    defaults={"minxmlen": 5, "mincorelen": 3, "candidate_min_len": 3, "mincount": 2})
 
 
 def codon_to_amino_acid(table: str = "standard") -> Projection:

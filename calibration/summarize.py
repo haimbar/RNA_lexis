@@ -147,6 +147,34 @@ def main():
     L.append(table(["corpus", "order 0", "order 1", "order 2", "order 3"],
                    [[c] + [[x for x in lr if x["corpus"] == c and int(x["background_order"]) == o][0]["supported_words_strict"] for o in range(4)]
                     for c in corp]))
+    # ---- discovery settings per alphabet ---------------------------------------------------
+    if (R / "pipeline_defaults.csv").exists():
+        pd_rows = rd("pipeline_defaults.csv")
+        L.append("## Discovery settings per alphabet (run_pipeline_defaults.py)\n")
+        L.append("The whole CLI pipeline (xmotifs, shared substrings, scoring) on null texts and on planted core "
+                 "families. `FP` = share of null texts with at least one statistically supported core (worst over "
+                 "all null models and lengths); `recall` = share of planted cores recovered (mean over core "
+                 "lengths, copies, text lengths and null models). Settings are (shortest xmotif, shortest core "
+                 "candidate, fewest occurrences).\n")
+        rows = []
+        for alph, label in (("codon", "codon"), ("amino", "amino acid"), ("letters", "Latin letters")):
+            settings = sorted({(int(r["xmotif_minlen"]), int(r["cand_minlen"]), int(r["min_count"]))
+                               for r in pd_rows if r["alphabet"] == alph})
+            for st in settings:
+                sel = [r for r in pd_rows if r["alphabet"] == alph and
+                       (int(r["xmotif_minlen"]), int(r["cand_minlen"]), int(r["min_count"])) == st]
+                fp = max(float(r["rate"]) for r in sel if r["core_units"] == "")
+                rec = [float(r["rate"]) for r in sel if r["core_units"] != ""]
+                rows.append([label, f"{st[0]}, {st[1]}, {st[2]}", f"{fp:.3f}", f"{sum(rec) / len(rec):.3f}"])
+        L.append(table(["alphabet", "setting", "FP (worst)", "recall (mean)"], rows))
+    if (R / "order_rule_checks.csv").exists():
+        L.append("## Order rule, beyond the first calibration (run_order_rule_checks.py)\n")
+        L.append("Codon text from 4,000 to 20,000 codons (the rule switches to order 1 at 4,096) and amino acids "
+                 "(K = 21, switch at 441 residues). Bias = mean log(expected / true expected) on the words seen at "
+                 "least twice (negative = anti-conservative); FP = share of null texts with a supported word.\n")
+        L.append(table(["null", "N", "order", "bias", "frac under-estimated 2x", "FP"],
+                       [[r["null"], r["N"], r["background_order"], r["mean_log_expected_ratio"],
+                         r["frac_underestimated_2x"], r["fp_rate"]] for r in rd("order_rule_checks.csv")]))
     (R / "SUMMARY.md").write_text("\n".join(L), encoding="utf-8")
     print("wrote", R / "SUMMARY.md")
 

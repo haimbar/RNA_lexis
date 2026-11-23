@@ -182,7 +182,8 @@ Requires at least 3 exact occurrences.
 By default a sequence is nucleotides. When new text is loaded the menu asks how to read
 it: **automatic** (nucleotides if the text is only A, C, G, T or U, otherwise Latin
 letters), **codons** (three nucleotides at a time, with a reading frame, so synonymous
-codons are different units), **Latin letters**, or **an alphabet from a file** (Greek
+codons are different units), **Latin letters**, **codons translated to amino acids** or **a protein in one-letter codes** (the amino-acid reading makes synonymous
+codons one unit, so running both shows whether the choice among them matters), or **an alphabet from a file** (Greek
 letters, syllable names, ...). Everything is then in those units: positions, lengths and
 mismatch counts, the statistics, the plots, and the result files, which show
 `ATG AAA TTT` and not nine nucleotides. The alphabet is *declared*, not observed: a
@@ -191,15 +192,15 @@ letters.
 
 For these alphabets the Markov background is order 0 for codons and order 1 for letters,
 and the false-discovery correction runs within each motif length over every possible
-word of that length. Both were chosen by simulation (`calibration/README.md`). Items that
-need nucleotides (logo, hairpins, GC content, reverse complement) are not available, and
-the menu says so. The batch CLI takes `--alphabet`, `--frame` and `--on-unknown`; the
+word of that length. Both were chosen by simulation (`calibration/README.md`). For large alphabets the sequence logo is replaced by a **unit profile**, a log-odds heatmap of
+what surrounds a motif that colors only the cells the counts support. Items that
+need nucleotides (hairpins, GC content, reverse complement) are not available, and
+the menu says so. The batch CLI takes `--alphabet`, `--frame`, `--translate` and `--on-unknown`; the
 sections *Reading the Text* and *Batch CLI* of `docs/user_guide.md` and the alphabet
 modules in `llms.txt` give the details and a worked example.
 
 ```
-rna_lexis_stat_cli rank-cores --input cds.fasta --output cores.csv --alphabet codon \
-    --min-xmotif-len 4 --candidate-min-len 3
+rna_lexis_stat_cli rank-cores --input cds.fasta --output cores.csv --alphabet codon
 ```
 
 ### Batch CLI (`rna_lexis_stat_cli`)

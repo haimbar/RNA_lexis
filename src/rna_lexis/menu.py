@@ -27,7 +27,8 @@ from rna_lexis.algorithms import (
     sliding_coverage_fraction, coverage_comparison_warnings,
 )
 from rna_lexis.alignment import gotoh_global, gotoh_local, print_alignment
-from rna_lexis.alphabet import Alphabet, BOUNDARY, latin, codon, get_alphabet
+from rna_lexis.alphabet import (Alphabet, BOUNDARY, NUCLEOTIDE_SETTINGS, default_settings, latin, codon,
+                                get_alphabet)
 from rna_lexis.genetic_code import amino_acid, codon_to_amino_acid
 from rna_lexis.tokenizers import tokenize
 from rna_lexis.plots import (
@@ -320,6 +321,26 @@ def _show(internal, alphabet):
 def _unit(alphabet):
     """The plural unit noun for messages: 'nt' for nucleotide text."""
     return 'nt' if alphabet is None else alphabet.units_label
+
+
+_SESSION_SETTINGS = ('minxmlen', 'mincorelen', 'mincount')
+
+
+def _apply_alphabet_defaults(defvals, alphabet):
+    """Give a new session the discovery settings its alphabet calls for.
+
+    Nucleotide text keeps the nucleotide settings.  A setting the user has changed (it no longer
+    equals what was last applied, or the nucleotide default) is left alone.  Also records the
+    shortest core candidate for *Rank core motifs*.
+    """
+    new = default_settings(alphabet)
+    applied = defvals.get('_applied', {k: NUCLEOTIDE_SETTINGS[k] for k in _SESSION_SETTINGS})
+    for key in _SESSION_SETTINGS:
+        if defvals.get(key) == applied.get(key):
+            defvals[key] = new[key]
+    defvals['_applied'] = {k: new[k] for k in _SESSION_SETTINGS}
+    defvals['candidate_min_len'] = new['candidate_min_len']
+    return defvals
 
 
 def _slug(internal, alphabet):
@@ -743,7 +764,7 @@ def _comparison_in_alphabet(data, alphabet, reading):
     """
     other = _alphabet_of(data)
     if data.get('corelist') is not None or data.get('alphabet') is not None:
-        if other is None or other.to_dict() != alphabet.to_dict():
+        if other is None or not other.same_symbols(alphabet):
             print(fmttxt([f"That session was read over "
                           f"{'nucleotides' if other is None else repr(other.name)}, not over "
                           f"'{alphabet.name}', so the two cannot be compared."],
@@ -2159,7 +2180,8 @@ def markov_kmer_input(txt, file_path='', alphabet=None):
 
 def statistical_core_input(file_path, txt, strs, alphabet=None):
     """Interactive Markov/FDR core-candidate ranking."""
-    min_len = safe_input(fmttxt(['Candidate minimum core length', '[default: 5]: '],
+    default_min = default_settings(alphabet)['candidate_min_len']
+    min_len = safe_input(fmttxt(['Candidate minimum core length', f'[default: {default_min}]: '],
                                 ['bold', ''], ['yellow', 'cyan']) + ' ').strip()
     max_len = safe_input(fmttxt(['Candidate maximum core length', '[default: 18]: '],
                                 ['bold', ''], ['yellow', 'cyan']) + ' ').strip()
@@ -2170,7 +2192,7 @@ def statistical_core_input(file_path, txt, strs, alphabet=None):
     alpha = safe_input(fmttxt(['FDR q-value threshold', '[default: 0.05]: '],
                               ['bold', ''], ['yellow', 'cyan']) + ' ').strip()
 
-    min_len = int(min_len) if min_len else 5
+    min_len = int(min_len) if min_len else default_min
     max_len = int(max_len) if max_len else 18
     support = int(support) if support else 2
     enrich = float(enrich) if enrich else 10.0
@@ -3038,6 +3060,7 @@ def menus():
                         is_rna = data['is_rna']
                         alphabet = _alphabet_of(data)
                         reading = data.get('reading')
+                        _apply_alphabet_defaults(defvals, alphabet)
                         if data.get("corelist"):
                             strs = {'corelist': data["corelist"], 'xmotifs': data["xmotifs"]}
                         else:
@@ -3058,6 +3081,7 @@ def menus():
                         is_rna = data['is_rna']
                         alphabet = _alphabet_of(data)
                         reading = data.get('reading')
+                        _apply_alphabet_defaults(defvals, alphabet)
                         if data.get("corelist"):
                             strs = {'corelist': data["corelist"], 'xmotifs': data["xmotifs"]}
                         else:
@@ -3134,7 +3158,11 @@ def menus():
                             print_settings(defvals, prefs, reading)
                             continue
                         if val == 6:
+                            _old = defvals
                             defvals = get_choices(defvals, prefs)
+                            for _key in ('_applied', 'candidate_min_len'):
+                                if _key in _old:
+                                    defvals[_key] = _old[_key]
                             new_default = defvals.pop('default_data_dir', None)
                             if new_default is not None and new_default != prefs.get('default_data_dir'):
                                 prefs['default_data_dir'] = new_default

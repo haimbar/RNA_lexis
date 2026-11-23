@@ -105,13 +105,17 @@ After a new input is loaded the menu asks how to read it:
 --- How to read the text ---
 1. Automatic (nucleotides if only A, C, G, T or U; otherwise Latin letters)
 2. Codons (read 3 nucleotides at a time)
-3. Latin letters (a-z)
-4. An alphabet from a file (e.g. Greek letters, syllables)
-5. Cancel
+3. Codons translated to amino acids (standard genetic code)
+4. Amino acids (a protein written in one-letter codes)
+5. Latin letters (a-z)
+6. An alphabet from a file (e.g. Greek letters, syllables)
+7. Cancel
 ```
 
 - **Automatic** leaves nucleotide text exactly as before. Any other text (English, a protein written in one-letter codes) is read as Latin letters.
 - **Codons** asks for a **reading frame** (0, 1 or 2): the number of nucleotides to skip at the start. Use the frame that starts the coding sequence; the Ensembl option fetches the full transcript including untranslated regions, so for coding analysis use a coding sequence (CDS) file. A codon that contains something other than A, C, G, T or U (such as `N`) is skipped as a whole, so the frame is never shifted by it, and a partial codon at the end is dropped. Synonymous codons are different units, so they are distinguished.
+- **Codons translated to amino acids** reads the text as codons and then replaces each codon by the amino acid it codes for (the three stop codons become `*`), so the analysis is over the 20 amino acids and stop. Synonymous codons become the same unit. Run the analysis both ways, as codons and as amino acids, to see whether the choice among synonymous codons matters: a phrase that recurs as a peptide but is spelled with different codons each time is one word to the amino-acid reading and several to the codon reading. Queries are then typed as amino-acid letters.
+- **Amino acids** reads a protein written in one-letter codes (20 residues and stop; a letter that is not one of them, such as `X`, is skipped with a warning).
 - **An alphabet from a file** reads text over any set of symbols (see below).
 
 The choice is saved in the session file and restored when the session is loaded; the main menu shows it next to the file name, and *Show settings* shows what was read (units read, symbols skipped, characters dropped).
@@ -144,9 +148,19 @@ Other fields (all optional): `"mode"` (`"chars"` one character per symbol, the d
 
 - **The background.** The Markov background is order 0 for codons and order 1 for letter alphabets (order 1 when the text has at least one observation per transition, otherwise order 0); chosen by simulation (`calibration/README.md`).
 - **The multiple-testing correction** in *Rank core motifs*, and in the summary table, corrects within each motif length over all `K^L` possible words (`K` = alphabet size). Nucleotide text keeps its existing correction, so numbers are not comparable between the two modes.
-- **Lengths are in units.** *Min xmotif length*, *Min core length* and the candidate lengths in *Rank core motifs* count units, and the nucleotide defaults (7, 6, 5) are long for codons: 7 codons is 21 nucleotides. For codons try a minimum xmotif length of 4 and candidate core length of 3. These are starting points; they have not been calibrated.
+- **Lengths are in units, and each alphabet starts with its own settings.** *Min xmotif length*, *Min core length* and the candidate lengths in *Rank core motifs* count units; 7 codons is 21 nucleotides, so the nucleotide defaults (7, 6, 5) would be far too long. A new session starts with settings chosen by simulation (`calibration/README.md`): the shortest core to look for is the thing to choose, the shortest xmotif is that plus 2, and the fewest occurrences stays at 2.
+
+  | Alphabet | Min xmotif length | Min core length | Rank-core candidate | Min occurrences |
+  |---|:---:|:---:|:---:|:---:|
+  | Nucleotides | 7 | 6 | 5 | 2 |
+  | Codons | 5 | 3 | 3 | 2 |
+  | Amino acids | 5 | 3 | 3 | 2 |
+  | Latin letters | 6 | 4 | 4 | 2 |
+  | Other alphabets with more than 8 symbols | 5 | 3 | 3 | 2 |
+
+  An alphabet file can give its own under `"defaults"` (`minxmlen`, `mincorelen`, `candidate_min_len`, `mincount`). A setting you change in *Change setting* is kept when you load text with another alphabet. In the simulation no setting produced a false positive, so these choices are about what you want to find: a minimum of 3 occurrences, for example, halved the number of planted families found, because a family split between two variants needs more copies. Real text contains many real repeats, which is what the ranking reports; the simulation's null texts contain none.
 - **Motifs never span a segment boundary** (the units on either side of a boundary between FASTA records or pasted blocks are not neighbors).
-- **Not available for other alphabets**, because they need nucleotides: *Logo*, *Compare motif coverage vs. GC-content*, *Export hairpins to CSV*, the reverse-complement option of the shared-motif diagram, and the BLAST bit score and E-value of *Alignment score*. The menu says so and returns.
+- **Not available for other alphabets**, because they need nucleotides: the sequence logo (the unit profile takes its place, see 1.4), *Compare motif coverage vs. GC-content*, *Export hairpins to CSV*, the reverse-complement option of the shared-motif diagram, and the BLAST bit score and E-value of *Alignment score*. The menu says so and returns.
 - **Comparison sequences** (shared-motif diagram, coverage comparison) are read over the same alphabet; a saved session read over a different alphabet is refused.
 
 ### Batch CLI
@@ -154,9 +168,12 @@ Other fields (all optional): `"mode"` (`"chars"` one character per symbol, the d
 `rna_lexis_stat_cli` takes the same choice: `--alphabet` (`nucleotide`, `codon`, `latin`, or the path of an alphabet file), `--frame` (reading frame for codons) and `--on-unknown` (`skip`, the default, or `error`). Motifs, anchors and queries are read the same way, FASTA records are segments, and results are written as the alphabet's labels:
 
 ```bash
-rna_lexis_stat_cli rank-cores --input cds.fasta --output cores.csv \
-    --alphabet codon --frame 0 --min-xmotif-len 4 --candidate-min-len 3
+rna_lexis_stat_cli rank-cores --input cds.fasta --output cores.csv --alphabet codon --frame 0
 ```
+
+The lengths and the minimum count default to the alphabet's (the table above); give `--min-xmotif-len`, `--candidate-min-len` or `--min-count` to change them.
+
+`--alphabet` also accepts `amino-acid` (protein text), and `--translate` (with `--alphabet codon`) reads the text as codons and analyzes the amino acids they code for; motifs and anchors are then amino-acid letters.
 
 Without `--alphabet` nothing changes.
 
@@ -306,9 +323,11 @@ The Rank-frequency plot shows the log of the rank of each score vs. the log of t
 After the plot-specific parameters, you will be prompted for an **output file name** and **format** (PNG standard, PDF, or SVG). Leave the file name blank to display on screen only.
 
 
-#### 1.4 Logo
+#### 1.4 Logo (and the unit profile for other alphabets)
 
-Generates a sequence logo centred on all occurrences of a chosen sequence.
+Generates a sequence logo centred on all occurrences of a chosen sequence. For text read over an alphabet other than nucleotides this item draws the **unit profile** instead (below), because a logo cannot be read once an alphabet has about 20 symbols or more: its height is capped at log2(K) bits (about 4.7 for 26 letters, 6 for 64 codons) and measured against a uniform background, so the stacks come out as tiny letters and common symbols such as `e` look informative when they are only common.
+
+The **unit profile** is a heatmap. Rows are the symbols (codons are grouped by the amino acid they code for), columns are the positions from a chosen number of units before the motif to the same number after it, and the colour is log2(frequency at that position / frequency in the whole text): red where a symbol is enriched next to the motif, blue where it is depleted. Only cells the counts support are coloured (a two-sided binomial test against the text's own frequency, p at most 0.01); everything else stays white, because with a few occurrences a symbol seen once or never says nothing. A ring marks the strongest enriched symbol of a column when it also survives correction over all the cells. The motif's own columns are labelled with its units. Prompts: the motif, the number of units on each side (default 5), the maximum number of mismatches in the motif (default 0), the output file, and whether to save the numbers as a CSV file (counts, log-odds and p-values per symbol and position).
 
 **Prompts:**
 

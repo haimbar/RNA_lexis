@@ -28,6 +28,29 @@
 
 ### Added
 
+- **Phase 5 of the codon-level work: amino acids, the unit profile, and calibrated settings per
+  alphabet.**
+  - *Projections and amino acids.* `alphabet.Projection` maps one alphabet many-to-one onto another
+    (`Tokenized.project` keeps positions, segments and what was skipped). `genetic_code` adds the
+    standard code as a replaceable table, the amino-acid alphabet and `codon_to_amino_acid`. The menu
+    offers "codons translated to amino acids" and "amino acids (protein text)"; the CLI takes
+    `--alphabet amino-acid` and `--translate`. Synonymous codons become one unit, so reading a text both
+    ways shows whether the choice among them matters.
+  - *The unit profile* (`statistical.unit_profile`, `plots.plot_unit_profile`, `write_unit_profile_csv`)
+    shows what surrounds a motif as a log-odds heatmap against the text's own background, replacing
+    the sequence logo, which cannot be read with about 20 symbols or more, for text read over other
+    alphabets (the menu's Logo item runs it). Cells are colored only where the count is surprising
+    (binomial p at most 0.01), so a few occurrences do not produce a wall of noise.
+  - *Calibrated discovery settings.* Each alphabet starts with its own shortest xmotif, core and
+    candidate lengths and minimum count (`alphabet.default_settings`): codons and amino acids 5, 3, 3, 2,
+    Latin letters 6, 4, 4, 2, other alphabets with more than 8 symbols 5, 3, 3, 2, nucleotides 7, 6, 5, 2
+    as before. An alphabet file can give its own `defaults`; the menu applies them when a session is
+    loaded (a setting you changed is kept), and the CLI uses them for any length option left out
+    (`--min-xmotif-len`, `--candidate-min-len` and `--min-count` now default to None, which is the
+    nucleotide values without `--alphabet`). In the simulation (`calibration/`) no setting produced
+    a false positive; recall is what the settings change.
+  - The Markov-order rule was checked for codon text above 4,096 codons and for amino acids, and holds.
+  - 48 new tests in all for phase 5; nucleotide output is unchanged (79 outputs compared before and after).
 - **The menu and the batch CLI can read text as codons, letters or other units (phase 4
   of the codon-level work).** When new text is loaded the menu asks how to read it:
   automatic, codons (with a reading frame), Latin letters, or an alphabet from a JSON

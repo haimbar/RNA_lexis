@@ -345,11 +345,31 @@ class Alphabet:
                 symbols.append(item["label"])
                 if item.get("code"):
                     codes[item["label"]] = item["code"]
+        defaults = d.get("defaults") or {}
+        unit_name = d.get("unit_name", "unit")
+        if not defaults:
+            # a file (or a session) from before the defaults were calibrated: use the built-in's
+            builtin = _BUILTIN_BY_NAME.get(d["name"])
+            if builtin is not None:
+                built = builtin()
+                if [s if isinstance(s, str) else s["label"] for s in d["symbols"]] == list(built.symbols):
+                    defaults = dict(built.defaults)
+                    if unit_name == "unit":
+                        unit_name = built.unit_name
         return cls(name=d["name"], symbols=symbols, extras=d.get("extras", ()),
                    codes=codes, mode=d.get("mode", "chars"), width=d.get("width", 1),
                    case_sensitive=d.get("case_sensitive", False),
-                   aliases=d.get("aliases", {}), defaults=d.get("defaults", {}),
-                   unit_name=d.get("unit_name", "unit"), display_sep=d.get("display_sep"))
+                   aliases=d.get("aliases", {}), defaults=defaults,
+                   unit_name=unit_name, display_sep=d.get("display_sep"))
+
+    def same_symbols(self, other: "Alphabet") -> bool:
+        """True if ``other`` reads text the same way: same name, symbols, extras, mode, width, case
+        and aliases.  Analysis defaults, the unit name and the display separator may differ, so a
+        session saved before a default was calibrated still matches the current built-in alphabet."""
+        keys = ("name", "symbols", "extras", "mode", "width", "case_sensitive", "aliases")
+        mine, theirs = self.to_dict(), other.to_dict()
+        return all(mine[k] == theirs[k] for k in keys if k not in ("symbols",)) and \
+            [s["label"] for s in mine["symbols"]] == [s["label"] for s in theirs["symbols"]]
 
     def save(self, path: str) -> str:
         """Write the alphabet as a JSON file and return the path."""
@@ -438,7 +458,7 @@ class Projection:
 def nucleotide() -> Alphabet:
     """a, c, g, t; ``u`` is read as ``t``."""
     return Alphabet(name="nucleotide", symbols=tuple("acgt"), mode="chars",
-                    aliases={"u": "t"}, unit_name="nt")
+                    aliases={"u": "t"}, unit_name="nt", defaults=dict(NUCLEOTIDE_SETTINGS))
 
 
 def codon() -> Alphabet:
@@ -449,13 +469,46 @@ def codon() -> Alphabet:
     """
     codons = ["".join(p) for p in itertools.product("acgt", repeat=3)]
     return Alphabet(name="codon", symbols=tuple(codons), codes={x: x for x in codons},
-                    mode="fixed", width=3, aliases={"u": "t"}, unit_name="codon")
+                    mode="fixed", width=3, aliases={"u": "t"}, unit_name="codon",
+                    defaults={"minxmlen": 5, "mincorelen": 3, "candidate_min_len": 3, "mincount": 2})
 
 
 def latin() -> Alphabet:
     """The 26 lower-case Latin letters."""
     return Alphabet(name="Latin letters", symbols=tuple("abcdefghijklmnopqrstuvwxyz"),
-                    mode="chars", unit_name="letter")
+                    mode="chars", unit_name="letter",
+                    defaults={"minxmlen": 6, "mincorelen": 4, "candidate_min_len": 4, "mincount": 2})
+
+
+_BUILTIN_BY_NAME = {
+    "nucleotide": nucleotide,
+    "codon": codon,
+    "Latin letters": latin,
+}
+
+
+# Settings of the nucleotide pipeline, as they have always been.
+NUCLEOTIDE_SETTINGS = {"minxmlen": 7, "mincorelen": 6, "candidate_min_len": 5, "mincount": 2}
+_SETTING_KEYS = tuple(NUCLEOTIDE_SETTINGS)
+
+
+def default_settings(alphabet=None) -> dict:
+    """The discovery settings an alphabet starts with.
+
+    ``minxmlen`` (shortest xmotif), ``mincorelen`` (shortest core, for the cores found from the
+    xmotifs), ``candidate_min_len`` (shortest core candidate in *Rank core motifs*) and ``mincount``
+    (fewest occurrences), all in units.  No alphabet is nucleotide text, which keeps the settings
+    it has always had.  Built-in alphabets carry calibrated values (``calibration/README.md``); an
+    alphabet file may give its own in ``defaults``; any other alphabet gets a rule: nucleotide
+    settings for a small alphabet (8 symbols or fewer), and 5, 3, 3, 2 otherwise.  The shortest
+    core to look for is the thing to choose: the shortest xmotif is that plus 2.
+    """
+    if alphabet is None:
+        return dict(NUCLEOTIDE_SETTINGS)
+    out = dict(NUCLEOTIDE_SETTINGS) if alphabet.size <= 8 else {
+        "minxmlen": 5, "mincorelen": 3, "candidate_min_len": 3, "mincount": 2}
+    out.update({k: v for k, v in alphabet.defaults.items() if k in _SETTING_KEYS})
+    return out
 
 
 def _amino_acid() -> Alphabet:
