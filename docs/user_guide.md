@@ -555,7 +555,7 @@ Same as above, but against a homopolymer-run density curve: the fraction of each
 
 #### 2.1 Find all matches
 
-Searches the full text for a query sequence (minimum 4 characters). Use `.` as a single-character wildcard. Reports the number of matches and prints each match with its position in the text.
+Searches the full text for a query sequence (minimum 4 characters). Use `.` as a single-character wildcard (for codons, `.` or `...` is one codon, so `act ... ... aga aaa` is a codon, any two codons, then two more). Reports the number of matches and prints each match with its position in the text.
 
 #### 2.2 Search with mutations
 
@@ -565,7 +565,7 @@ Searches the full text for a single query string and reports both exact and appr
 
 | Prompt | Default | Notes |
 |---|---|---|
-| Query string | | Blank to cancel and go back to the menu |
+| Query string | | Blank to cancel and go back to the menu. `.` matches any one letter (for codons, `.` or `...` is any one codon) and is never counted as a mutation, though it counts toward the length that sets the allowance |
 | Mutation rate: 1 per N letters | 6 | Maximum number of nucleotides per one mismatch |
 
 **Output:**

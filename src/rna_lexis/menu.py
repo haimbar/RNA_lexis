@@ -365,8 +365,12 @@ def _query_to_internal(raw, alphabet, wildcard=False):
     Without an alphabet (nucleotide text) the query is returned as it is.  With
     one, it is read like the text itself: for codons the user types nucleotides
     (``atgaaa`` is two units), for letters the letters.  ``wildcard=True`` keeps
-    ``.`` as "any one unit" (the regular-expression wildcard).  Symbols that
-    are not in the alphabet are dropped with a warning, as when loading.
+    ``.`` as "any one unit" (the regular-expression wildcard).  For units that
+    are several characters wide (codons), a run of dots as long as a multiple
+    of the width stands for that many units, so ``...`` is one codon, as it is
+    when the same text is searched as nucleotides; any other run is one unit
+    per dot.  Symbols that are not in the alphabet are dropped with a warning,
+    as when loading.
     """
     if alphabet is None:
         try:
@@ -376,6 +380,9 @@ def _query_to_internal(raw, alphabet, wildcard=False):
                           "the usual pattern; ( [ { * + ? | \\ have a special meaning."], ['bold'], ['red']))
             return ''
         return raw
+    if wildcard and alphabet.mode == 'fixed' and alphabet.width > 1:
+        raw = re.sub(r'\.+', lambda m: '.' * (len(m.group()) // alphabet.width
+                                              if len(m.group()) % alphabet.width == 0 else len(m.group())), raw)
     pieces = raw.split('.') if wildcard else [raw]
     out = []
     for piece in pieces:
@@ -392,7 +399,11 @@ def _query_to_internal(raw, alphabet, wildcard=False):
 
 def _show(internal, alphabet):
     """An internal string as text for the screen (unchanged without an alphabet)."""
-    return internal if alphabet is None else alphabet.show(internal)
+    if alphabet is None:
+        return internal
+    if '.' not in internal:
+        return alphabet.show(internal)
+    return alphabet.sep.join('.' * max(1, alphabet.label_width) if c == '.' else alphabet.show(c) for c in internal)
 
 
 def _unit(alphabet):
@@ -428,10 +439,10 @@ def _slug(internal, alphabet):
 def _highlight(seq, matched, alphabet, on, off):
     """``matched`` with the units that differ from ``seq`` in red upper case."""
     if alphabet is None:
-        return ''.join(f'{on}{mark_case(mc, True)}{off}' if mc != sc else mc
+        return ''.join(f'{on}{mark_case(mc, True)}{off}' if mc != sc and sc != '.' else mc
                        for sc, mc in zip(seq, matched))
-    return alphabet.sep.join(
-        f'{on}{alphabet.show(mc, [True])}{off}' if mc != sc else alphabet.show(mc)
+    return alphabet.sep.join(                      # a wildcard in the query matches anything: not a difference
+        f'{on}{alphabet.show(mc, [True])}{off}' if mc != sc and sc != '.' else alphabet.show(mc)
         for sc, mc in zip(seq, matched))
 
 
@@ -1545,7 +1556,8 @@ def find_match_input(txt, strs, minlen=4, alphabet=None):
         minlen: Minimum query length accepted (default 4).
     """
     while True:
-        s0 = safe_input(fmttxt(["Enter the sequence to analyze (use . as a single letter wild card): "],
+        s0 = safe_input(fmttxt(["Enter the sequence to analyze (use . as a single letter wild card"
+                       + ("; ... is one codon" if alphabet is not None and alphabet.width > 1 else "") + "): "],
                       ['bold'], ["yellow"]) + " ")
         raw0 = s0
         s0 = _query_to_internal(s0.lower(), alphabet, wildcard=True)
@@ -1731,10 +1743,12 @@ def search_input(txt, mutr=1/6, M=4, alphabet=None):
     RED   = '\033[31m'
     RESET = '\033[0m'
 
-    prompt = fmttxt(['Enter query string', '[blank to cancel]: '],
+    prompt = fmttxt(['Enter query string (. is any one unit; ... is one codon)' if alphabet is not None and alphabet.width > 1
+                     else 'Enter query string (. is any one letter)' if alphabet is None
+                     else 'Enter query string (. is any one unit)', '[blank to cancel]: '],
                     ['bold', ''], ['yellow', 'cyan'])
-    seq = _query_to_internal(safe_input(prompt + ' ').strip().lower(), alphabet)
-    if not seq:
+    seq = _query_to_internal(safe_input(prompt + ' ').strip().lower(), alphabet, wildcard=True)
+    if not seq.replace('.', ''):
         return
 
     mutr_str = safe_input(fmttxt(['Mutation rate: 1 per N letters', f'[default: {1/mutr:.1f}]: '],

@@ -824,7 +824,7 @@ For Z-score plots you will also be asked for a <strong>threshold</strong> (defau
 15. Back
 </code></pre>
 <h4>2.1 Find all matches</h4>
-<p>Searches the full text for a query sequence (minimum 4 characters). Use <code>.</code> as a single-character wildcard. Reports the number of matches and prints each match with its position in the text.</p>
+<p>Searches the full text for a query sequence (minimum 4 characters). Use <code>.</code> as a single-character wildcard (for codons, <code>.</code> or <code>...</code> is one codon, so <code>act ... ... aga aaa</code> is a codon, any two codons, then two more). Reports the number of matches and prints each match with its position in the text.</p>
 <h4>2.2 Search with mutations</h4>
 <p>Searches the full text for a single query string and reports both exact and approximate matches (within a configurable mutation allowance). Mismatched characters in approximate matches are printed in <strong>RED</strong> and <strong>UPPERCASE</strong> so differences are immediately visible.</p>
 <p><strong>Prompts:</strong></p>
@@ -840,7 +840,7 @@ For Z-score plots you will also be asked for a <strong>threshold</strong> (defau
 <tr>
 <td>Query string</td>
 <td></td>
-<td>Blank to cancel and go back to the menu</td>
+<td>Blank to cancel and go back to the menu. <code>.</code> matches any one letter (for codons, <code>.</code> or <code>...</code> is any one codon) and is never counted as a mutation, though it counts toward the length that sets the allowance</td>
 </tr>
 <tr>
 <td>Mutation rate: 1 per N letters</td>

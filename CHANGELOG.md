@@ -4,6 +4,12 @@
 
 ### Fixed
 
+- **Wildcards in codon queries.** *Search with mutations* did not accept a wildcard at all in codon (or letter) mode: `act ... ... aga aaa cca tct tat`
+  had its dots dropped as unknown symbols and found nothing, though the logo showed `act` before both occurrences. It now takes
+  `.` as any one unit, and in the menus that already took a wildcard, `...` is one codon (as in nucleotide text) instead of three
+  codons; a run of dots whose length is a multiple of the width is that many units, any other run one unit per dot. A wildcard is never
+  counted as a mutation and is not marked red (`find_with_mutations`; before, a `.` in a nucleotide query was always a
+  mismatch in the approximate search). Tests 426 to 433.
 - **A text with no Latin letters (Greek, Cyrillic, ...) could not be loaded, so *An alphabet from a file* could never be chosen
   for it.** The loader kept only a to z, found none and stopped with "contains no alphabetic characters", before the reading menu
   was reached; that option was reachable only for text that already had Latin letters. Now such a file loads, and the reading

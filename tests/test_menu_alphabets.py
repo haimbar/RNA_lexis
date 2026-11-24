@@ -133,6 +133,63 @@ class QueryTests(unittest.TestCase):
         self.assertIs(M._alphabet_of({"alphabet": A}), A)
 
 
+class WildcardQueryTests(unittest.TestCase):
+    """``.`` in a query: one unit, and ``...`` is one codon, as in nucleotide text."""
+
+    def setUp(self):
+        self._safe = M.safe_input
+
+    def tearDown(self):
+        M.safe_input = self._safe
+
+    def count(self, query):
+        return len(M._query_to_internal(query, A, wildcard=True).replace(".", "")), \
+            M._query_to_internal(query, A, wildcard=True).count(".")
+
+    def test_three_dots_are_one_codon(self):
+        self.assertEqual(self.count("act ... ... aga"), (2, 2))
+        self.assertEqual(self.count("act...aga"), (2, 1))
+        self.assertEqual(self.count("act......aga"), (2, 2))         # six dots: two codons
+
+    def test_one_dot_is_one_codon_and_other_runs_are_one_per_dot(self):
+        self.assertEqual(self.count("act . . aga"), (2, 2))
+        self.assertEqual(self.count("act .. aga"), (2, 2))
+        self.assertEqual(self.count("act .... aga"), (2, 4))
+
+    def test_letters_keep_one_dot_per_letter(self):
+        self.assertEqual(M._query_to_internal("t...e", latin(), wildcard=True), "t...e")
+
+    def test_without_the_wildcard_flag_dots_are_dropped_as_before(self):
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(M._query_to_internal("act ... aga", A), A.encode(["act", "aga"]))
+
+    def search(self, txt, query, rate="3"):
+        M.safe_input = Script([query, rate, ""])
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            M.search_input(txt, alphabet=A)
+        return buf.getvalue()
+
+    def test_search_with_mutations_takes_a_codon_wildcard(self):
+        rnd = random.Random(2)
+        pool = ["atg", "aaa", "ccc", "ggt", "tat", "gca", "tct"]
+        units = [rnd.choice(pool) for _ in range(300)]
+        units[40:48] = ["act", "ttt", "ggg", "aga", "aaa", "cca", "tct", "tat"]          # exact, other codons in the gap
+        units[100:108] = ["act", "ccc", "aaa", "aga", "aaa", "ccc", "tct", "gca"]        # two codons differ outside the gap
+        txt = A.encode(units)
+        out = self.search(txt, "act ... ... aga aaa cca tct tat")
+        self.assertIn("positions: [40]", out)
+        self.assertIn("pos   100", out)
+        self.assertIn("dist=2", out)
+        self.assertIn("L=8", out)
+        approx_line = [l for l in out.splitlines() if "pos   100" in l][0]
+        self.assertIn("act ccc aaa aga aaa", approx_line)                        # the gap is shown plainly, not marked
+        self.assertEqual(approx_line.count("\x1b[31m"), 2)                        # only the two real differences are red
+
+    def test_a_query_of_only_wildcards_is_cancelled(self):
+        self.assertEqual(self.search(A.encode(["atg", "aaa"] * 10), "... ..."), "")
+
+
 class ReadingTests(unittest.TestCase):
     def setUp(self):
         self._show_menu, self._safe, self._open = M.show_menu, M.safe_input, M.openFile

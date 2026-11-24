@@ -96,6 +96,14 @@ class BoundaryAndCoresTests(unittest.TestCase):
 
 
 class MutationSearchTests(unittest.TestCase):
+    def test_a_dot_in_the_query_matches_any_letter_and_is_not_a_mutation(self):
+        txt = "ttacgtaaacgtttacctcc" "gg"
+        exact, approx, maxmut = find_with_mutations("acg.aa", txt, mutr=1 / 3)
+        self.assertEqual(exact, [2])                                 # the dot matched a t
+        # 'acc.aa' differs from 'acgtaa' only at the third letter: one mutation, the dot is free
+        _, approx, _ = find_with_mutations("acc.aa", txt, mutr=1 / 3)
+        self.assertIn((2, "acgtaa", 1), approx)
+
     def test_find_with_mutations_separates_exact_and_approximate(self):
         txt = "aaatgcatgcgggtgcaggcttt"
         exact, approx, maxmut = find_with_mutations("tgcatgc", txt, mutr=1 / 6)

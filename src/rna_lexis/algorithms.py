@@ -1059,6 +1059,9 @@ def zscore(x, robust=True):
 def find_with_mutations(seq, txt, mutr=1/6, M=4):
     """Find exact and approximate (Hamming) occurrences of seq in txt.
 
+    A ``.`` in ``seq`` matches any one letter and is never counted as a mutation (it still counts toward the
+    length that sets the number of mutations allowed).
+
     Returns:
         exact_pos  - list of start positions where seq matches exactly
         approx     - list of (pos, matched_str, distance) for 0 < d <= maxmut
@@ -1076,7 +1079,7 @@ def find_with_mutations(seq, txt, mutr=1/6, M=4):
         for j in range(n_txt - L + 1):
             d = 0
             for k in range(L):
-                if txt_lower[j + k] != seq[k]:
+                if seq[k] != '.' and txt_lower[j + k] != seq[k]:
                     d += 1
                     if d > maxmut:
                         break
