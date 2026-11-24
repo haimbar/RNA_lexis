@@ -349,6 +349,96 @@ class SignificanceLevelPromptTests(unittest.TestCase):
         self.assertIn("p <= 0.5", loose)
 
 
+class WildcardMotifTests(unittest.TestCase):
+    """A ``.`` in the motif is any one unit: never a mismatch, and its own column in the profile."""
+
+    SONG = ("you take " * 5 + "x " + "you make " * 4 + "q " + "you fake " * 2 + "z " + "you bake qqq " * 3) * 2
+
+    def setUp(self):
+        self.a = latin()
+        self.txt = self.a.encode("zz" + "".join(c for c in self.SONG if c.isalpha()))   # room for a flank before the first one
+
+    def test_show_writes_a_wildcard_as_dots_as_wide_as_a_label(self):
+        self.assertEqual(self.a.show(self.a.encode("you") + "." + self.a.encode("ake")), "you.ake")
+        from rna_lexis.alphabet import codon
+        c = codon()
+        self.assertEqual(c.show(c.encode(["act"]) + "." + c.encode(["aga"])), "act ... aga")
+
+    def test_hamming_scan_ignores_the_wildcard_but_not_the_other_letters(self):
+        from rna_lexis.statistical import hamming_family_positions
+        motif = self.a.encode("you") + "." + self.a.encode("ake")
+        exact = hamming_family_positions(motif, self.txt, 0, self.a)
+        self.assertEqual(len(exact), 2 * (5 + 4 + 2 + 3))                       # take, make, fake, bake
+        self.assertTrue(all(d == 0 for _, _, d in exact))
+        near = hamming_family_positions(self.a.encode("yoz") + "." + self.a.encode("ake"), self.txt, 1, self.a)
+        self.assertEqual(len(near), len(exact))                                 # one real difference (u/z), the wildcard is free
+        self.assertTrue(all(d == 1 for _, _, d in near))
+
+    def test_the_wildcard_column_is_profiled_and_described(self):
+        motif = self.a.encode("you") + "." + self.a.encode("ake")
+        p = unit_profile(self.txt, motif, flank=2, alphabet=self.a, alpha=0.05)
+        self.assertEqual(p["wildcards"], [3])
+        self.assertEqual(p["motif_labels"][3], ".")
+        j = p["motif_columns"][0] + 3
+        t = p["labels"].index("t")
+        self.assertEqual(p["counts"][t][j], 10)                                 # 'take' x10
+        lines = describe_profile(p)
+        self.assertTrue(any(l.strip().startswith("slot 4: T 10 of") for l in lines), lines)
+        self.assertFalse(any(l.strip().startswith("slot 1") for l in lines))     # the letters of the motif are not described
+        self.assertTrue(any("slot 4" in l for l in describe_profile(p) + describe_empty_positions(p)))
+
+    def test_a_motif_of_only_wildcards_is_refused(self):
+        with self.assertRaises(ValueError):
+            unit_profile(self.txt, "...", alphabet=self.a)
+
+    def test_the_logo_draws_the_wildcard_column_next_to_the_motif_letters(self):
+        motif = self.a.encode("you") + "." + self.a.encode("ake")
+        p = unit_profile(self.txt, motif, flank=2, alphabet=self.a, alpha=0.05)
+        P.plot_unit_logo(p)
+        ax = plt.gcf().axes[0]
+        ticks = [t.get_text() for t in ax.get_xticklabels()]
+        self.assertEqual(ticks[2:9], list("YOU?AKE"))                            # not collapsed into one block
+        P.plot_unit_heatmap(p)
+        plt.close("all")
+
+    def test_the_menu_takes_a_wildcard_motif_and_does_not_count_it_as_a_unit_that_can_differ(self):
+        import contextlib
+        import rna_lexis.menu as M
+        answers = iter(["you.ake", "2", "", "0.05", "1", "", "n"])
+        asked = []
+        saved = (M.safe_input, M._spawn_plot, M._prompt_save)
+        M.safe_input = lambda prompt="": (asked.append(prompt), next(answers, ""))[1]
+        M._spawn_plot = lambda fn, *a, **k: None
+        M._prompt_save = lambda **k: ("", 1)
+        try:
+            with contextlib.redirect_stdout(io.StringIO()) as out:
+                M.profile_input(self.txt, {}, "", self.a)
+        finally:
+            M.safe_input, M._spawn_plot, M._prompt_save = saved
+        text = out.getvalue()
+        self.assertNotIn("unknown symbol", text)
+        self.assertIn("occurrence(s) used", text)
+        self.assertIn("slot 4", text)
+        self.assertTrue(any("6 letters long, not counting 1 wildcard" in q for q in asked), asked)
+
+    def test_the_arc_plot_takes_a_wildcard_seed(self):
+        import contextlib
+        import rna_lexis.menu as M
+        answers = iter(["you.ake", "", "", ""])
+        got = {}
+        saved = (M.safe_input, M._spawn_plot, M._prompt_save)
+        M.safe_input = lambda prompt="": next(answers, "")
+        M._spawn_plot = lambda fn, seed, results, positions, **k: got.update(seed=seed, n=len(results), pos=positions)
+        M._prompt_save = lambda **k: ("", 1)
+        try:
+            with contextlib.redirect_stdout(io.StringIO()):
+                M.self_similarity_arcs_input(self.txt, "", self.a)
+        finally:
+            M.safe_input, M._spawn_plot, M._prompt_save = saved
+        self.assertEqual(self.a.show(got["seed"]), "you.ake")
+        self.assertEqual(len(got["pos"]), 28)                                   # every occurrence of take, make, fake, bake
+
+
 class LogoTests(unittest.TestCase):
     """The letter logo: what it draws, and what it must not."""
 

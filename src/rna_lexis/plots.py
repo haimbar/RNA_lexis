@@ -876,7 +876,8 @@ def plot_unit_logo(profile, title='', file='', scale=1):
     n = max(1, int(profile['n']))
     n_rows, n_cols = counts.shape
     m0, m1 = profile['motif_columns']
-    motif_rows = [profile['chars'].index(c) for c in profile['motif']]
+    slots = set(profile.get('wildcards', []))            # a '.' in the motif: any letter, so it is a column to read like a flank
+    motif_rows = [None if k in slots else profile['chars'].index(c) for k, c in enumerate(profile['motif'])]
     color_of, legend = _unit_style(profile)
 
     freq = counts / n
@@ -884,7 +885,8 @@ def plot_unit_logo(profile, title='', file='', scale=1):
         bits = np.where((freq > 0) & (freq > bg[:, None]), freq * np.log2(freq / bg[:, None]), 0.0)
     drawn = sig & (bits > 0)
     for j in range(m0, m1):                              # the motif's own letter is the band, not a stack
-        drawn[motif_rows[j - m0], j] = False
+        if motif_rows[j - m0] is not None:
+            drawn[motif_rows[j - m0], j] = False
 
     stacks = []                                          # per column: [(row, height)] from the bottom up
     for j in range(n_cols):
@@ -896,7 +898,7 @@ def plot_unit_logo(profile, title='', file='', scale=1):
     # The motif is the same in every window, so unless letters that differ from it are drawn there it is one
     # block, about as wide as its length allows, and not one column per letter.
     L = m1 - m0
-    collapse = not any(stacks[j] for j in range(m0, m1))
+    collapse = not slots and not any(stacks[j] for j in range(m0, m1))
     cw = 1.0 if max(len(lab) for lab in labels) == 1 else 0.75 * max(len(lab) for lab in labels)   # a codon needs a wider column
     block = (min(L, max(3.0, 0.3 * L + 1.5)) if collapse else float(L)) * cw
     xs, x = [], 0.0
@@ -919,7 +921,7 @@ def plot_unit_logo(profile, title='', file='', scale=1):
     ax.set_xlim(0, total_w)
     ax.set_ylim(0, ymax)
     tick_x = [xs[j] for j in range(n_cols) if xs[j] is not None]
-    tick_t = [profile['motif_labels'][j - m0].upper() if m0 <= j < m1 else (f'{profile["columns"][j]}' if j < m0
+    tick_t = [('?' if (j - m0) in slots else profile['motif_labels'][j - m0].upper()) if m0 <= j < m1 else (f'{profile["columns"][j]}' if j < m0
               else f'+{j - m1 + 1}') for j in range(n_cols) if xs[j] is not None]
     ax.set_xticks(tick_x)
     ax.set_xticklabels(tick_t, fontsize=9, rotation=90 if max(len(t) for t in tick_t) > 2 else 0)
@@ -956,7 +958,8 @@ def plot_unit_logo(profile, title='', file='', scale=1):
                 fontsize=8, color='#8a8a8a')
     else:
         for j in range(m0, m1):
-            ax.text(xs[j], ymax * 0.93, profile['motif_labels'][j - m0].upper(), ha='center', va='center',     # at the top, clear of the stacks
+            ax.text(xs[j], ymax * 0.93, '?' if (j - m0) in slots else profile['motif_labels'][j - m0].upper(),
+                    ha='center', va='center',     # at the top, clear of the stacks
                     fontsize=15 if len(profile['motif_labels'][0]) == 1 else 10, fontweight='bold',
                     color='#a8a8a8', zorder=1)
     for j, st in enumerate(stacks):

@@ -399,11 +399,7 @@ def _query_to_internal(raw, alphabet, wildcard=False):
 
 def _show(internal, alphabet):
     """An internal string as text for the screen (unchanged without an alphabet)."""
-    if alphabet is None:
-        return internal
-    if '.' not in internal:
-        return alphabet.show(internal)
-    return alphabet.sep.join('.' * max(1, alphabet.label_width) if c == '.' else alphabet.show(c) for c in internal)
+    return internal if alphabet is None else alphabet.show(internal)
 
 
 def _unit(alphabet):
@@ -1454,9 +1450,10 @@ def profile_input(txt, strs, file_path='', alphabet=None):
         file_path: Session file path; anchors relative output names.
         alphabet:  The session's Alphabet.
     """
-    raw = safe_input(fmttxt(["Enter the motif to analyze: "], ['bold'], ['yellow']))
-    motif = _query_to_internal(raw.strip().lower(), alphabet)
-    if not motif or len(find_all_matches(motif, txt)) < 1:
+    raw = safe_input(fmttxt([f"Enter the motif to analyze (. is any one unit{'; ... is one codon' if alphabet is not None and alphabet.width > 1 else ''}): "],
+                            ['bold'], ['yellow']))
+    motif = _query_to_internal(raw.strip().lower(), alphabet, wildcard=True)
+    if not motif.replace('.', '') or len(find_all_matches(motif, txt)) < 1:
         print(fmttxt(["\nSequence not found."], ['bold'], ['red']))
         safe_input(fmttxt(["Press any key to continue"], [''], ['white']))
         return None
@@ -1476,8 +1473,10 @@ def profile_input(txt, strs, file_path='', alphabet=None):
                           + ".\n"], ['bold'], ['red']))
 
     flank = ask_int(f"Enter the number of {_unit(alphabet)} on both sides", 5, 0, MAX_FLANK)
-    mismatches = ask_int(f"Enter the maximum number of mismatches in the motif ({len(motif)} {_unit(alphabet)} long; "
-                         f"1 per 6 would be {len(motif) // 6}; at most {len(motif) // 2})", 0, 0, len(motif) // 2)
+    fixed = len(motif.replace('.', ''))                  # a wildcard cannot differ, so it is not counted
+    mismatches = ask_int(f"Enter the maximum number of mismatches in the motif ({fixed} {_unit(alphabet)} long"
+                         + (f", not counting {len(motif) - fixed} wildcard(s)" if fixed != len(motif) else "")
+                         + f"; 1 per 6 would be {fixed // 6}; at most {fixed // 2})", 0, 0, fixed // 2)
     alpha = _number(safe_input(fmttxt(["A letter is drawn when its count at a position has p at most",
                                        "[Default: 0.01; larger, e.g. 0.05, draws more letters]"],
                                       ['bold', ''], ['yellow', 'cyan']) + " "),
@@ -2014,9 +2013,12 @@ def self_similarity_arcs_input(txt, file_path='', alphabet=None):
     extensions among all its exact occurrences as a semicircular arc
     diagram (self-similarity within one sequence — e.g. a tandem-repeat
     region)."""
-    seq = _query_to_internal(safe_input(fmttxt(['Enter seed sequence', '[blank to cancel]: '],
-                             ['bold', ''], ['yellow', 'cyan']) + ' ').strip().lower(), alphabet)
-    if not seq:
+    seq = _query_to_internal(safe_input(fmttxt(['Enter seed sequence (. is any one '
+                                                + ('letter' if alphabet is None else 'unit')
+                                                + ('; ... is one codon' if alphabet is not None and alphabet.width > 1 else '') + ')',
+                                                '[blank to cancel]: '],
+                             ['bold', ''], ['yellow', 'cyan']) + ' ').strip().lower(), alphabet, wildcard=True)
+    if not seq.replace('.', ''):
         return
 
     positions_all = find_all_matches(seq, txt, ret='pos')

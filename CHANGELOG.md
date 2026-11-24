@@ -4,6 +4,11 @@
 
 ### Fixed
 
+- **Wildcards in the unit profile and the arc plot for letters and codons.** The motif prompt of the unit profile (*Logo*, other
+  alphabets) dropped a `.` as an unknown symbol, so `you.ake` was read as `youake`. `.` is now any one unit (`...` one codon), in the
+  profile and in the seed of the self-similarity arc plot. In the profile the wildcard is a column of its own inside the motif,
+  drawn and described like a flank (`slot 4: T 10 of 28; M ...`), and neither it nor the wildcard in the arc seed counts as a mismatch.
+  `Alphabet.show` writes a wildcard as dots (`...` for a codon). Tests 434 to 441.
 - **The unit profile's threshold can be set, and near misses are visible.** A letter is drawn only if its count at a position has a
   binomial p at most 0.01 against its frequency in the text, so a common letter needs more windows than a rare one (in *Every
   Breath You Take*, `e` 4 of 7 at `+1` and `+3` has p = 0.014 and was left out, while `v`, `r`, `y` at 4 of 7 were drawn). The rule

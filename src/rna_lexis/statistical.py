@@ -276,15 +276,28 @@ def window_hamming(a: str, b: str) -> int:
     return sum(x != y for x, y in zip(a, b))
 
 
+def _pattern(motif: str, alphabet) -> str:
+    """A motif checked like any sequence, with ``"."`` kept as the wildcard (any one symbol).
+
+    Only for an :class:`Alphabet`; nucleotide text keeps its old rule, which drops everything but ``acgt``.
+    The wildcard is not available when ``"."`` is a symbol of the alphabet itself.
+    """
+    if isinstance(alphabet, Alphabet) and "." in motif and "." not in alphabet.chars:
+        return ".".join(normalize_sequence(part, alphabet) for part in motif.split("."))
+    return normalize_sequence(motif, alphabet)
+
+
 def hamming_family_positions(motif: str, txt: str, radius: int, alphabet=None) -> list[tuple[int, str, int]]:
     """Return all transcript windows within Hamming radius of motif.
+
+    With an alphabet, a ``"."`` in the motif matches any one symbol and is never counted as a mismatch.
 
     Windows that span a segment boundary are skipped.  Each hit is ``(start, window, distance)``, in order of start.
     Mismatches are counted one motif position at a time over all windows at once, so a long text costs
     ``len(motif)`` passes instead of ``len(text) * len(motif)`` steps.
     """
 
-    motif = normalize_sequence(motif, alphabet)
+    motif = _pattern(motif, alphabet)
     txt = normalize_sequence(txt, alphabet)
     L = len(motif)
     if radius < 0 or L == 0 or L > len(txt):
@@ -294,9 +307,11 @@ def hamming_family_positions(motif: str, txt: str, radius: int, alphabet=None) -
     distance = np.zeros(n_windows, dtype=np.int32)
     spans_boundary = np.zeros(n_windows, dtype=bool)
     boundary = ord(BOUNDARY)
+    has_wildcard = isinstance(alphabet, Alphabet) and "." not in alphabet.chars
     for j, ch in enumerate(motif):
         column = codes[j : j + n_windows]
-        distance += column != ord(ch)
+        if not (has_wildcard and ch == "."):
+            distance += column != ord(ch)
         spans_boundary |= column == boundary
     keep = np.flatnonzero((distance <= radius) & ~spans_boundary)
     return [(int(i), txt[i : i + L], int(distance[i])) for i in keep]
@@ -1090,9 +1105,11 @@ def unit_profile(
     _require("mismatches", mismatches, low=0, integer=True)
     _require("alpha", alpha, low=0, high=1, low_open=True)
     txt_n = normalize_sequence(txt, alphabet)
-    motif_n = normalize_sequence(motif, alphabet)
-    if not motif_n or BOUNDARY in motif_n:
-        raise ValueError("the motif must be non-empty and cannot contain the segment boundary")
+    motif_n = _pattern(motif, alphabet)
+    if not motif_n.replace(".", "") and not (isinstance(alphabet, Alphabet) and "." in alphabet.chars) or BOUNDARY in motif_n:
+        raise ValueError("the motif must have at least one symbol and cannot contain the segment boundary")
+    wildcards = [j for j, c in enumerate(motif_n)
+                 if c == "." and isinstance(alphabet, Alphabet) and "." not in alphabet.chars]
     L = len(motif_n)
     bg = MarkovBackground(txt_n, order=0, alphabet=alphabet if alphabet is not None else ALPHABET)
     chars = list(bg.alphabet)
@@ -1148,7 +1165,7 @@ def unit_profile(
             start += n
     labels = [alphabet.show(c) if alphabet is not None else c for c in chars]
     return {"chars": chars, "labels": labels, "columns": list(range(-flank, L + flank)),
-            "motif_columns": (flank, flank + L), "counts": counts, "frequency": frequency,
+            "motif_columns": (flank, flank + L), "wildcards": wildcards, "counts": counts, "frequency": frequency,
             "log_odds": log_odds, "p_value": p_value, "significant": significant, "alpha": alpha,
             "background": background, "n": used, "skipped": skipped,
             "groups": groups, "motif": motif_n,
@@ -1178,19 +1195,32 @@ def describe_matches(profile: dict) -> list[str]:
     return lines
 
 
+def _position_name(profile: dict, j: int) -> str:
+    """Name of column ``j`` of a profile: ``-3``, ``+2``, or ``slot 4`` for a wildcard inside the motif."""
+    m0, m1 = profile["motif_columns"]
+    if m0 <= j < m1:
+        return f"slot {j - m0 + 1}"
+    return f"{profile['columns'][j]}" if j < m0 else f"+{j - m1 + 1}"
+
+
+def _described_columns(profile: dict):
+    """Columns that are described in text: both flanks and the wildcard slots of the motif."""
+    m0, m1 = profile["motif_columns"]
+    slots = {m0 + k for k in profile.get("wildcards", [])}
+    return [j for j in range(len(profile["columns"])) if not (m0 <= j < m1) or j in slots]
+
+
 def describe_profile(profile: dict) -> list[str]:
     """The letters that are clearly enriched at each position next to the motif, as lines of text.
 
     One line per position that has any, such as ``-5: Z 3 of 53 (72x as common as in the text)``, strongest
-    first, flanks only (the motif's own letters are the same in every window).  It is what the logo shows, with
-    the counts spelled out.
+    first, flanks only (the motif's own letters are the same in every window), and the positions of a ``.`` in
+    the motif, called ``slot 4`` for the fourth unit of the motif.  It is what the logo shows, with the counts
+    spelled out.
     """
     n = max(1, int(profile["n"]))
-    m0, m1 = profile["motif_columns"]
     lines = []
-    for j, col in enumerate(profile["columns"]):
-        if m0 <= j < m1:
-            continue
+    for j in _described_columns(profile):
         found = []
         for i, label in enumerate(profile["labels"]):
             count, b = profile["counts"][i][j], profile["background"][i]
@@ -1198,7 +1228,7 @@ def describe_profile(profile: dict) -> list[str]:
                 found.append((count / n * math.log2(count / n / b), f"{label.upper()} {count} of {n} "
                               f"({count / n / b:.0f}x as common as in the text)"))
         if found:
-            name = f"{col}" if j < m0 else f"+{j - m1 + 1}"
+            name = _position_name(profile, j)
             lines.append(f"{name:>3}: " + "; ".join(t for _, t in sorted(found, reverse=True)))
     return lines
 
@@ -1212,13 +1242,8 @@ def describe_empty_positions(profile: dict) -> list[str]:
     which *no* position has anything is described by the figure itself and gives no lines here.
     """
     n = max(1, int(profile["n"]))
-    m0, m1 = profile["motif_columns"]
     shown = {line.split(":")[0].strip() for line in describe_profile(profile)}
-    named = []
-    for j, col in enumerate(profile["columns"]):
-        if m0 <= j < m1:
-            continue
-        named.append((j, f"{col}" if j < m0 else f"+{j - m1 + 1}"))
+    named = [(j, _position_name(profile, j)) for j in _described_columns(profile)]
     if not shown:
         return []
     lines = []

@@ -313,6 +313,9 @@ class Alphabet:
                       motif columns in result files).
             pad:      Pad every label to the longest label so columns line up.
             boundary: How a segment boundary is shown.
+
+        A ``"."`` in ``internal`` is the wildcard of a pattern ("any one symbol") and is shown as dots as wide
+        as a label (``"..."`` for a codon), unless ``"."`` is itself a symbol of this alphabet.
         """
         sep = self.sep if sep is None else sep
         if mask is not None and len(mask) != len(internal):
@@ -322,6 +325,9 @@ class Alphabet:
         for i, c in enumerate(internal):
             if c == BOUNDARY:
                 parts.append(boundary)
+                continue
+            if c == "." and "." not in self._to_label:
+                parts.append("." * (width if self.mode == "fixed" else 1))
                 continue
             label = self.label(c)
             flagged = upper or (mask is not None and bool(mask[i]))
