@@ -756,7 +756,233 @@ def plot_logo(wd, k, txt, outfile, fmt='pdf', muts=0):
     open_pdf(out_plot)
 
 
-def plot_unit_profile(profile, title='', file='', scale=1, annotate=True):
+def plot_unit_profile(profile, title='', file='', scale=1, annotate=True, kind='logo'):
+    """What surrounds a motif, drawn for an alphabet that is not nucleotides.
+
+    ``kind="logo"`` (the default) is a letter logo against the text's own background, see
+    :func:`plot_unit_logo`; ``kind="heatmap"`` is the log-odds table, see :func:`plot_unit_heatmap`.
+    Both take the dict from :func:`rna_lexis.statistical.unit_profile`.
+    """
+    if kind == 'logo':
+        return plot_unit_logo(profile, title=title, file=file, scale=scale)
+    if kind == 'heatmap':
+        return plot_unit_heatmap(profile, title=title, file=file, scale=scale, annotate=annotate)
+    raise ValueError("kind must be 'logo' or 'heatmap'")
+
+
+_VOWEL_COLOR, _CONSONANT_COLOR, _OTHER_COLOR = '#c8374a', '#2b5fa8', '#6f6f6f'
+_AA_COLORS = {'polar': '#2f9e4f', 'basic': '#2b5fa8', 'acidic': '#c8374a', 'hydrophobic': '#2b2b2b', 'stop': '#8c8c8c'}
+_AA_CLASS = {**{a: 'polar' for a in 'GSTYCQN'}, **{a: 'basic' for a in 'KRH'}, **{a: 'acidic' for a in 'DE'},
+             **{a: 'hydrophobic' for a in 'AVLIPWFM'}, '*': 'stop'}
+
+
+def _profile_title(profile):
+    """``Around THE MOTIF (53 occurrences)``, with how many are exact when mismatches were allowed."""
+    n_win, left_out = profile['n'], profile['skipped']
+    by = profile.get('by_distance', {})
+    detail = ''
+    if profile.get('mismatches') and any(d for d in by):
+        detail = ': ' + ', '.join([f"{by.get(0, 0)} exact"] + [f"{c} with {d} mismatch{'es' if d != 1 else ''}"
+                                                               for d, c in by.items() if d])
+    return (f"Around {' '.join(profile['motif_labels']).upper()} "
+            f"({n_win} occurrence{'s' if n_win != 1 else ''}{detail}"
+            + (f", {left_out} left out" if left_out else "") + ")")
+
+
+def _unit_style(profile):
+    """``(color of a label, legend)`` for the units of a profile.
+
+    Letters are colored vowel or consonant; amino acids and codons by the chemistry of the amino acid
+    (the colors WebLogo uses for protein); anything else one neutral color.  ``legend`` is a list of
+    ``(text, color)``, empty when the colors carry no meaning.
+    """
+    name = (profile.get('alphabet_name') or '').lower()
+    if name == 'codon':
+        from rna_lexis.genetic_code import codon_to_amino_acid
+        table = codon_to_amino_acid().mapping
+        color = lambda lab: _AA_COLORS[_AA_CLASS.get(table.get(lab, '*').upper(), 'stop')]
+    elif name == 'amino acid':
+        color = lambda lab: _AA_COLORS[_AA_CLASS.get(lab.upper(), 'stop')]
+    elif name == 'latin letters':
+        color = lambda lab: (_VOWEL_COLOR if lab in 'aeiou' else _CONSONANT_COLOR if lab.isalpha() else _OTHER_COLOR)
+    else:
+        return (lambda lab: '#2a7f8f'), []
+    if name == 'latin letters':
+        return color, [('vowel', _VOWEL_COLOR), ('consonant', _CONSONANT_COLOR)]
+    return color, [('polar', _AA_COLORS['polar']), ('basic', _AA_COLORS['basic']), ('acidic', _AA_COLORS['acidic']),
+                   ('hydrophobic', _AA_COLORS['hydrophobic']), ('stop', _AA_COLORS['stop'])]
+
+
+def _draw_glyph(ax, text, x, y, width, height, color):
+    """Draw ``text`` as a filled shape in the box ``(x, y, width, height)``, as sequence logos do.
+
+    The height is exact (it carries the value).  The width fills the box, but a thin letter such as ``I`` is
+    not stretched into a block: its width is at most twice what keeps its natural shape, and it is centered.
+    A white outline keeps neighboring letters of the same color apart.
+    """
+    from matplotlib.font_manager import FontProperties
+    from matplotlib.patches import PathPatch
+    from matplotlib.textpath import TextPath
+    from matplotlib.transforms import Affine2D
+    # a sans-serif capital I is a plain bar, which reads as a block; the monospaced face gives it serifs
+    family = 'DejaVu Sans Mono' if text == 'I' else 'DejaVu Sans'
+    path = TextPath((0, 0), text, size=1, prop=FontProperties(family=family, weight='bold'))
+    box = path.get_extents()
+    if box.width <= 0 or box.height <= 0 or height <= 0:
+        return
+    sy = height / box.height
+    sx = min(width / box.width, 2.0 * sy * _glyph_aspect(ax))
+    x_off = x + (width - sx * box.width) / 2
+    transform = Affine2D().translate(-box.x0, -box.y0).scale(sx, sy).translate(x_off, y)
+    ax.add_patch(PathPatch(transform.transform_path(path), facecolor=color, edgecolor='white', lw=0.7))
+
+
+def _glyph_aspect(ax):
+    """Data units per inch along y divided by data units per inch along x: converts a vertical scale to a horizontal one."""
+    fig = ax.figure
+    bbox = ax.get_position()
+    w_in, h_in = bbox.width * fig.get_figwidth(), bbox.height * fig.get_figheight()
+    (x0, x1), (y0, y1) = ax.get_xlim(), ax.get_ylim()
+    return ((x1 - x0) / w_in) / ((y1 - y0) / h_in)
+
+
+def plot_unit_logo(profile, title='', file='', scale=1):
+    """A letter logo of what surrounds a motif, for text that is not nucleotides.
+
+    It reads like a sequence logo.  Each position next to the motif has a stack of letters; a letter's
+    height is how much more often it stands there than it does anywhere in the text,
+    ``f * log2(f / b)`` bits (``f`` its frequency at the position, ``b`` its frequency in the whole text,
+    the measure of a Kullback-Leibler logo, as in Seq2Logo).  A rare letter that recurs is tall, while
+    a common letter that is merely common is not drawn at all, which an ordinary logo gets wrong for 26 letters.
+    Only letters whose count is surprising given the text (binomial p at most ``profile['alpha']``,
+    default 0.01) are drawn, so a letter seen once is never a tall stack.  The number above a stack is how
+    many of the windows have its top letter at that position (``3/53``), so a tall letter that stands for
+    a handful of occurrences says so.
+
+    The motif sits in a grey band with its own letters, because they are the same in every window by
+    definition; with mismatches allowed, the letters that differ from the motif are stacked there too.
+    Letters are colored vowel or consonant; amino acids and codons by the chemistry of the amino acid.
+
+    Args:
+        profile: Dict from ``unit_profile``.
+        title:   Plot title (default: the motif and the number of windows).
+        file:    Output path (.png/.svg/.pdf); empty = display only.
+        scale:   DPI multiplier for raster export.
+    """
+    counts = np.array(profile['counts'], dtype=float)
+    sig = np.array(profile['significant'], dtype=bool)
+    bg = np.array(profile['background'], dtype=float)
+    labels = profile['labels']
+    n = max(1, int(profile['n']))
+    n_rows, n_cols = counts.shape
+    m0, m1 = profile['motif_columns']
+    motif_rows = [profile['chars'].index(c) for c in profile['motif']]
+    color_of, legend = _unit_style(profile)
+
+    freq = counts / n
+    with np.errstate(divide='ignore', invalid='ignore'):
+        bits = np.where((freq > 0) & (freq > bg[:, None]), freq * np.log2(freq / bg[:, None]), 0.0)
+    drawn = sig & (bits > 0)
+    for j in range(m0, m1):                              # the motif's own letter is the band, not a stack
+        drawn[motif_rows[j - m0], j] = False
+
+    stacks = []                                          # per column: [(row, height)] from the bottom up
+    for j in range(n_cols):
+        rows = sorted((i for i in range(n_rows) if drawn[i, j]), key=lambda i: bits[i, j])
+        stacks.append([(i, float(bits[i, j])) for i in rows])
+    tallest = max((sum(h for _, h in st) for st in stacks), default=0.0)
+    ymax = max(1.0, tallest * 1.18)
+
+    # The motif is the same in every window, so unless letters that differ from it are drawn there it is one
+    # block, about as wide as its length allows, and not one column per letter.
+    L = m1 - m0
+    collapse = not any(stacks[j] for j in range(m0, m1))
+    cw = 1.0 if max(len(lab) for lab in labels) == 1 else 0.75 * max(len(lab) for lab in labels)   # a codon needs a wider column
+    block = (min(L, max(3.0, 0.3 * L + 1.5)) if collapse else float(L)) * cw
+    xs, x = [], 0.0
+    for j in range(n_cols):
+        if j == m0:
+            motif_x0 = x
+        if collapse and m0 <= j < m1:
+            xs.append(None)
+            if j == m1 - 1:
+                x += block
+        else:
+            xs.append(x + cw / 2)
+            x += cw
+    total_w = x
+    motif_x1 = motif_x0 + block
+    motif_text = ' '.join(profile['motif_labels']).upper() if len(profile['motif_labels'][0]) > 1 \
+        else ''.join(profile['motif_labels']).upper()
+
+    fig, ax = plt.subplots(figsize=(max(6.5, 0.75 * total_w + 2.0), 4.4))
+    ax.set_xlim(0, total_w)
+    ax.set_ylim(0, ymax)
+    tick_x = [xs[j] for j in range(n_cols) if xs[j] is not None]
+    tick_t = [profile['motif_labels'][j - m0].upper() if m0 <= j < m1 else (f'{profile["columns"][j]}' if j < m0
+              else f'+{j - m1 + 1}') for j in range(n_cols) if xs[j] is not None]
+    ax.set_xticks(tick_x)
+    ax.set_xticklabels(tick_t, fontsize=9, rotation=90 if max(len(t) for t in tick_t) > 2 else 0)
+    ax.set_xlabel('position relative to the motif')
+    ax.set_ylabel('enrichment (bits)')
+    for side in ('top', 'right'):
+        ax.spines[side].set_visible(False)
+    n_win, left_out = profile['n'], profile['skipped']
+    default_title = _profile_title(profile)
+    ax.set_title(title or default_title, fontsize=11, loc='left')
+    if legend:
+        from matplotlib.patches import Patch
+        fig.legend(handles=[Patch(color=c, label=t) for t, c in legend], loc='upper right', fontsize=8,
+                   frameon=False, ncol=len(legend), bbox_to_anchor=(0.995, 0.995))
+    fig.text(0.01, 0.005, f"Only letters clearly more common here than in the text are shown (p \u2264 {profile['alpha']}). "
+             "The number above a stack is how many of the windows have its top letter there.",
+             fontsize=7, color='#666666', ha='left', va='bottom')
+    fig.tight_layout(rect=(0, 0.03, 1, 0.94 if legend else 1))          # the final size of the axes, before anything is drawn to scale
+
+    ax.axvspan(motif_x0, motif_x1, color='#ececec', zorder=0)
+    aspect = _glyph_aspect(ax)
+    if collapse:
+        from matplotlib.font_manager import FontProperties
+        from matplotlib.patches import PathPatch
+        from matplotlib.textpath import TextPath
+        from matplotlib.transforms import Affine2D
+        tp = TextPath((0, 0), motif_text, size=1, prop=FontProperties(family='DejaVu Sans', weight='bold'))
+        bx = tp.get_extents()
+        kx = min(0.92 * block / bx.width, 0.14 * ymax * aspect / bx.height)     # keeps the letters' own proportions
+        tr = Affine2D().translate(-(bx.x0 + bx.width / 2), -(bx.y0 + bx.height / 2)).scale(kx, kx / aspect) \
+            .translate((motif_x0 + motif_x1) / 2, ymax * 0.5)
+        ax.add_patch(PathPatch(tr.transform_path(tp), facecolor='#9a9a9a', edgecolor='none'))
+        ax.text((motif_x0 + motif_x1) / 2, ymax * 0.5 - 0.1 * ymax, 'the motif', ha='center', va='top',
+                fontsize=8, color='#8a8a8a')
+    else:
+        for j in range(m0, m1):
+            ax.text(xs[j], ymax * 0.93, profile['motif_labels'][j - m0].upper(), ha='center', va='center',     # at the top, clear of the stacks
+                    fontsize=15 if len(profile['motif_labels'][0]) == 1 else 10, fontweight='bold',
+                    color='#a8a8a8', zorder=1)
+    for j, st in enumerate(stacks):
+        if xs[j] is None:
+            continue
+        y = 0.0
+        for i, h in st:
+            _draw_glyph(ax, labels[i].upper(), xs[j] - 0.43 * cw, y, 0.86 * cw, h, color_of(labels[i]))
+            y += h
+        if st:
+            top_row = st[-1][0]
+            ax.text(xs[j], y + ymax * 0.015, f"{int(counts[top_row, j])}/{n}", ha='center', va='bottom',
+                    fontsize=7, color='#555555')
+    if not any(stacks):
+        ax.text(total_w / 2, ymax * 0.8, 'no letter is clearly enriched next to this motif', ha='center',
+                va='center', color='#777777', fontsize=11)
+    if file:
+        try:
+            plt.savefig(file, bbox_inches='tight', dpi=150 * scale)
+            open_file_with_default_software(file)
+        except Exception as e:
+            print(f'Could not save plot: {file}\n{e}')
+    plt.show()
+
+
+def plot_unit_heatmap(profile, title='', file='', scale=1, annotate=True):
     """Heatmap of what surrounds a motif: log-odds of every symbol at every position.
 
     Takes the dict from :func:`rna_lexis.statistical.unit_profile`.  Rows are the
@@ -822,9 +1048,7 @@ def plot_unit_profile(profile, title='', file='', scale=1, annotate=True):
                 ax.plot(j, i, marker='o', mfc='none', mec='black', ms=7, mew=0.9)
     ax.set_xlabel('position relative to the motif (units)')
     n_win, left_out = profile['n'], profile['skipped']
-    default_title = (f"Around {' '.join(profile['motif_labels']).upper()} "
-                     f"({n_win} occurrence{'s' if n_win != 1 else ''}"
-                     + (f", {left_out} left out" if left_out else "") + ")")
+    default_title = _profile_title(profile)
     ax.set_title(title or default_title, fontsize=10)
     fig.colorbar(image, ax=ax, label='log2 (frequency here / frequency in the text)',
                  pad=0.12 if profile.get('groups') else 0.02, shrink=0.5, aspect=25)

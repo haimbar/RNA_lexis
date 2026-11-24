@@ -775,9 +775,12 @@ many-to-one map between alphabets is a `rna_lexis.alphabet.Projection(source, ta
 `apply(internal)`, and `Tokenized.project(projection)` keeps positions, segments and what was skipped.
 `statistical.unit_profile(txt, motif, flank=5, mismatches=0, alphabet=A, group_by=None)` counts every symbol at
 every position around a motif's occurrences and returns log-odds against the text's own background with a
-binomial p-value per cell; `plots.plot_unit_profile(profile)` draws it as a heatmap that colors only the cells the
-counts support (the replacement for a sequence logo when an alphabet has about 20 symbols or more), and
-`statistical.write_unit_profile_csv` writes the numbers.
+binomial p-value per cell; `plots.plot_unit_profile(profile, kind="logo")` draws it as a letter logo (the default): each letter's height is
+`f * log2(f / b)` bits against the text's own background, only letters with a binomial p of at most 0.01 are drawn,
+and the number above a stack is the count of its top letter (`3/53`); `kind="heatmap"` draws the log-odds table.
+`statistical.describe_profile(profile)` lists the enriched letters at each position with their counts as text lines,
+and `statistical.write_unit_profile_csv` writes the numbers. The replacement for a sequence logo when an alphabet
+has about 20 symbols or more.
 
 ### 1 — Standard pipeline: load → discover → save
 

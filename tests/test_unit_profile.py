@@ -15,7 +15,7 @@ import matplotlib.pyplot as plt
 import rna_lexis.plots as P
 from rna_lexis.alphabet import BOUNDARY, Alphabet, codon, latin, nucleotide
 from rna_lexis.genetic_code import amino_acid, codon_to_amino_acid
-from rna_lexis.statistical import unit_profile, write_unit_profile_csv
+from rna_lexis.statistical import unit_profile, describe_profile, describe_matches, write_unit_profile_csv
 from rna_lexis.tokenizers import tokenize
 
 A = codon()
@@ -182,7 +182,7 @@ class PlotTests(unittest.TestCase):
     def test_heatmap_shows_decoded_labels_and_rings_the_planted_cells(self):
         txt, motif = planted_text()
         p = unit_profile(txt, motif, flank=3, alphabet=A, group_by=codon_to_amino_acid())
-        P.plot_unit_profile(p)
+        P.plot_unit_profile(p, kind="heatmap")
         ax = plt.gcf().axes[0]
         xt = [t.get_text() for t in ax.get_xticklabels()]
         self.assertEqual(xt[3:7], list(A.decode_list(motif)))          # the motif, as codons
@@ -198,7 +198,7 @@ class PlotTests(unittest.TestCase):
     def test_only_supported_cells_are_colored(self):
         txt, motif = planted_text()
         p = unit_profile(txt, motif, flank=3, alphabet=A)
-        P.plot_unit_profile(p)
+        P.plot_unit_profile(p, kind="heatmap")
         data = plt.gcf().axes[0].images[0].get_array()
         colored = int((data != 0).sum())
         self.assertEqual(colored, sum(map(sum, p["significant"])))
@@ -216,6 +216,202 @@ class PlotTests(unittest.TestCase):
                 out = os.path.join(d, "p.png")
                 P.plot_unit_profile(p, file=out)
                 self.assertGreater(os.path.getsize(out), 1000)
+            plt.close("all")
+
+
+class MismatchTests(unittest.TestCase):
+    """A motif is matched up to a chosen number of substituted units, and the output says which occurrences were approximate."""
+    MOTIF = "kloprsuv"
+
+    def setUp(self):
+        plt.close("all")
+        self.addCleanup(plt.close, "all")
+        self._open = P.open_file_with_default_software
+        P.open_file_with_default_software = lambda *a, **k: None
+        self.addCleanup(setattr, P, "open_file_with_default_software", self._open)
+        rnd = random.Random(12)
+        self.a = latin()
+        units = [rnd.choice("abcdefghijmnqtwxyz") for _ in range(3000)]        # none of the motif's letters
+        for st in range(100, 2900, 400):                                         # 7 exact copies
+            units[st:st + 8] = list(self.MOTIF)
+        for st in (250, 650):                                                    # one mismatch: the last letter
+            units[st:st + 8] = list("kloprsua")
+        units[1050:1058] = list("kloprsax")                                      # two mismatches
+        self.txt = self.a.encode("".join(units))
+
+    def profile(self, m):
+        return unit_profile(self.txt, self.a.encode(self.MOTIF), flank=3, mismatches=m, alphabet=self.a)
+
+    def test_the_number_of_occurrences_grows_with_the_mismatches_allowed(self):
+        self.assertEqual([self.profile(m)["n"] for m in (0, 1, 2)], [7, 9, 10])
+
+    def test_the_breakdown_and_the_approximate_occurrences_are_reported(self):
+        p = self.profile(2)
+        self.assertEqual(p["by_distance"], {0: 7, 1: 2, 2: 1})
+        self.assertEqual(p["approximate"], [(250, "kloprsua", 1), (650, "kloprsua", 1), (1050, "kloprsax", 2)])
+        lines = describe_matches(p)
+        self.assertEqual(lines[0], "10 occurrence(s) allowing up to 2 mismatches: 7 exact, 2 with 1 mismatch, 1 with 2 mismatches")
+        self.assertIn("  position 1050: KLOPRSAX instead of KLOPRSUV (2 mismatches)", lines)
+        self.assertIn("  position 250: KLOPRSUA instead of KLOPRSUV (1 mismatch)", lines)
+        self.assertEqual(describe_matches(self.profile(0)), ["7 occurrence(s), all exact"])
+
+    def test_the_title_of_both_plots_says_how_many_are_exact(self):
+        for kind in ("logo", "heatmap"):
+            P.plot_unit_profile(self.profile(2), kind=kind)
+            ax = plt.gcf().axes[0]
+            title = ax.get_title(loc="left") or ax.get_title()
+            self.assertIn("10 occurrences: 7 exact, 2 with 1 mismatch, 1 with 2 mismatches", title, kind)
+            plt.close("all")
+        P.plot_unit_profile(self.profile(0))
+        self.assertNotIn("exact", plt.gcf().axes[0].get_title(loc="left"))
+
+    def test_the_flanks_of_an_approximate_occurrence_are_counted_like_the_others(self):
+        for m, expect in ((0, 7), (2, 10)):
+            p = self.profile(m)
+            self.assertEqual(sum(p["counts"][i][0] for i in range(len(p["chars"]))), expect)
+
+    def test_the_letters_where_a_variant_differs_are_drawn_when_they_recur(self):
+        # 20 copies in which the last letter is 'a' instead of 'v': that is a clear departure at the last position
+        units = list(self.a.decode(self.txt))
+        for st in range(60, 2900, 140):
+            units[st:st + 8] = list("kloprsua")
+        p = unit_profile(self.a.encode("".join(units)), self.a.encode(self.MOTIF), flank=3, mismatches=1, alphabet=self.a)
+        P.plot_unit_profile(p)
+        ticks = [t.get_text() for t in plt.gcf().axes[0].get_xticklabels()]
+        self.assertEqual(ticks[3:11], list("KLOPRSUV"))          # the motif's columns are kept, to show the variant
+
+    def test_the_menu_asks_for_the_mismatches_and_prints_what_it_found(self):
+        import contextlib
+        import rna_lexis.menu as M
+        answers = iter([self.MOTIF, "3", "2", "1", "", "n"])     # motif, flank, mismatches, logo, format, no csv
+        saved = (M.safe_input, M._spawn_plot, M._prompt_save)
+        asked = []
+        M.safe_input = lambda prompt="": (asked.append(prompt), next(answers, ""))[1]
+        M._spawn_plot = lambda fn, *a, **k: None
+        M._prompt_save = lambda **k: ("", 1)
+        try:
+            with contextlib.redirect_stdout(io.StringIO()) as out:
+                M.profile_input(self.txt, {}, "", self.a)
+        finally:
+            M.safe_input, M._spawn_plot, M._prompt_save = saved
+        text = out.getvalue()
+        self.assertIn("allowing up to 2 mismatches: 7 exact, 2 with 1 mismatch, 1 with 2 mismatches", text)
+        self.assertIn("KLOPRSAX instead of KLOPRSUV", text)
+        self.assertTrue(any("8 letters long; 1 per 6 would be 1" in a for a in asked), asked)
+
+    def test_the_menu_does_not_allow_more_than_half_the_motif_to_differ(self):
+        import contextlib
+        import rna_lexis.menu as M
+        answers = iter([self.MOTIF, "3", "5", "4", "1", "", "n"])   # 5 is refused (more than half of 8), then 4 is taken
+        saved = (M.safe_input, M._spawn_plot, M._prompt_save)
+        M.safe_input = lambda prompt="": next(answers, "")
+        M._spawn_plot = lambda fn, *a, **k: None
+        M._prompt_save = lambda **k: ("", 1)
+        try:
+            with contextlib.redirect_stdout(io.StringIO()) as out:
+                M.profile_input(self.txt, {}, "", self.a)
+        finally:
+            M.safe_input, M._spawn_plot, M._prompt_save = saved
+        self.assertIn("Please enter an integer from 0 to 4", out.getvalue())
+
+
+class LogoTests(unittest.TestCase):
+    """The letter logo: what it draws, and what it must not."""
+
+    def setUp(self):
+        plt.close("all")
+        self.addCleanup(plt.close, "all")
+        self._open = P.open_file_with_default_software
+        P.open_file_with_default_software = lambda *a, **k: None
+        self.addCleanup(setattr, P, "open_file_with_default_software", self._open)
+
+    def planted_letters(self):
+        """A text over Latin letters with 'q' two before every 'the', which is otherwise rare."""
+        rnd = random.Random(3)
+        base = [rnd.choice("abcdefghijklmnoprstuvwxy") for _ in range(4000)]
+        for s in range(100, 3900, 120):
+            base[s:s + 5] = list("qxthe")
+        return latin(), latin().encode("".join(base))
+
+    def test_default_is_the_logo_and_the_heatmap_is_still_there(self):
+        a, txt = self.planted_letters()
+        p = unit_profile(txt, a.encode("the"), flank=3, alphabet=a)
+        P.plot_unit_profile(p)
+        self.assertEqual(len(plt.gcf().axes[0].images), 0)               # no heatmap image: it is drawn with shapes
+        plt.close("all")
+        P.plot_unit_profile(p, kind="heatmap")
+        self.assertEqual(len(plt.gcf().axes[0].images), 1)
+        with self.assertRaises(ValueError):
+            P.plot_unit_profile(p, kind="pie")
+
+    def test_the_planted_letters_are_stacked_where_they_were_put_with_their_counts(self):
+        a, txt = self.planted_letters()
+        p = unit_profile(txt, a.encode("the"), flank=3, alphabet=a)
+        P.plot_unit_profile(p)
+        ax = plt.gcf().axes[0]
+        labels = [t.get_text() for t in ax.texts]
+        n = p["n"]
+        counts = [int(t.split("/")[0]) for t in labels if "/" in t]
+        self.assertTrue(all(t.endswith(f"/{n}") for t in labels if "/" in t))
+        self.assertGreaterEqual(max(counts), n - 3)                      # q and x are in nearly every window (a few
+                                                                         # chance 'the' have other letters there)
+        lines = describe_profile(p)
+        self.assertTrue(any(l.strip().startswith("-2:") and " Q " in " " + l for l in lines), lines)
+        self.assertTrue(any(l.strip().startswith("-1:") and " X " in " " + l for l in lines), lines)
+
+    def test_the_motif_is_one_block_not_a_column_per_letter(self):
+        a, txt = self.planted_letters()
+        p = unit_profile(txt, a.encode("the"), flank=3, alphabet=a)
+        P.plot_unit_profile(p)
+        ax = plt.gcf().axes[0]
+        ticks = [t.get_text() for t in ax.get_xticklabels()]
+        self.assertEqual(ticks, ["-3", "-2", "-1", "+1", "+2", "+3"])   # the motif has no ticks of its own
+        self.assertEqual(max(ax.get_xlim()), 6 + 3.0)                   # six flank columns and a 3-wide block
+
+    def test_a_letter_that_is_only_common_is_not_drawn_and_a_rare_one_is_small_but_counted(self):
+        a, txt = self.planted_letters()
+        p = unit_profile(txt, a.encode("the"), flank=3, alphabet=a)
+        lines = " ".join(describe_profile(p))
+        self.assertNotIn(" E ", lines)                                   # e is common everywhere
+        # the counts always accompany a letter, so a rare letter seen a few times cannot pass for a dominant one
+        for line in describe_profile(p):
+            self.assertRegex(line, r"[A-Z] \d+ of \d+ \(\d+x as common")
+
+    def test_nothing_enriched_says_so(self):
+        rnd = random.Random(9)
+        a = latin()
+        txt = a.encode("".join(rnd.choice("abcdefghijklmnopqrstuvwxyz") for _ in range(3000)))
+        p = unit_profile(txt, a.encode("th"), flank=3, alphabet=a)
+        p["significant"] = [[False] * len(r) for r in p["significant"]]
+        P.plot_unit_profile(p)
+        self.assertTrue(any("no letter is clearly enriched" in t.get_text() for t in plt.gcf().axes[0].texts))
+        self.assertEqual(describe_profile(p), [])
+
+    def test_mismatches_keep_the_columns_so_that_the_variants_can_be_shown(self):
+        a, txt = self.planted_letters()
+        units = list(txt)
+        for s in range(100, 3900, 240):                                  # every other copy: 'the' becomes 'tha'
+            units[s + 4] = a.char("a")
+        p = unit_profile("".join(units), a.encode("the"), flank=3, mismatches=1, alphabet=a)
+        P.plot_unit_profile(p)
+        ticks = [t.get_text() for t in plt.gcf().axes[0].get_xticklabels()]
+        if "T" in ticks:                                                 # the variant stack forced the motif columns
+            self.assertEqual(ticks[3:6], ["T", "H", "E"])
+
+    def test_works_for_codons_amino_acids_and_other_alphabets(self):
+        rnd = random.Random(5)
+        for alpha in (codon(), amino_acid(), Alphabet("Greek", tuple("αβγδεζηθικλμνξοπρστυφχψω"))):
+            units = [rnd.choice(alpha.labels) for _ in range(3000)]
+            for s in range(50, 2900, 100):
+                units[s:s + 3] = list(alpha.labels[:3])
+                units[s - 1] = alpha.labels[5]
+                units[s + 3] = alpha.labels[6]
+            p = unit_profile(alpha.encode(units), alpha.encode(alpha.labels[:3]), flank=3, alphabet=alpha)
+            with tempfile.TemporaryDirectory() as d:
+                out = os.path.join(d, "logo.png")
+                P.plot_unit_profile(p, file=out)
+                self.assertGreater(os.path.getsize(out), 1000)
+            self.assertEqual(private_use("".join(t.get_text() for t in plt.gcf().axes[0].texts)), [])
             plt.close("all")
 
 

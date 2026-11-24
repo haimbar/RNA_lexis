@@ -195,8 +195,9 @@ letters.
 
 For these alphabets the Markov background is order 0 for codons and order 1 for letters,
 and the false-discovery correction runs within each motif length over every possible
-word of that length. Both were chosen by simulation (`calibration/README.md`). For large alphabets the sequence logo is replaced by a **unit profile**, a log-odds heatmap of
-what surrounds a motif that colors only the cells the counts support. Items that
+word of that length. Both were chosen by simulation (`calibration/README.md`). For large alphabets the sequence logo is replaced by a **unit profile**, a letter logo of
+what surrounds a motif in which a letter's height is how much more often it stands there than in the whole text, with
+the counts shown (a heatmap is the other style). Items that
 need nucleotides (hairpins, GC content, reverse complement) are not available, and
 the menu says so. The batch CLI takes `--alphabet`, `--frame`, `--translate` and `--on-unknown`; the
 sections *Reading the Text* and *Batch CLI* of `docs/user_guide.md` and the alphabet

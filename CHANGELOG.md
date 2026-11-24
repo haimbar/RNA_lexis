@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **The unit profile is now a letter logo by default**, with the heatmap as plot style 2. The heatmap was hard to read
+  (rows are letters shared by every column; the motif's own columns were colored although they are the same in
+  every occurrence; a rare letter was the darkest red with no indication that it stood for 3 of 53 occurrences). The logo
+  stacks, at each position next to the motif, the letters that are clearly more common there than in the whole text
+  (binomial p at most 0.01), each as tall as `f * log2(f / b)` bits, colored vowel or consonant (amino acids and codons by
+  the chemistry of the amino acid). The number above a stack is the count of its top letter (`3/53`). The motif is one grey
+  block. `plots.plot_unit_profile(profile, kind="logo" | "heatmap")`, `plots.plot_unit_logo`, `plots.plot_unit_heatmap`; the
+  menu asks for the style, and prints `statistical.describe_profile(profile)`, the enriched letters with their counts
+  (`-5: Z 3 of 53 (73x as common as in the text)`). Mismatches still work and are now reported: the title of both plots says how
+  many occurrences were exact and how many had 1, 2, ... mismatches (`81 occurrences: 6 exact, 75 with 1 mismatch`), the terminal lists
+  each approximate occurrence with its position and what it reads (`statistical.describe_matches`), the profile dict gains
+  `by_distance` and `approximate`, and the menu allows at most half the motif's length (it allowed all of it, which matches noise).
+  Tests 396 to 410.
+
 ### Fixed
 
 - **A FASTA file that begins with a `;` comment line had its header lines read as sequence.** The

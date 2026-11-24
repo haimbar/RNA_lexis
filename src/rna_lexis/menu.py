@@ -53,7 +53,7 @@ from rna_lexis.statistical import (
     score_gapped_motif,
     shared_exact_motifs,
     spacing_periodicity_test,
-    unit_profile, MAX_FLANK,
+    unit_profile, describe_profile, describe_matches, MAX_FLANK,
     write_unit_profile_csv,
     write_rows_csv,
 )
@@ -1404,7 +1404,8 @@ def profile_input(txt, strs, file_path='', alphabet=None):
                           + ".\n"], ['bold'], ['red']))
 
     flank = ask_int(f"Enter the number of {_unit(alphabet)} on both sides", 5, 0, MAX_FLANK)
-    mismatches = ask_int("Enter the maximum number of mismatches in the motif", 0, 0, len(motif))
+    mismatches = ask_int(f"Enter the maximum number of mismatches in the motif ({len(motif)} {_unit(alphabet)} long; "
+                         f"1 per 6 would be {len(motif) // 6}; at most {len(motif) // 2})", 0, 0, len(motif) // 2)
     group_by = codon_to_amino_acid() if alphabet is not None and alphabet.name == 'codon' else None
     try:
         profile = unit_profile(txt, motif, flank=flank, mismatches=mismatches,
@@ -1421,6 +1422,13 @@ def profile_input(txt, strs, file_path='', alphabet=None):
     print(fmttxt([f"{profile['n']} occurrence(s) used, {profile['skipped']} left out; "
                   f"{sum(map(sum, profile['significant']))} cell(s) differ from the background "
                   f"(p <= {profile['alpha']})."], [''], ['cyan']))
+    for line in describe_matches(profile)[:25]:          # which occurrences were exact, and what the others read
+        print(f"  {line}")
+    for line in describe_profile(profile)[:60]:          # what the logo shows, with the counts spelled out
+        print(f"  {line}")
+    style = safe_input(fmttxt(["Plot style", "[1: letter logo (default), 2: heatmap]: "],
+                              ['bold', ''], ['yellow', 'cyan']) + " ")
+    kind = 'heatmap' if style.strip() == '2' else 'logo'
     session_dir = os.path.dirname(os.path.abspath(file_path)) if file_path else ''
     fn_out, scale = _prompt_save(plotly=False, session_dir=session_dir)
     ans = safe_input(fmttxt(["Also save the numbers as a CSV file?", "[y/N]: "],
@@ -1430,7 +1438,7 @@ def profile_input(txt, strs, file_path='', alphabet=None):
         out_csv = f"{base}_profile_{_slug(motif, alphabet)}.csv"
         write_unit_profile_csv(out_csv, profile)
         print(fmttxt([f"Saved to {out_csv}"], [''], ['green']))
-    _spawn_plot(plot_unit_profile, profile, file=fn_out, scale=scale)
+    _spawn_plot(plot_unit_profile, profile, file=fn_out, scale=scale, kind=kind)
 
 
 def coverage_input(txt, strs, file_path='', alphabet=None):

@@ -1104,14 +1104,18 @@ def unit_profile(
     W = flank + L + flank
     counts = [[0] * W for _ in chars]
 
-    starts = [p for p, _, _ in hamming_family_positions(motif_n, txt_n, mismatches, alphabet)]
+    hits = hamming_family_positions(motif_n, txt_n, mismatches, alphabet)
     used = skipped = 0
-    for p in starts:
+    by_distance, approximate = {}, []
+    for p, window, dist in hits:
         a, b = p - flank, p + L + flank
         if a < 0 or b > len(txt_n) or BOUNDARY in txt_n[a:b]:
             skipped += 1
             continue
         used += 1
+        by_distance[dist] = by_distance.get(dist, 0) + 1
+        if dist:
+            approximate.append((p, alphabet.show(window) if alphabet is not None else window, dist))
         for j, c in enumerate(txt_n[a:b]):
             counts[index[c]][j] += 1
 
@@ -1148,7 +1152,55 @@ def unit_profile(
             "log_odds": log_odds, "p_value": p_value, "significant": significant, "alpha": alpha,
             "background": background, "n": used, "skipped": skipped,
             "groups": groups, "motif": motif_n,
-            "motif_labels": [alphabet.show(c) if alphabet is not None else c for c in motif_n]}
+            "motif_labels": [alphabet.show(c) if alphabet is not None else c for c in motif_n],
+            "alphabet_name": alphabet.name if alphabet is not None else "nucleotide",
+            "mismatches": mismatches, "by_distance": dict(sorted(by_distance.items())),
+            "approximate": approximate}
+
+
+def describe_matches(profile: dict) -> list[str]:
+    """How the windows of a profile match the motif, as lines of text.
+
+    The first line says how many windows were used and, when mismatches were allowed, how many of them were exact
+    and how many differ from the motif in 1, 2, ... units; each approximate occurrence then follows with its position
+    (in units, from 0) and what it reads.  With no mismatches allowed there is one line.
+    """
+    n, allowed = profile["n"], profile.get("mismatches", 0)
+    by = profile.get("by_distance", {})
+    if not allowed:
+        return [f"{n} occurrence(s), all exact"]
+    parts = [f"{by.get(0, 0)} exact"] + [f"{c} with {d} mismatch{'es' if d != 1 else ''}" for d, c in by.items() if d]
+    lines = [f"{n} occurrence(s) allowing up to {allowed} mismatch{'es' if allowed != 1 else ''}: " + ", ".join(parts)]
+    shown = " ".join(profile["motif_labels"]).upper() if len(profile["motif_labels"][0]) > 1 else \
+        "".join(profile["motif_labels"]).upper()
+    for pos, text, dist in profile.get("approximate", []):
+        lines.append(f"  position {pos}: {text.upper()} instead of {shown} ({dist} mismatch{'es' if dist != 1 else ''})")
+    return lines
+
+
+def describe_profile(profile: dict) -> list[str]:
+    """The letters that are clearly enriched at each position next to the motif, as lines of text.
+
+    One line per position that has any, such as ``-5: Z 3 of 53 (72x as common as in the text)``, strongest
+    first, flanks only (the motif's own letters are the same in every window).  It is what the logo shows, with
+    the counts spelled out.
+    """
+    n = max(1, int(profile["n"]))
+    m0, m1 = profile["motif_columns"]
+    lines = []
+    for j, col in enumerate(profile["columns"]):
+        if m0 <= j < m1:
+            continue
+        found = []
+        for i, label in enumerate(profile["labels"]):
+            count, b = profile["counts"][i][j], profile["background"][i]
+            if profile["significant"][i][j] and count / n > b:
+                found.append((count / n * math.log2(count / n / b), f"{label.upper()} {count} of {n} "
+                              f"({count / n / b:.0f}x as common as in the text)"))
+        if found:
+            name = f"{col}" if j < m0 else f"+{j - m1 + 1}"
+            lines.append(f"{name:>3}: " + "; ".join(t for _, t in sorted(found, reverse=True)))
+    return lines
 
 
 def write_unit_profile_csv(path: str, profile: dict) -> str:
