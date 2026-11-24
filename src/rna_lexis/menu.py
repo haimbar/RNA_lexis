@@ -53,7 +53,7 @@ from rna_lexis.statistical import (
     score_gapped_motif,
     shared_exact_motifs,
     spacing_periodicity_test,
-    unit_profile, describe_profile, describe_matches, MAX_FLANK,
+    unit_profile, describe_profile, describe_empty_positions, describe_matches, MAX_FLANK,
     write_unit_profile_csv,
     write_rows_csv,
 )
@@ -1444,6 +1444,8 @@ def profile_input(txt, strs, file_path='', alphabet=None):
         print(f"  {line}")
     for line in describe_profile(profile)[:60]:          # what the logo shows, with the counts spelled out
         print(f"  {line}")
+    for line in describe_empty_positions(profile)[:60]:  # empty columns of the logo, so they are not mistaken for missing
+        print(fmttxt([f"  {line}"], [''], ['cyan']))
     style = safe_input(fmttxt(["Plot style", "[1: letter logo (default), 2: heatmap]: "],
                               ['bold', ''], ['yellow', 'cyan']) + " ")
     kind = 'heatmap' if style.strip() == '2' else 'logo'

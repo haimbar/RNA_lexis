@@ -15,6 +15,9 @@
 
 ### Changed
 
+- **The unit profile now names the positions where nothing stands out**, with the most common letters there
+  (`-1: nothing stands out (most common: A 2 of 4, E 2 of 4)`), because the logo leaves such a column empty and it looked like a
+  missing one. `statistical.describe_empty_positions(profile)`. Tests 417 to 418.
 - **The unit profile is now a letter logo by default**, with the heatmap as plot style 2. The heatmap was hard to read
   (rows are letters shared by every column; the motif's own columns were colored although they are the same in
   every occurrence; a rare letter was the darkest red with no indication that it stood for 3 of 53 occurrences). The logo

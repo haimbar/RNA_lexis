@@ -1203,6 +1203,34 @@ def describe_profile(profile: dict) -> list[str]:
     return lines
 
 
+def describe_empty_positions(profile: dict) -> list[str]:
+    """Positions next to the motif where no letter is clearly enriched, as lines of text.
+
+    The logo leaves such a position empty, which can look like a missing column.  Each line gives the most
+    common letters there, e.g. ``-1: nothing stands out (most common: A 2 of 4, E 2 of 4)``.  A profile in
+    which *no* position has anything is described by the figure itself and gives no lines here.
+    """
+    n = max(1, int(profile["n"]))
+    m0, m1 = profile["motif_columns"]
+    shown = {line.split(":")[0].strip() for line in describe_profile(profile)}
+    named = []
+    for j, col in enumerate(profile["columns"]):
+        if m0 <= j < m1:
+            continue
+        named.append((j, f"{col}" if j < m0 else f"+{j - m1 + 1}"))
+    if not shown:
+        return []
+    lines = []
+    for j, name in named:
+        if name in shown:
+            continue
+        top = sorted(((profile["counts"][i][j], label) for i, label in enumerate(profile["labels"])),
+                     key=lambda t: (-t[0], t[1]))[:3]
+        common = ", ".join(f"{label.upper()} {c} of {n}" for c, label in top if c > 0)
+        lines.append(f"{name:>3}: nothing stands out" + (f" (most common: {common})" if common else ""))
+    return lines
+
+
 def write_unit_profile_csv(path: str, profile: dict) -> str:
     """Write a :func:`unit_profile` as a table: one row per symbol, and for every
     position its count and its log-odds against the background."""

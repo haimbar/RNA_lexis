@@ -15,7 +15,7 @@ import matplotlib.pyplot as plt
 import rna_lexis.plots as P
 from rna_lexis.alphabet import BOUNDARY, Alphabet, codon, latin, nucleotide
 from rna_lexis.genetic_code import amino_acid, codon_to_amino_acid
-from rna_lexis.statistical import unit_profile, describe_profile, describe_matches, write_unit_profile_csv
+from rna_lexis.statistical import unit_profile, describe_profile, describe_empty_positions, describe_matches, write_unit_profile_csv
 from rna_lexis.tokenizers import tokenize
 
 A = codon()
@@ -376,6 +376,20 @@ class LogoTests(unittest.TestCase):
         # the counts always accompany a letter, so a rare letter seen a few times cannot pass for a dominant one
         for line in describe_profile(p):
             self.assertRegex(line, r"[A-Z] \d+ of \d+ \(\d+x as common")
+
+    def test_an_empty_column_is_named_with_its_most_common_letters(self):
+        a, txt = self.planted_letters()
+        p = unit_profile(txt, a.encode("the"), flank=3, alphabet=a)
+        shown = {line.split(":")[0].strip() for line in describe_profile(p)}
+        empty = describe_empty_positions(p)
+        self.assertTrue(shown)
+        named = {line.split(":")[0].strip() for line in empty}
+        self.assertEqual(shown | named, {"-3", "-2", "-1", "+1", "+2", "+3"})   # every flank position is accounted for
+        self.assertFalse(shown & named)
+        for line in empty:
+            self.assertRegex(line, r"nothing stands out \(most common: [A-Z] \d+ of \d+")
+        p["significant"] = [[False] * len(r) for r in p["significant"]]
+        self.assertEqual(describe_empty_positions(p), [])                       # all empty: the figure says so itself
 
     def test_nothing_enriched_says_so(self):
         rnd = random.Random(9)
