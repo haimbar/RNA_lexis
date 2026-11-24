@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **A text with no Latin letters (Greek, Cyrillic, ...) could not be loaded, so *An alphabet from a file* could never be chosen
+  for it.** The loader kept only a to z, found none and stopped with "contains no alphabetic characters", before the reading menu
+  was reached; that option was reachable only for text that already had Latin letters. Now such a file loads, and the reading
+  menu offers only *An alphabet from a file*. A file with no letters at all is still refused. (Pasting text still needs a Latin letter.)
+- **Polytonic Greek (accents, breathings) could not be read with a plain Greek alphabet**: every accented letter was an unknown
+  symbol. An alphabet may now say `"strip_marks": true` to remove combining marks before reading (`Alphabet(strip_marks=True)`),
+  after lower-casing and before the aliases. Stray combining marks in decomposed text are ignored, not reported as unknown.
+  The opening of the *Odyssey* (8,123 letters) reads as 24 letters with only punctuation skipped. Tests 410 to 417.
+
 ### Changed
 
 - **The unit profile is now a letter logo by default**, with the heatmap as plot style 2. The heatmap was hard to read

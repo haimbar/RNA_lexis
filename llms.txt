@@ -288,6 +288,7 @@ from rna_lexis.codec import (make_codebook, read_codebook_csv, write_codebook_cs
                              encode_nt, decode_nt, frame_for_position)
 
 a = codon().with_extras(" 0123456789")   # 64 codons + a space + digits; size == 75
+greek = Alphabet("Greek", tuple("αβγδεζηθικλμνξοπρστυφχψω"), aliases={"ς": "σ"}, strip_marks=True)   # polytonic text reads as plain letters
 a.size                                    # declared symbols, used or not
 t = tokenize("ATGAAAUUU", codon())        # t.text: one internal character per codon
 t.decode(sep=" ")                         # "atg aaa ttt"

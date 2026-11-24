@@ -240,9 +240,18 @@ def _load_fasta_or_text(file_path):
     txt = sub(' +', '', txtb)
 
     if not txt:
-        print(f"Error: '{file_path}' contains no alphabetic characters. "
-              "The file may use a non-Latin script or be empty.")
-        return None
+        if not any(ch.isalpha() for ch in raw):
+            print(f"Error: '{file_path}' contains no letters. The file may be empty.")
+            return None
+        # Letters, but none of a-z: another script (Greek, Cyrillic, ...).  Nucleotide and Latin-letter reading
+        # do not apply, but an alphabet from a file can read it, so go on to choose the reading.
+        print(fmttxt([f"'{os.path.basename(file_path)}' has no Latin letters (a-z), so it can be read only with an "
+                      "alphabet from a file."], [''], ['yellow']))
+        result = {'file_path': file_path, 'txt': '', 'is_rna': False, 'txtb': '', 'dir': dirname(file_path),
+                  'raw': raw}
+        if gene_name:
+            result['gene_name'] = gene_name
+        return result
     is_rna = contains_only_rna(txt)
     if is_rna:
         txt = re.sub(r"[^A-Za-z]+", "", txt).lower().replace("u", "t")
@@ -453,17 +462,26 @@ def _choose_reading(data):
     """
     if data is None or data == -1 or data.get('corelist'):
         return data
-    options = ["Automatic (nucleotides if only A, C, G, T or U; otherwise Latin letters)",
-               "Codons (read 3 nucleotides at a time)",
-               "Codons translated to amino acids (standard genetic code)",
-               "Amino acids (a protein written in one-letter codes)",
-               "Latin letters (a-z)",
-               "An alphabet from a file (e.g. Greek letters, syllables)",
-               "Cancel"]
-    choice = show_menu("How to read the text", "Choose how the text is read", options, clr=False)
-    if choice in (0, len(options)):
-        return None
     base = data['txt']
+    if not base:
+        # no a-z at all: the other readings have nothing to read, so offer the one that can
+        options = ["An alphabet from a file (e.g. Greek letters, syllables)", "Cancel"]
+        choice = show_menu("How to read the text", "This text has no Latin letters; choose how it is read",
+                           options, clr=False)
+        if choice in (0, len(options)):
+            return None
+        choice = 6
+    else:
+        options = ["Automatic (nucleotides if only A, C, G, T or U; otherwise Latin letters)",
+                   "Codons (read 3 nucleotides at a time)",
+                   "Codons translated to amino acids (standard genetic code)",
+                   "Amino acids (a protein written in one-letter codes)",
+                   "Latin letters (a-z)",
+                   "An alphabet from a file (e.g. Greek letters, syllables)",
+                   "Cancel"]
+        choice = show_menu("How to read the text", "Choose how the text is read", options, clr=False)
+        if choice in (0, len(options)):
+            return None
     if choice == 1:
         if data.get('is_rna') or contains_only_rna(base):
             return data

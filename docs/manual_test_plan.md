@@ -147,7 +147,7 @@ Menu names are as on screen. "Expect" is what the branch is meant to do.
 - [ ] **T11** *Codons*, frame 0, 1, 2 on one CDS. Expect: the number of codons read changes with the frame; a partial codon at the end is dropped with a warning; a codon with `N` is skipped as a whole (the frame does not shift).
 - [ ] **T12** *Codons translated to amino acids*. Expect: stops shown as `*`; queries are typed as amino-acid letters; the settings line says the reading was translated.
 - [ ] **T13** *Amino acids* on a protein FASTA; a letter such as `X` is skipped with a warning.
-- [ ] **T14** *An alphabet from a file*: Greek letters (Homer); a `"words"` alphabet for syllables; one with `"extras": [" "]`. Expect: the declared size is used even for symbols that never occur.
+- [ ] **T14** *An alphabet from a file*: Greek letters (`~/Desktop/Homer`, with `controls/alphabets/greek.json`, which folds accents and the final sigma). Loading a text with no Latin letters must go straight to this option, with a note that only an alphabet from a file can read it; a `"words"` alphabet for syllables; one with `"extras": [" "]`. Expect: the declared size is used even for symbols that never occur.
 - [ ] **T15** *Cancel* returns to the input menu.
 - [ ] **T16** Synonymous-codon case (`controls/planted/synonymous_demo.fa`, or the pasted text above). As codons: no xmotif and no core, and *Find all matches* with the nucleotides `atgaaagttcttgccggtatt` finds 1. As amino acids: one xmotif and core, `MKVLAGI`, and *Find all matches* with `mkvlagi` finds 4.
 

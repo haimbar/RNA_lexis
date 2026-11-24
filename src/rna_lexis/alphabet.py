@@ -77,6 +77,10 @@ class Alphabet:
         width:          Characters per symbol when ``mode`` is ``"fixed"``.
         case_sensitive: When False (default) labels must be lower-case and
                         input text is lower-cased before it is read.
+        strip_marks:    When True, accents, breathings and other combining marks are removed
+                        from the text before it is read (after lower-casing, before the aliases),
+                        so a polytonic Greek text reads over the 24 plain letters: ``ἄνδρα``
+                        is ``ανδρα``.  Default False.
         aliases:        Input read as something else, e.g. ``u`` -> ``t``.  In
                         ``"chars"`` and ``"words"`` mode the target must be a
                         symbol; in ``"fixed"`` mode an alias is one character
@@ -99,6 +103,7 @@ class Alphabet:
     mode: str = "chars"
     width: int = 1
     case_sensitive: bool = False
+    strip_marks: bool = False
     aliases: Mapping = field(default_factory=dict)
     defaults: Mapping = field(default_factory=dict)
     unit_name: str = "unit"
@@ -125,6 +130,8 @@ class Alphabet:
             raise ValueError(f"width must be a whole number, at least 1, got {self.width!r}")
         if not isinstance(self.case_sensitive, bool):
             raise ValueError(f"case_sensitive must be true or false, got {self.case_sensitive!r}")
+        if not isinstance(self.strip_marks, bool):
+            raise ValueError(f"strip_marks must be true or false, got {self.strip_marks!r}")
         if not self.symbols:
             raise ValueError("an alphabet needs at least one symbol")
         for key, value in self.aliases.items():
@@ -350,6 +357,7 @@ class Alphabet:
             "mode": self.mode,
             "width": self.width,
             "case_sensitive": self.case_sensitive,
+            "strip_marks": self.strip_marks,
             "symbols": [{"label": x, **({"code": self.codes[x]} if x in self.codes else {})}
                         for x in self.symbols],
             "extras": list(self.extras),
@@ -401,6 +409,7 @@ class Alphabet:
             return cls(name=d["name"], symbols=symbols, extras=d.get("extras") or (),
                        codes=codes, mode=d.get("mode", "chars"), width=d.get("width", 1),
                        case_sensitive=d.get("case_sensitive", False),
+                       strip_marks=d.get("strip_marks", False),
                        aliases=d.get("aliases") or {}, defaults=defaults,
                        unit_name=unit_name, display_sep=d.get("display_sep"))
         except (TypeError, AttributeError) as exc:           # a field of the wrong kind that no check above names
@@ -410,7 +419,7 @@ class Alphabet:
         """True if ``other`` reads text the same way: same name, symbols, extras, mode, width, case
         and aliases.  Analysis defaults, the unit name and the display separator may differ, so a
         session saved before a default was calibrated still matches the current built-in alphabet."""
-        keys = ("name", "symbols", "extras", "mode", "width", "case_sensitive", "aliases")
+        keys = ("name", "symbols", "extras", "mode", "width", "case_sensitive", "strip_marks", "aliases")
         mine, theirs = self.to_dict(), other.to_dict()
         return all(mine[k] == theirs[k] for k in keys if k not in ("symbols",)) and \
             [s["label"] for s in mine["symbols"]] == [s["label"] for s in theirs["symbols"]]

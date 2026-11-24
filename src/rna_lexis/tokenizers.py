@@ -40,6 +40,7 @@ removal may not exist in the original text; ``Tokenized.removal_points`` and
 from __future__ import annotations
 
 import re
+import unicodedata
 import warnings
 from collections import Counter
 from dataclasses import dataclass, field
@@ -174,6 +175,8 @@ class _SegmentReader:
     # -- helpers --------------------------------------------------------
     def fold(self, s: str) -> str:
         s = s if self.a.case_sensitive else s.lower()
+        if self.a.strip_marks:
+            s = "".join(c for c in unicodedata.normalize("NFD", s) if not unicodedata.combining(c))
         return self.a.aliases.get(s, s)
 
     def emit(self, label: str, offset: int):
@@ -209,8 +212,8 @@ class _SegmentReader:
             f = self.fold(ch)
             if f in self.a:
                 self.emit(f, i)
-            elif ch.isspace():
-                pass                          # formatting
+            elif ch.isspace() or f == "":
+                pass                          # formatting, or a combining mark that strip_marks removed
             else:
                 self.unknown(i, ch)
             i += 1
@@ -220,7 +223,7 @@ class _SegmentReader:
             f = self.fold(m.group())
             if f in self.a:
                 self.emit(f, m.start())
-            else:
+            elif f != "":
                 self.unknown(m.start(), m.group())
 
     def read_fixed(self, seg: str, width: int, frame: int):
@@ -258,8 +261,8 @@ class _SegmentReader:
             if f in extras:
                 flush()
                 self.emit(f, i)
-            elif ch.isspace():
-                continue                      # formatting
+            elif ch.isspace() or f == "":
+                continue                      # formatting, or a combining mark that strip_marks removed
             else:
                 state["run"].append((i, f, ch))
         flush()

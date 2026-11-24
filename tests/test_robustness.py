@@ -10,6 +10,7 @@ import json
 import os
 import random
 import tempfile
+import unicodedata
 import unittest
 import warnings
 
@@ -714,6 +715,108 @@ class LogoIntermediateTests(unittest.TestCase):
             P.shutil.which, P.subprocess.run, P.open_pdf = saved
         self.assertTrue(seen["fa_existed"])                              # WebLogo did get its input
         self.assertFalse(os.path.exists(seen["fa"]))                     # and it is gone now
+
+
+# ----------------------------------------------------------------------
+# text in another script reaches the alphabet-from-a-file option
+# ----------------------------------------------------------------------
+GREEK = "αβγδεζηθικλμνξοπρστυφχψω"
+ODYSSEY = ("ἄνδρα μοι ἔννεπε, μοῦσα, πολύτροπον, ὃς μάλα πολλὰ\n"
+           "πλάγχθη, ἐπεὶ Τροίης ἱερὸν πτολίεθρον ἔπερσεν:\n"
+           "πολλῶν δ᾽ ἀνθρώπων ἴδεν ἄστεα καὶ νόον ἔγνω,\n")
+
+
+class NonLatinTextTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.saved = (M.show_menu, M.openFile, M.safe_input)
+        self.addCleanup(lambda: setattr_all(M, ("show_menu", "openFile", "safe_input"), self.saved))
+
+    def path(self, name, content):
+        p = os.path.join(self.tmp.name, name)
+        open(p, "w", encoding="utf-8").write(content)
+        return p
+
+    def greek(self, **kw):
+        return Alphabet("Greek letters", tuple(GREEK), aliases={"ς": "σ"}, **kw)
+
+    def test_accents_breathings_and_final_sigma_are_folded_when_asked(self):
+        a = self.greek(strip_marks=True)
+        tok, cats, _ = caught(T.tokenize, ODYSSEY, a)
+        self.assertTrue(tok.text.startswith(a.encode(list("ανδραμοιεννεπεμουσα"))))
+        self.assertEqual(sorted({s.text for s in tok.skipped}), [",", ":", "᾽"])     # punctuation only, no letters
+        self.assertEqual(tok.n_units, sum(1 for ch in ODYSSEY if ch.isalpha()))
+        self.assertIn(T.UnknownSymbolWarning, cats)
+        self.assertNotIn(T.AlphabetMismatchWarning, cats)
+
+    def test_without_it_the_accented_letters_are_unknown_as_before(self):
+        tok, cats, _ = caught(T.tokenize, ODYSSEY, self.greek())
+        skipped_letters = [s.text for s in tok.skipped if s.text.isalpha()]
+        self.assertGreater(len(skipped_letters), 20)             # a quarter of the letters of this passage
+        self.assertTrue(all(unicodedata.normalize("NFD", c)[0] in GREEK + "ς" for c in skipped_letters))
+        self.assertIn(T.UnknownSymbolWarning, cats)
+
+    def test_text_that_is_stored_decomposed_reads_the_same_and_loose_marks_are_ignored(self):
+        a = self.greek(strip_marks=True)
+        composed = T.tokenize("ἄνδρα μοῦσα", a).text
+        decomposed = T.tokenize(unicodedata.normalize("NFD", "ἄνδρα μοῦσα"), a)
+        self.assertEqual(decomposed.text, composed)
+        self.assertEqual(decomposed.skipped, [])                  # the combining marks are not "unknown symbols"
+
+    def test_capitals_and_the_setting_survive_a_file_and_a_session(self):
+        a = self.greek(strip_marks=True)
+        self.assertEqual(T.tokenize("ΜΗΝΙΝ Ἀχιλλῆος", a).decode(), "μηνινα\u03c7ιλληοσ")
+        path = a.save(self.path("greek.json", ""))
+        b = get_alphabet(path)
+        self.assertTrue(b.strip_marks)
+        self.assertTrue(a.same_symbols(b))
+        self.assertFalse(a.same_symbols(self.greek()))            # reads differently, so not the same alphabet
+        d = a.to_dict(); del d["strip_marks"]
+        self.assertFalse(Alphabet.from_dict(d).strip_marks)       # an older alphabet file or session
+        with self.assertRaises(ValueError):
+            Alphabet("x", tuple("ab"), strip_marks="yes")
+
+    def test_a_file_with_only_greek_loads_and_one_with_no_letters_does_not(self):
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            data = M._load_fasta_or_text(self.path("homer.txt", ODYSSEY))
+            self.assertIsNotNone(data)
+            self.assertEqual(data["txt"], "")
+            self.assertEqual(data["raw"], ODYSSEY)
+            self.assertIsNone(M._load_fasta_or_text(self.path("digits.txt", "123 456 ... !!!\n")))
+            self.assertIsNone(M._load_fasta_or_text(self.path("empty.txt", "")))
+        self.assertIn("no Latin letters", out.getvalue())
+        self.assertIn("contains no letters", out.getvalue())
+
+    def test_the_reading_menu_offers_only_the_alphabet_option_and_reads_the_text(self):
+        with contextlib.redirect_stdout(io.StringIO()):
+            data = M._load_fasta_or_text(self.path("homer.txt", ODYSSEY))
+        alpha_file = self.greek(strip_marks=True).save(self.path("greek.json", ""))
+        offered = []
+        M.show_menu = lambda title, prompt, options, clr=False: (offered.append(list(options)), 1)[1]
+        M.openFile = lambda initial_dir=None: alpha_file
+        with contextlib.redirect_stdout(io.StringIO()):
+            res = M._choose_reading(data)
+        self.assertEqual(len(offered[0]), 2)
+        self.assertIn("alphabet from a file", offered[0][0])
+        self.assertEqual(res["alphabet"].name, "Greek letters")
+        self.assertEqual(res["reading"]["units"], sum(1 for ch in ODYSSEY if ch.isalpha()))
+        self.assertEqual(res["txt"][:5], res["alphabet"].encode(list("ανδρα")))
+        M.show_menu = lambda title, prompt, options, clr=False: 2          # Cancel
+        self.assertIsNone(M._choose_reading(data))
+
+    def test_latin_text_still_gets_the_whole_menu(self):
+        with contextlib.redirect_stdout(io.StringIO()):
+            data = M._load_fasta_or_text(self.path("dna.txt", "acgtacgtacgt\n"))
+        offered = []
+        M.show_menu = lambda title, prompt, options, clr=False: (offered.append(list(options)), 0)[1]
+        M._choose_reading(data)
+        self.assertEqual(len(offered[0]), 7)
+
+
+def setattr_all(module, names, values):
+    for n, v in zip(names, values):
+        setattr(module, n, v)
 
 
 if __name__ == "__main__":

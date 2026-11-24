@@ -145,10 +145,14 @@ An alphabet file is JSON. The simplest form lists the symbols:
 ```json
 {"name": "Greek letters",
  "symbols": ["α", "β", "γ", "δ", "ε", "ζ", "η", "θ", "ι", "κ", "λ", "μ",
-             "ν", "ξ", "ο", "π", "ρ", "σ", "τ", "υ", "φ", "χ", "ψ", "ω"]}
+             "ν", "ξ", "ο", "π", "ρ", "σ", "τ", "υ", "φ", "χ", "ψ", "ω"],
+ "aliases": {"ς": "σ"},
+ "strip_marks": true}
 ```
 
-Other fields (all optional): `"mode"` (`"chars"` one character per symbol, the default; `"fixed"` with `"width"` characters per symbol, as codons; `"words"` whitespace-separated labels, e.g. syllable names), `"extras"` (single characters that belong to the alphabet beside the symbols, such as a space or digits; they count in the statistics and can appear inside motifs), `"unit_name"` (what axes call one symbol), `"display_sep"` (what goes between symbols when shown), `"aliases"` (for example `{"u": "t"}`), `"case_sensitive"`, and `"symbols"` entries of the form `{"label": "a", "code": "ttt"}` to give each symbol a nucleotide code. Python helpers in `rna_lexis.alphabet`, `rna_lexis.tokenizers` and `rna_lexis.codec` build alphabets and codebooks and convert between units and nucleotides (see `llms.txt`).
+That is the form for ancient (polytonic) Greek: `"aliases"` reads the final sigma `ς` as `σ`, and `"strip_marks": true` removes accents, breathings and other combining marks before reading (after lower-casing), so `ἄνδρα μοῦσα` is read as `ανδρα μουσα`. Without `strip_marks` every accented letter would be an unknown symbol (about a quarter of the letters of the first lines of the *Odyssey*). Text that has no Latin letters at all is loaded without complaint and goes straight to this option: the reading menu then offers only *An alphabet from a file*. Punctuation and line numbers are skipped with a warning, as for any symbol that is not in the alphabet.
+
+Other fields (all optional): `"mode"` (`"chars"` one character per symbol, the default; `"fixed"` with `"width"` characters per symbol, as codons; `"words"` whitespace-separated labels, e.g. syllable names), `"extras"` (single characters that belong to the alphabet beside the symbols, such as a space or digits; they count in the statistics and can appear inside motifs), `"unit_name"` (what axes call one symbol), `"display_sep"` (what goes between symbols when shown), `"aliases"` (for example `{"u": "t"}`), `"case_sensitive"`, `"strip_marks"` (remove accents and other combining marks, default false), and `"symbols"` entries of the form `{"label": "a", "code": "ttt"}` to give each symbol a nucleotide code. Python helpers in `rna_lexis.alphabet`, `rna_lexis.tokenizers` and `rna_lexis.codec` build alphabets and codebooks and convert between units and nucleotides (see `llms.txt`).
 
 ### What changes in the analysis
 
