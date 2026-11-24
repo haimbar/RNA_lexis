@@ -466,7 +466,7 @@ class MenuOverCodonsTests(MenuCase):
 
     def test_unit_profile_replaces_the_logo(self):
         out, files = self.run_fn(lambda: M.profile_input(self.txt, self.strs, self.fp, A),
-                                 [CORE_NT[:12], "2", "", "", "prof", "", "y"])      # style: blank = the letter logo
+                                 [CORE_NT[:12], "2", "", "", "", "prof", "", "y"])      # style: blank = the letter logo
         self.check(out, files, "occurrence(s) used")
         self.assertIn("prof.png", files)
         self.assertIn(" of ", out)                         # the enriched units are listed with their counts
@@ -475,7 +475,7 @@ class MenuOverCodonsTests(MenuCase):
         self.assertIn("count@-2", files[name])
         # the other style
         out, files = self.run_fn(lambda: M.profile_input(self.txt, self.strs, self.fp, A),
-                                 [CORE_NT[:12], "2", "", "2", "heat", "", "n"])
+                                 [CORE_NT[:12], "2", "", "", "2", "heat", "", "n"])
         self.check(out, files, "occurrence(s) used")
         self.assertIn("heat.png", files)
         # a motif that is not in the text

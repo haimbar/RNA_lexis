@@ -4,6 +4,11 @@
 
 ### Fixed
 
+- **The unit profile's threshold can be set, and near misses are visible.** A letter is drawn only if its count at a position has a
+  binomial p at most 0.01 against its frequency in the text, so a common letter needs more windows than a rare one (in *Every
+  Breath You Take*, `e` 4 of 7 at `+1` and `+3` has p = 0.014 and was left out, while `v`, `r`, `y` at 4 of 7 were drawn). The rule
+  was right but invisible and fixed. The menu now asks for the level (default 0.01), and the lines for positions where nothing stands out
+  give the p-value of each common letter. Tests 433 to 434.
 - **Wildcards in codon queries.** *Search with mutations* did not accept a wildcard at all in codon (or letter) mode: `act ... ... aga aaa cca tct tat`
   had its dots dropped as unknown symbols and found nothing, though the logo showed `act` before both occurrences. It now takes
   `.` as any one unit, and in the menus that already took a wildcard, `...` is one codon (as in nucleotide text) instead of three

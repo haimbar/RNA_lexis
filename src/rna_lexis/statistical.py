@@ -1207,7 +1207,8 @@ def describe_empty_positions(profile: dict) -> list[str]:
     """Positions next to the motif where no letter is clearly enriched, as lines of text.
 
     The logo leaves such a position empty, which can look like a missing column.  Each line gives the most
-    common letters there, e.g. ``-1: nothing stands out (most common: A 2 of 4, E 2 of 4)``.  A profile in
+    common letters there with the p-value of each, e.g. ``-1: nothing stands out (most common: A 2 of 4
+    (p 0.2), E 2 of 4 (p 0.3))``; a p-value just above ``alpha`` shows a letter that nearly passed.  A profile in
     which *no* position has anything is described by the figure itself and gives no lines here.
     """
     n = max(1, int(profile["n"]))
@@ -1224,9 +1225,9 @@ def describe_empty_positions(profile: dict) -> list[str]:
     for j, name in named:
         if name in shown:
             continue
-        top = sorted(((profile["counts"][i][j], label) for i, label in enumerate(profile["labels"])),
-                     key=lambda t: (-t[0], t[1]))[:3]
-        common = ", ".join(f"{label.upper()} {c} of {n}" for c, label in top if c > 0)
+        top = sorted(((profile["counts"][i][j], label, profile["p_value"][i][j])
+                      for i, label in enumerate(profile["labels"])), key=lambda t: (-t[0], t[1]))[:3]
+        common = ", ".join(f"{label.upper()} {c} of {n} (p {q:.2g})" for c, label, q in top if c > 0)
         lines.append(f"{name:>3}: nothing stands out" + (f" (most common: {common})" if common else ""))
     return lines
 

@@ -283,7 +283,7 @@ class MismatchTests(unittest.TestCase):
     def test_the_menu_asks_for_the_mismatches_and_prints_what_it_found(self):
         import contextlib
         import rna_lexis.menu as M
-        answers = iter([self.MOTIF, "3", "2", "1", "", "n"])     # motif, flank, mismatches, logo, format, no csv
+        answers = iter([self.MOTIF, "3", "2", "", "1", "", "n"])  # motif, flank, mismatches, alpha, logo, format, no csv
         saved = (M.safe_input, M._spawn_plot, M._prompt_save)
         asked = []
         M.safe_input = lambda prompt="": (asked.append(prompt), next(answers, ""))[1]
@@ -302,7 +302,7 @@ class MismatchTests(unittest.TestCase):
     def test_the_menu_does_not_allow_more_than_half_the_motif_to_differ(self):
         import contextlib
         import rna_lexis.menu as M
-        answers = iter([self.MOTIF, "3", "5", "4", "1", "", "n"])   # 5 is refused (more than half of 8), then 4 is taken
+        answers = iter([self.MOTIF, "3", "5", "4", "", "1", "", "n"])   # 5 is refused (more than half of 8), then 4 is taken
         saved = (M.safe_input, M._spawn_plot, M._prompt_save)
         M.safe_input = lambda prompt="": next(answers, "")
         M._spawn_plot = lambda fn, *a, **k: None
@@ -313,6 +313,40 @@ class MismatchTests(unittest.TestCase):
         finally:
             M.safe_input, M._spawn_plot, M._prompt_save = saved
         self.assertIn("Please enter an integer from 0 to 4", out.getvalue())
+
+
+class SignificanceLevelPromptTests(unittest.TestCase):
+    """The menu lets the user say how strong a count must be to be drawn."""
+
+    def run_menu(self, alpha_answer):
+        import contextlib
+        import rna_lexis.menu as M
+        a = latin()
+        rnd = random.Random(5)
+        txt = a.encode("".join(rnd.choice("abcdefghijklmnopqrstuvwxyz") for _ in range(3000)))
+        motif = "qzxjvk"
+        txt = a.encode("".join(rnd.choice("abcdefghijklmnopqrstuvwxyz") for _ in range(300))) + "".join(
+            a.encode("ee" + motif + "e" + rnd.choice("abcdefghijklmnopqrstuvwxyz")) for _ in range(6)) + txt
+        answers = iter([motif, "2", "0", alpha_answer, "1", "", "n"])
+        saved = (M.safe_input, M._spawn_plot, M._prompt_save)
+        M.safe_input = lambda prompt="": next(answers, "")
+        M._spawn_plot = lambda fn, *a, **k: None
+        M._prompt_save = lambda **k: ("", 1)
+        try:
+            with contextlib.redirect_stdout(io.StringIO()) as out:
+                M.profile_input(txt, {}, "", a)
+        finally:
+            M.safe_input, M._spawn_plot, M._prompt_save = saved
+        return out.getvalue()
+
+    def test_a_larger_level_draws_more_cells_and_a_bad_answer_keeps_the_default(self):
+        import re as _re
+        cells = lambda t: int(_re.search(r"(\d+) cell\(s\) differ", t).group(1))
+        strict, default, bad, loose = (self.run_menu(x) for x in ("0.00000001", "", "abc", "0.5"))
+        self.assertEqual(cells(default), cells(bad))
+        self.assertLessEqual(cells(strict), cells(default))
+        self.assertGreater(cells(loose), cells(default))
+        self.assertIn("p <= 0.5", loose)
 
 
 class LogoTests(unittest.TestCase):

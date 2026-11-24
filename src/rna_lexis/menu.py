@@ -1478,10 +1478,14 @@ def profile_input(txt, strs, file_path='', alphabet=None):
     flank = ask_int(f"Enter the number of {_unit(alphabet)} on both sides", 5, 0, MAX_FLANK)
     mismatches = ask_int(f"Enter the maximum number of mismatches in the motif ({len(motif)} {_unit(alphabet)} long; "
                          f"1 per 6 would be {len(motif) // 6}; at most {len(motif) // 2})", 0, 0, len(motif) // 2)
+    alpha = _number(safe_input(fmttxt(["A letter is drawn when its count at a position has p at most",
+                                       "[Default: 0.01; larger, e.g. 0.05, draws more letters]"],
+                                      ['bold', ''], ['yellow', 'cyan']) + " "),
+                    0.01, float, low=0, high=1, low_open=True)
     group_by = codon_to_amino_acid() if alphabet is not None and alphabet.name == 'codon' else None
     try:
         profile = unit_profile(txt, motif, flank=flank, mismatches=mismatches,
-                               alphabet=alphabet, group_by=group_by)
+                               alphabet=alphabet, group_by=group_by, alpha=alpha)
     except ValueError as exc:
         print(fmttxt([f"That motif cannot be profiled: {exc}"], ['bold'], ['red']))
         safe_input(fmttxt(["Press any key to continue"], [''], ['white']))
