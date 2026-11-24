@@ -1800,10 +1800,14 @@ def motif_extensions_input(txt, file_path='', alphabet=None):
     GREEN = '\033[32m'
 
     # ── motif ───────────────────────────────────────────────────────────────
-    motif = _query_to_internal(safe_input(fmttxt(['Enter motif', '[blank to cancel]: '],
-                               ['bold', ''], ['yellow', 'cyan']) + ' ').strip().lower(), alphabet)
-    if not motif:
+    motif = _query_to_internal(safe_input(fmttxt(['Enter motif (. is any one '
+                                                  + ('letter' if alphabet is None else 'unit')
+                                                  + ('; ... is one codon' if alphabet is not None and alphabet.width > 1 else '') + ')',
+                                                  '[blank to cancel]: '],
+                               ['bold', ''], ['yellow', 'cyan']) + ' ').strip().lower(), alphabet, wildcard=True)
+    if not motif.replace('.', ''):
         return
+    wild = {k for k, c in enumerate(motif) if c == '.'}          # seed positions that may hold anything: not differences
 
     # ── search method ────────────────────────────────────────────────────────
     method = safe_input(fmttxt(['Search method:', '[1] Exact  [2] With mutations  [default: 1]: '],
@@ -1902,7 +1906,7 @@ def motif_extensions_input(txt, file_path='', alphabet=None):
         out = []
         for i, (rc, qc) in enumerate(zip(ref, qry)):
             in_seed  = (left <= i < left + sl)
-            mismatch = (rc != qc)
+            mismatch = (rc != qc) and not (in_seed and (i - left) in wild)
             ch = (mark_case(qc, in_seed or mismatch) if alphabet is None
                   else alphabet.show(qc, [in_seed or mismatch]))
             if mismatch:

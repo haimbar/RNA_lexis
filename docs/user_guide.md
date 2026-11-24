@@ -579,7 +579,7 @@ Press **Enter** to return to the Sequence operations menu.
 
 #### 2.3 Motif extensions
 
-Combines motif search with pairwise extension analysis.  Enter a motif, find all its occurrences (exact or approximate), then automatically compute the longest Hamming-bounded extension for every pair of occurrences and display the results with colour-coded alignments.
+Combines motif search with pairwise extension analysis.  Enter a motif, find all its occurrences (exact or approximate), then automatically compute the longest Hamming-bounded extension for every pair of occurrences and display the results with colour-coded alignments.  In the motif, `.` is any one letter (for codons, `.` or `...` is one codon), so `you.ake` finds *you take*, *you make* and *you fake*; the wildcard position is not counted as a mutation and is not marked in the alignments.
 
 **Prompts:**
 

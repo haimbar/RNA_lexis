@@ -421,6 +421,40 @@ class WildcardMotifTests(unittest.TestCase):
         self.assertIn("slot 4", text)
         self.assertTrue(any("6 letters long, not counting 1 wildcard" in q for q in asked), asked)
 
+    def run_extensions(self, txt, answers):
+        import contextlib
+        import tempfile
+        import rna_lexis.menu as M
+        it = iter(answers)
+        saved = M.safe_input
+        M.safe_input = lambda prompt="": next(it, "")
+        try:
+            with tempfile.TemporaryDirectory() as d, contextlib.redirect_stdout(io.StringIO()) as out:
+                M.motif_extensions_input(txt, os.path.join(d, "s"), self.a)
+                files = sorted(os.listdir(d))
+        finally:
+            M.safe_input = saved
+        return out.getvalue(), files
+
+    def test_motif_extensions_takes_a_wildcard_and_does_not_mark_it_as_a_difference(self):
+        txt = self.a.encode("abyoutakecdabyoumakecd")
+        text, files = self.run_extensions(txt, ["you.ake", "1", "", "1", ""])
+        self.assertIn("Found 2 exact match(es)", text)
+        self.assertIn("hamming=\x1b[36m0/11", text)                       # the slot (t against m) is not a mismatch
+        self.assertNotIn("\x1b[31m", text)                                # nothing is marked red
+        self.assertEqual(files, ["extensions_you_ake.csv"])
+
+    def test_motif_extensions_with_mutations_and_a_wildcard(self):
+        base = "abyoutakecd"
+        txt = self.a.encode(base + "abyoumakecd" + "abyoutakecd".replace("you", "yoz"))
+        text, _ = self.run_extensions(txt, ["you.ake", "2", "3", "", "n"])
+        self.assertIn("Found 2 exact and 1 approximate match(es)", text)
+        self.assertIn("~dist=1", text)
+
+    def test_a_motif_of_only_wildcards_is_cancelled_in_the_extensions(self):
+        text, files = self.run_extensions(self.txt, ["....."])
+        self.assertEqual((text, files), ("", []))
+
     def test_the_arc_plot_takes_a_wildcard_seed(self):
         import contextlib
         import rna_lexis.menu as M
