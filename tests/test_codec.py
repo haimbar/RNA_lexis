@@ -153,3 +153,44 @@ class EncodeDecodeTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class FindOrfTests(unittest.TestCase):
+    def test_longest_atg_to_stop_in_the_three_frames(self):
+        from rna_lexis.codec import find_orf
+        utr5, utr3 = "ccgcc", "gcgc"
+        body = "atg" + "gaa" * 10 + "taa"
+        text = utr5 + body + utr3
+        got = find_orf(text)
+        self.assertEqual(text[got["start"]:got["end"]], body)
+        self.assertEqual((got["codons"], got["frame"]), (11, 5 % 3))
+        # a longer one in another frame wins; the stop is part of the region
+        longer = "ct" + "atg" + "aaa" * 30 + "tga"
+        got = find_orf(body + longer)
+        self.assertEqual(got["codons"], 31)
+
+    def test_rna_case_and_nothing(self):
+        from rna_lexis.codec import find_orf
+        self.assertEqual(find_orf("AUGGAAUAA")["codons"], 2)
+        self.assertEqual(find_orf("AUG GAA\nUAA")["end"], 9)
+        self.assertIsNone(find_orf(""))
+        self.assertIsNone(find_orf("atggaaaaa"))             # no stop: not an open reading frame
+        self.assertIsNone(find_orf("ccccccccc"))
+        self.assertIsNone(find_orf("taaatg"))                 # the stop comes first
+
+    def test_agrees_with_a_plain_scan(self):
+        import random
+        from rna_lexis.codec import find_orf
+        rnd = random.Random(4)
+        for _ in range(200):
+            t = "".join(rnd.choice("acgt") for _ in range(rnd.randint(0, 300)))
+            best = 0
+            for i in range(len(t) - 2):
+                if t[i:i + 3] != "atg":
+                    continue
+                for j in range(i + 3, len(t) - 2, 3):
+                    if t[j:j + 3] in ("taa", "tag", "tga"):
+                        best = max(best, (j - i) // 3)
+                        break
+            got = find_orf(t)
+            self.assertEqual(got["codons"] if got else 0, best)

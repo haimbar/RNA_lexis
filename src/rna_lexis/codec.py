@@ -185,3 +185,42 @@ def frame_for_position(pos: int, width: int = 3) -> int:
     position 0.  A motif found at ``pos`` is read with this frame.
     """
     return (-pos) % width
+
+
+# Open reading frames turn up by chance in any RNA, long non-coding ones included (the human lncRNA NORAD, 5,400
+# nucleotides, has one of 108 codons).  Under MIN_CODING_CODONS the text is not offered as a coding region at all;
+# from there to LIKELY_CODING_CODONS it is offered with a warning; from LIKELY_CODING_CODONS on it is the default.
+MIN_CODING_CODONS = 100
+LIKELY_CODING_CODONS = 300
+_STOP_CODONS = ("taa", "tag", "tga")
+
+
+def find_orf(nt: str):
+    """The longest open reading frame of a transcript: ``ATG`` to the first stop codon, forward strand only.
+
+    Looks in the three frames (``u`` is read as ``t``; case does not matter) and returns the longest stretch
+    that starts at an ``atg`` and ends at a stop, with the stop included, as a dict
+    ``{"start", "end", "frame", "codons"}``: ``nt[start:end]`` is the region, ``frame`` is ``start % 3``, and
+    ``codons`` counts the codons before the stop.  A stretch with no stop before the text ends is not an
+    open reading frame here.  None if there is none (or the text is empty).
+
+    A transcript from a protein-coding gene has one that is hundreds or thousands of codons long
+    (:data:`LIKELY_CODING_CODONS`); a long non-coding RNA does not.  This is not a gene finder: it does not look
+    at the reverse strand, at introns, or at alternative start codons, and the longest ORF is not always the
+    annotated one.
+    """
+    text = re.sub(r"[^a-z]", "", str(nt).lower().replace("u", "t"))
+    best = None
+    for frame in range(3):
+        start = None
+        for i in range(frame, len(text) - 2, 3):
+            codon = text[i:i + 3]
+            if start is None:
+                if codon == "atg":
+                    start = i
+            elif codon in _STOP_CODONS:
+                codons = (i - start) // 3
+                if best is None or codons > best["codons"]:
+                    best = {"start": start, "end": i + 3, "frame": start % 3, "codons": codons}
+                start = None
+    return best

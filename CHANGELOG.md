@@ -13,6 +13,18 @@
   after lower-casing and before the aliases. Stray combining marks in decomposed text are ignored, not reported as unknown.
   The opening of the *Odyssey* (8,123 letters) reads as 24 letters with only punctuation skipped. Tests 410 to 417.
 
+### Added
+
+- **Codons of the coding region.** Reading a transcript as codons (or as amino acids) now reports its longest open reading frame
+  (ATG to stop, three forward frames; `codec.find_orf`) and accepts `o` as the reading frame: the text is cut to that region, so a
+  coding gene fetched with its untranslated regions reads as its codons (BRCA2: 3,418 codons and the stop; it translates to
+  `MPIGSKERPTFFEIFKTRCN...`). It is the default from 300 codons; from 100 to 299 it is offered with a warning (NORAD, a lncRNA, has one of
+  108 by chance); under 100 it is refused, so a non-coding transcript is not read as coding by accident. The region is stored in
+  the session as `reading["orf"]`.
+- **A saved transcript can be read again.** Fetching an ENST that already has a saved nucleotide session used to load that session
+  at once, so the reading menu was never reached. It now asks whether to use the session or read the sequence again; the
+  second is saved as a separate session (`..._codon.json`), and the nucleotide one is not touched. Tests 418 to 426.
+
 ### Changed
 
 - **The unit profile now names the positions where nothing stands out**, with the most common letters there

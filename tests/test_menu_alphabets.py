@@ -174,6 +174,34 @@ class ReadingTests(unittest.TestCase):
         self.assertEqual(out["alphabet"].decode_list(out["txt"]), ["atg", "aaa", "ttt"])
         self.assertEqual(out["reading"]["skipped"], 1)
 
+    def coding(self, codons, utr5="gcgcc", utr3="ggcgc"):
+        return utr5 + "atg" + "gaa" * (codons - 1) + "taa" + utr3
+
+    def test_a_coding_transcript_is_read_from_its_start_codon_by_default(self):
+        txt = self.coding(400)
+        out = self.choose(self.data(txt), 2, answers=[""])
+        self.assertEqual(out["alphabet"].decode_list(out["txt"])[0], "atg")
+        self.assertEqual(out["alphabet"].decode_list(out["txt"])[-1], "taa")
+        self.assertEqual(out["reading"]["units"], 401)
+        self.assertEqual(out["reading"]["orf"], {"start": 5, "end": 5 + 3 * 401, "codons": 400})
+        out = self.choose(self.data(txt), 3, answers=["o"])         # also when translated
+        self.assertEqual(out["alphabet"].decode(out["txt"]), "m" + "e" * 399 + "*")
+
+    def test_a_frame_can_still_be_chosen_for_a_coding_transcript(self):
+        out = self.choose(self.data(self.coding(400)), 2, answers=["0"])
+        self.assertNotIn("orf", out["reading"])
+        self.assertEqual(out["reading"]["frame"], 0)
+
+    def test_a_short_open_reading_frame_is_not_the_default_and_a_tiny_one_is_refused(self):
+        mid = self.data(self.coding(150))                          # could be chance: not the default
+        out = self.choose(mid, 2, answers=[""])
+        self.assertNotIn("orf", out["reading"])
+        out = self.choose(mid, 2, answers=["o"])                   # but it can be asked for
+        self.assertEqual(out["reading"]["orf"]["codons"], 150)
+        tiny = self.data(self.coding(20))
+        self.assertIsNone(self.choose(tiny, 2, answers=["o"]))     # not a coding region: back to the menu
+        self.assertIsNotNone(self.choose(tiny, 2, answers=["1"]))  # a frame is still allowed
+
     def test_codons_translated_to_amino_acids(self):
         out = self.choose(self.data("atggcctaaggg"), 3, answers=[""])
         self.assertEqual(out["alphabet"].name, "amino acid")
@@ -207,6 +235,50 @@ class ReadingTests(unittest.TestCase):
         session = self.data("acgt", corelist=["acg"], xmotifs=["acg"])
         self.assertIs(self.choose(session, 2), session)             # a saved session keeps its reading
         self.assertEqual(M._choose_reading(-1), -1)
+
+
+class CachedTranscriptTests(unittest.TestCase):
+    """A transcript that already has a saved session: the saved one is used, or the sequence is read again."""
+
+    def setUp(self):
+        self._safe, self._show = M.safe_input, M.show_menu
+        self.tmp = tempfile.TemporaryDirectory()
+        root = self.tmp.name
+        self.gene = os.path.join(root, "BRCA")
+        os.mkdir(self.gene)
+        self.txt = "gcgcc" + "atg" + "gaa" * 399 + "taa" + "ggcgc"
+        session = {"file_path": os.path.join(self.gene, "ENST1_X"), "txt": self.txt, "txtb": self.txt,
+                   "is_rna": True, "corelist": ["gaa"], "xmotifs": ["gaagaa"], "dir": self.gene,
+                   "alphabet": None, "reading": None}
+        with open(os.path.join(self.gene, "ENST1_X.json"), "w", encoding="utf-8") as fh:
+            json.dump(session, fh)
+
+    def tearDown(self):
+        M.safe_input, M.show_menu = self._safe, self._show
+        self.tmp.cleanup()
+
+    def load(self, answers):
+        M.safe_input = Script(answers)
+        with contextlib.redirect_stdout(io.StringIO()):
+            return M.choose_enst(self.gene)
+
+    def test_the_saved_session_is_the_default(self):
+        got = self.load(["ENST1", ""])
+        self.assertTrue(got.get("corelist"))
+        self.assertNotIn("reread", got)
+
+    def test_it_can_be_read_again_as_codons_and_is_saved_under_another_name(self):
+        got = self.load(["ENST1", "2"])
+        self.assertFalse(got.get("corelist"))
+        self.assertTrue(got["reread"])
+        M.show_menu = lambda *a, **k: 2
+        M.safe_input = Script([""])
+        with contextlib.redirect_stdout(io.StringIO()):
+            out = M._choose_reading(got)
+        self.assertEqual(out["reading"]["orf"]["codons"], 400)
+        self.assertTrue(out["file_path"].endswith("ENST1_X_codon"))
+        self.assertNotIn("reread", out)
+        self.assertTrue(os.path.exists(os.path.join(self.gene, "ENST1_X.json")))      # the first one is untouched
 
 
 class GatingTests(unittest.TestCase):

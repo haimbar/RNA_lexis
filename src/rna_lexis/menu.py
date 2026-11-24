@@ -32,6 +32,7 @@ from rna_lexis.alphabet import (Alphabet, BOUNDARY, NUCLEOTIDE_SETTINGS, default
                                 get_alphabet)
 from rna_lexis.genetic_code import amino_acid, codon_to_amino_acid
 from rna_lexis.tokenizers import tokenize
+from rna_lexis.codec import find_orf, MIN_CODING_CODONS, LIKELY_CODING_CODONS
 from rna_lexis.plots import (
     plot_logo, plotzscore, plotkmerhist, plot_frequency_rank,
     plot_seq_nbrs, plot_nbrs_condensed, export_nbrs_condensed,
@@ -463,6 +464,7 @@ def _choose_reading(data):
     if data is None or data == -1 or data.get('corelist'):
         return data
     base = data['txt']
+    orf_note = None
     if not base:
         # no a-z at all: the other readings have nothing to read, so offer the one that can
         options = ["An alphabet from a file (e.g. Greek letters, syllables)", "Cancel"]
@@ -488,12 +490,37 @@ def _choose_reading(data):
         alphabet, frame, text = latin(), 0, base
     elif choice in (2, 3):
         alphabet, text = codon(), base
-        if not (data.get('is_rna') or contains_only_rna(base)):
+        nucleotides = bool(data.get('is_rna') or contains_only_rna(base))
+        if not nucleotides:
             print(fmttxt(["This text has letters other than A, C, G, T, U; codons "
                           "that contain them will be skipped."], [''], ['yellow']))
-        fr = safe_input(fmttxt(["Reading frame (characters to skip at the start)", "[0, 1 or 2; default 0]: "],
-                               ['bold', ''], ['yellow', 'cyan']) + ' ').strip()
-        frame = int(fr) if fr in ('0', '1', '2') else 0
+        orf = find_orf(base) if nucleotides else None
+        n_orf = orf['codons'] if orf else 0
+        long_enough = n_orf >= MIN_CODING_CODONS
+        likely = n_orf >= LIKELY_CODING_CODONS
+        if orf:
+            note = ("" if likely else
+                    f" - this long a reading frame also occurs by chance in non-coding RNA (under {LIKELY_CODING_CODONS} codons)"
+                    if long_enough else f" - too short for a protein-coding region (under {MIN_CODING_CODONS} codons)")
+            print(fmttxt([f"Longest open reading frame (ATG to stop): {orf['codons']:,} codons, "
+                          f"nucleotides {orf['start'] + 1:,} to {orf['end']:,}{note}"],
+                         [''], ['cyan' if likely else 'yellow']))
+        elif nucleotides:
+            print(fmttxt(["No open reading frame (ATG to stop) in this text."], [''], ['cyan']))
+        default = 'o' if likely else '0'
+        fr = safe_input(fmttxt(["Reading frame (characters to skip at the start)",
+                                f"[0, 1 or 2; o = the coding region found above; default {default}]: "],
+                               ['bold', ''], ['yellow', 'cyan']) + ' ').strip().lower() or default
+        if fr == 'o':
+            if not long_enough:
+                print(fmttxt(["There is no coding region to read: this does not look like a protein-coding "
+                              "transcript. Choose a reading frame (0, 1 or 2) to read it as codons anyway."],
+                             ['bold'], ['red']))
+                return None
+            text, frame = base[orf['start']:orf['end']], 0
+            orf_note = {'start': orf['start'], 'end': orf['end'], 'codons': orf['codons']}
+        else:
+            frame = int(fr) if fr in ('0', '1', '2') else 0
     elif choice == 4:
         alphabet, frame, text = amino_acid(), 0, base
     elif choice == 5:
@@ -516,6 +543,8 @@ def _choose_reading(data):
     internal, reading = _read_text_as(text, alphabet, frame=frame)
     if internal is None:
         return None
+    if orf_note:
+        reading['orf'] = orf_note
     if choice == 3:        # read as codons, then translate: the analysis is over amino acids
         projection = codon_to_amino_acid()
         internal = projection.apply(internal)
@@ -526,6 +555,9 @@ def _choose_reading(data):
     data = dict(data)
     data.update({'txt': internal, 'txtb': '', 'is_rna': False,
                  'alphabet': alphabet, 'reading': reading})
+    if data.pop('reread', False):        # a saved session read another way: keep both, under different names
+        data['file_path'] = f"{data['file_path']}_{re.sub(r'[^A-Za-z0-9]+', '_', alphabet.name).strip('_').lower()}"
+        print(fmttxt([f"Saved as a separate session: {os.path.basename(data['file_path'])}.json"], [''], ['cyan']))
     return data
 
 
@@ -655,7 +687,18 @@ def choose_enst(datadir='', save_at_parent=True):
             if matches:
                 cached_path = matches[0]
                 print(fmttxt([f"Loading cached session:", cached_path], ['bold', ''], ['green', 'cyan']))
-                return _load_session_checked(cached_path)
+                saved = _load_session_checked(cached_path)
+                if saved is not None and not saved.get('alphabet') and saved.get('txt'):
+                    # the saved session reads the transcript as nucleotides; a coding gene may be wanted as codons
+                    again = safe_input(fmttxt(["This session reads the transcript as nucleotides. Use it as it is, or "
+                                               "read the sequence again (as codons, for example)?",
+                                               "[1: use it (default), 2: read it again, saved as a separate session]: "],
+                                              ['bold', ''], ['yellow', 'cyan']) + ' ').strip()
+                    if again == '2':
+                        return {'file_path': saved['file_path'], 'txt': saved['txt'], 'txtb': saved['txt'],
+                                'is_rna': saved.get('is_rna', False), 'source': 'ensembl',
+                                'enst': saved.get('enst', base_id), 'dir': saved.get('dir', ''), 'reread': True}
+                return saved
         try:
             tid, label, seq = fetch_enst_cdna(enst)
             txt = sub('[^a-z]+', '', seq.lower())
