@@ -455,6 +455,90 @@ class WildcardMotifTests(unittest.TestCase):
         text, files = self.run_extensions(self.txt, ["....."])
         self.assertEqual((text, files), ("", []))
 
+    def drive(self, fn, answers):
+        import contextlib
+        import re as _re
+        import rna_lexis.menu as M
+        it = iter(answers)
+        saved = M.safe_input
+        M.safe_input = lambda prompt="": next(it, "")
+        try:
+            with contextlib.redirect_stdout(io.StringIO()) as out:
+                fn()
+        finally:
+            M.safe_input = saved
+        return _re.sub(r"\x1b\[[0-9;]*m", "", out.getvalue())
+
+    def test_print_core_aligns_the_xmotifs_that_hold_the_wildcard_pattern(self):
+        import rna_lexis.menu as M
+        a = self.a
+        txt = a.encode("ab" + "youtake" + "cd" + "abyoumakecd" + "zzyoufakeq" + "x" * 20 + "abyoutakecd")
+        xm = [a.encode(x) for x in ["abyoutakecd", "abyoumakecd", "zzyoufakeq", "nothere", "youbake"]]
+        out = self.drive(lambda: M.print_core_input(txt, {"xmotifs": xm}, 4, a), ["you.ake"])
+        lines = [l for l in out.splitlines() if l.strip()]
+        self.assertEqual(len(lines), 4, lines)                                     # not 'nothere'
+        self.assertEqual(sorted(l.split()[1] for l in lines),
+                         ["abyoumakecd", "abyoutakecd", "youbake", "zzyoufakeq"])
+        # the pattern lines up: 'you' begins in the same column for every entry
+        cols = {l.index("you") for l in lines}
+        self.assertEqual(len(cols), 1, lines)
+        self.assertIn("     2 abyoutakecd", out)                                    # its count in the text
+
+    def test_the_neighbors_export_takes_a_wildcard(self):
+        import csv
+        import tempfile
+        import rna_lexis.menu as M
+        a = self.a
+        txt = a.encode("x" * 50 + "youtake" + "x" * 100 + "youmake" + "x" * 50)
+        strs = {"corelist": [a.encode("you")], "xmotifs": [a.encode("youtake")]}
+        with tempfile.TemporaryDirectory() as d:
+            target = os.path.join(d, "out.csv")
+            import rna_lexis.plots as PL
+            keep = PL.open_file_with_default_software
+            PL.open_file_with_default_software = lambda f: None
+            try:
+                text = self.drive(lambda: M.neighbors_condensed_export_input(os.path.join(d, "s"), txt, strs, a),
+                                  ["you.ake", "5", "2", "", target])
+            finally:
+                PL.open_file_with_default_software = keep
+            rows = list(csv.reader(open(target, encoding="utf-8")))
+        self.assertNotIn("not found", text)
+        self.assertEqual([r[:2] for r in rows[1:]], [["45", "61"], ["152", "168"]])   # both occurrences, 5 each side
+
+    def test_sequence_hits_takes_wildcards_and_does_not_mark_them(self):
+        import tempfile
+        import rna_lexis.menu as M
+        import rna_lexis.plots as PL
+        a = self.a
+        txt = a.encode("ab" + "youtake" + "cd" + "yoztake" + "ef" + "youmake")
+        got = {}
+        saved = (M.plot_sequence_hits, M._prompt_save)
+        M.plot_sequence_hits = lambda data, n, **k: got.update(data=data)
+        M._prompt_save = lambda **k: ("", 1)
+        try:
+            with tempfile.TemporaryDirectory() as d:
+                self.drive(lambda: M.sequence_hits_input(os.path.join(d, "s"), txt, a),
+                           ["you.ake", "", "6", "", "", "", ""])
+        finally:
+            M.plot_sequence_hits, M._prompt_save = saved
+        d0 = got["data"][0]
+        self.assertEqual((d0["L"], d0["exact"]), (7, [2, 20]))
+        self.assertEqual([(p, dist) for p, _, dist in d0["approx"]], [(11, 1)])      # yoz: one real difference
+        with tempfile.TemporaryDirectory() as d:
+            f = os.path.join(d, "d.html")
+            PL.plot_sequence_hits_detailed(got["data"], txt, 0, len(txt), file=f, alphabet=a)
+            html = open(f, encoding="utf-8").read()
+        import re as _re
+        self.assertEqual(_re.findall(r'color:red;font-weight:bold">([A-Z])</span>', html), ["Z"])   # not the slot's letters
+
+    def test_the_spacing_test_takes_a_wildcard(self):
+        import rna_lexis.menu as M
+        txt = self.a.encode(("youtake" + "x" * 13 + "youmake" + "x" * 13) * 6 + "q")
+        out = self.drive(lambda: M.spacing_test_input(txt, self.a), ["you.ake", ""])
+        self.assertIn("Spacing analysis for 'you.ake'", out)
+        self.assertIn("Occurrences (m)        : 12", out)
+        self.assertIn("Significant periodic spacing at T = 20", out)
+
     def test_the_arc_plot_takes_a_wildcard_seed(self):
         import contextlib
         import rna_lexis.menu as M

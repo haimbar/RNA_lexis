@@ -396,7 +396,8 @@ def print_core(txt, core, xm, alphabet=None):
 
     Args:
         txt:  Source text (used to count occurrences of each xmotif).
-        core: Core sequence to align around (case-insensitive).
+        core: Core sequence to align around (case-insensitive).  A ``.`` in it is any one unit,
+              so the xmotifs that hold ``you.ake`` are aligned at ``youtake``, ``youmake``, ...
         xm:   List of extended motif strings to filter and align.
         alphabet: Optional :class:`rna_lexis.alphabet.Alphabet`.  When given,
               the strings are internal strings; each xmotif is shown as its
@@ -410,10 +411,13 @@ def print_core(txt, core, xm, alphabet=None):
     txt = txt.lower()
     xmmatch = dict()
     maxLeft = 0
+    # a "." in the core is any one unit (unless "." is itself a symbol of the alphabet), so it is searched as a pattern
+    wild = "." in core and not (alphabet is not None and "." in alphabet.chars)
     for i in range(len(xm)):
         xm[i] = xm[i].lower()
-        if core in xm[i]:
-            xmmatch[xm[i]] = find_all_matches(core, xm[i])[0]
+        hits = find_all_matches(core, xm[i]) if wild else None
+        if (hits if wild else core in xm[i]):
+            xmmatch[xm[i]] = hits[0] if wild else find_all_matches(core, xm[i])[0]
             maxLeft = max(maxLeft, xmmatch[xm[i]])
     if alphabet is not None:
         cell = alphabet.label_width + len(alphabet.sep)

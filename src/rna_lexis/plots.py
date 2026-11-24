@@ -1413,7 +1413,7 @@ def plot_sequence_hits(seq_data, txt_len, title='', file='', scale=1,
             fig.add_shape(type='rect', x0=x0c, x1=x1c, y0=lane_y0, y1=lane_y1,
                           fillcolor=fill, line=dict(color=line_col, width=1))
             for k, (sc, mc) in enumerate(zip(seq, matched)):
-                if sc != mc:
+                if sc != mc and sc != '.':                         # a wildcard cannot differ
                     xm = x0c + span * (k + 0.5) / L
                     fig.add_shape(type='line', x0=xm, x1=xm,
                                   y0=lane_mid, y1=lane_y1,
@@ -1550,7 +1550,7 @@ def plot_sequence_hits_detailed(seq_data, txt, start, end, title='', file='', al
                 abs_k = pos + k - start
                 if 0 <= abs_k < n:
                     bg[abs_k].add(i)
-                    if seq[k] != matched[k]:
+                    if seq[k] != matched[k] and seq[k] != '.':       # a wildcard cannot differ
                         chars[abs_k] = unit_mut(matched[k])
                         is_mut[abs_k] = True
 

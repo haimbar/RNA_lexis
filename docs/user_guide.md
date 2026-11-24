@@ -126,7 +126,7 @@ An alphabet is the full set of symbols, whether or not a given text uses them. A
 
 ### Typing queries
 
-Queries (a motif to search for, an anchor, a seed) are read the same way as the text. For codons, type nucleotides: `atgaaagct` is the three units `atg aaa gct`. `.` stands for any one unit where the prompt says it is allowed, so `atgaaa.` is two codons followed by any codon. Symbols that are not in the alphabet are dropped with a warning.
+Queries (a motif to search for, an anchor, a seed) are read the same way as the text. For codons, type nucleotides: `atgaaagct` is the three units `atg aaa gct`. `.` stands for any one unit where the prompt says it is allowed, so `atgaaa.` is two codons followed by any codon; for codons, `...` is also one codon, as it is in nucleotide text, so `atg ... aaa` is `atg`, any codon, `aaa`. Wildcards are accepted by *Find all matches*, *Search with mutations*, *Motif extensions*, the self-similarity arc plot, the unit profile (*Logo*), *Print core*, *Export neighbors to CSV* (the condensed export), *Sequence hits* and the *Motif spacing / periodicity test*; the prompt says so. A wildcard is never counted as a mutation or marked as a difference, though it counts toward the length that sets the number of mutations allowed. The other prompts (the core neighbors plots, *Mutation family*, *Gapped motif*) read `.` as an unknown symbol and drop it. In text with several records (a multi-record FASTA), a wildcard can match across the boundary between two records. Symbols that are not in the alphabet are dropped with a warning.
 
 ### Unknown symbols
 

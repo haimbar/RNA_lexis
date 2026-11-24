@@ -397,6 +397,13 @@ def _query_to_internal(raw, alphabet, wildcard=False):
     return '.'.join(out)
 
 
+def _wildcard_hint(alphabet):
+    """What to tell the user at a motif prompt that accepts ``.``: ``" (. is any one letter)"`` and so on."""
+    if alphabet is None:
+        return " (. is any one letter)"
+    return " (. is any one unit; ... is one codon)" if alphabet.width > 1 else " (. is any one unit)"
+
+
 def _show(internal, alphabet):
     """An internal string as text for the screen (unchanged without an alphabet)."""
     return internal if alphabet is None else alphabet.show(internal)
@@ -1265,9 +1272,9 @@ def neighbors_condensed_export_input(fn, txt, strs, alphabet=None):
         txt:  Full source sequence.
         strs: Session strings dict with keys 'corelist' and 'xmotifs'.
     """
-    seq = safe_input(fmttxt(["Enter the sequence to analyze: "], ['bold'], ['yellow']))
-    seq = _query_to_internal(seq, alphabet)
-    if len(find_all_matches(seq, txt)) < 1:
+    seq = safe_input(fmttxt([f"Enter the sequence to analyze{_wildcard_hint(alphabet)}: "], ['bold'], ['yellow']))
+    seq = _query_to_internal(seq, alphabet, wildcard=True)
+    if not seq.replace('.', '') or len(find_all_matches(seq, txt)) < 1:
         print(fmttxt(["\nSequence not found."], ['bold'], ['red']))
         safe_input(fmttxt(["Press any key to continue"], [''], ['white']))
         return
@@ -1626,13 +1633,13 @@ def print_core_input(txt, strs, minlen=4, alphabet=None):
         minlen: Minimum query length accepted (default 4).
     """
     while True:
-        s0 = safe_input(fmttxt(["Enter the sequence to analyze: "],
+        s0 = safe_input(fmttxt([f"Enter the sequence to analyze{_wildcard_hint(alphabet)}: "],
                       ['bold'], ["yellow"]))
-        s0 = _query_to_internal(s0.lower(), alphabet)
-        if len(s0) >= minlen:
+        s0 = _query_to_internal(s0.lower(), alphabet, wildcard=True)
+        if len(s0) >= minlen and s0.replace('.', ''):
             break
         else:
-            print(fmttxt(["Sequence too short"], ['bold'], ['red']))
+            print(fmttxt(["Sequence too short (wildcards do not count as letters to search for)"], ['bold'], ['red']))
             safe_input("Press any key to continue.")
     commoncore = print_core(txt, s0, strs["xmotifs"], alphabet=alphabet)
     if len(commoncore) > 1:
@@ -2554,10 +2561,10 @@ def sequence_hits_input(fn, txt, alphabet=None):
     """
     seqs = []
     for i in range(3):
-        prompt = fmttxt([f'Enter sequence {i+1}/3', '[blank to stop]: '],
+        prompt = fmttxt([f'Enter sequence {i+1}/3{_wildcard_hint(alphabet)}', '[blank to stop]: '],
                         ['bold', ''], ['yellow', 'cyan'])
-        seq = _query_to_internal(safe_input(prompt + ' ').strip().lower(), alphabet)
-        if not seq:
+        seq = _query_to_internal(safe_input(prompt + ' ').strip().lower(), alphabet, wildcard=True)
+        if not seq.replace('.', ''):
             break
         seqs.append(seq)
 
@@ -2833,9 +2840,9 @@ def parsedata(txt, defvals, alphabet=None):
 def spacing_test_input(txt, alphabet=None):
     """Test whether occurrences of a motif are more regularly spaced than chance."""
     seq = _query_to_internal(safe_input(fmttxt(
-        ["Enter the sequence to test for periodic spacing: "], ['bold'], ['yellow']
-    )).strip().lower(), alphabet)
-    if not seq:
+        [f"Enter the sequence to test for periodic spacing{_wildcard_hint(alphabet)}: "], ['bold'], ['yellow']
+    )).strip().lower(), alphabet, wildcard=True)
+    if not seq.replace('.', ''):
         return
     shown = _show(seq, alphabet)
     unit = _unit(alphabet)
