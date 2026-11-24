@@ -4,7 +4,7 @@ You test by hand; this plan says what to install, what to try, what you should s
 keep so that I can reproduce anything you report. Tick the boxes as you go. Nothing here merges to
 `main`; the branch stays as it is until you say you are done.
 
-Commit under test: `0e2e328a781b032d5b700179c2c8ab7ee94f1e1f` (change the hash below if we fix
+Commit under test: `9e67d7928c09182f88808b082380c7fe797130c9` (change the hash below if we fix
 something and you reinstall).
 
 ---
@@ -17,7 +17,7 @@ A separate environment keeps this version away from any RNA_lexis you already us
 python3 -m venv ~/venvs/lexis-branch
 source ~/venvs/lexis-branch/bin/activate
 python -m pip install --upgrade pip
-pip install "git+https://github.com/haimbar/RNA_lexis.git@0e2e328a781b032d5b700179c2c8ab7ee94f1e1f"
+pip install "git+https://github.com/haimbar/RNA_lexis.git@9e67d7928c09182f88808b082380c7fe797130c9"
 ```
 
 Pinning the hash, not the branch name, means the install is exactly what I tested and can be
@@ -222,7 +222,7 @@ random text (documented in the README and CHANGELOG; unchanged on purpose).
 
 ```
 ID:            T52-03
-Date / commit: 2026-.. / 0e2e328
+Date / commit: 2026-.. / 9e67d79
 Input:         inputs/antony.txt  (sha256 ...)
 Reading:       Latin letters           (menu option 5)
 Path:          Plots > 4 (unit profile)
