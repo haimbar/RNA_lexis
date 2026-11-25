@@ -601,10 +601,10 @@ class ArcRangeTests(unittest.TestCase):
         got["out"] = out.getvalue()
         return got
 
-    def test_without_a_range_every_occurrence_is_used_and_the_axis_is_as_before(self):
+    def test_without_a_range_every_occurrence_is_used_and_the_axis_is_the_whole_text(self):
         got = self.run_arcs(["abcdef", "", "", "", ""])
         self.assertEqual(got["pos"], [100, 160, 220, 280, 340])
-        self.assertIsNone(got["xrange"])
+        self.assertEqual(got["xrange"], (0, len(self.txt)))
 
     def test_a_range_limits_the_occurrences_and_keeps_positions_in_the_whole_text(self):
         got = self.run_arcs(["abcdef", "150, 300", "", "", ""])
@@ -617,21 +617,22 @@ class ArcRangeTests(unittest.TestCase):
         self.assertNotIn("pos", got)
         self.assertIn("found 2 time(s) between 150 and 230", got["out"])
 
-    def test_the_axis_is_the_range_when_one_is_given(self):
+    def test_the_menu_passes_the_whole_text_as_the_axis_and_the_plot_uses_it(self):
         got = self.run_arcs(["abcdef", "", "", "", ""])
+        self.assertEqual(got["xrange"], (0, len(self.txt)))
         import rna_lexis.plots as PL
         keep = PL.open_file_with_default_software
         PL.open_file_with_default_software = lambda f: None
         try:
             PL.plot_self_similarity_arcs("abcdef", got["results"], got["pos"], arcs="consecutive")
-            default = plt.gca().get_xlim()
-            PL.plot_self_similarity_arcs("abcdef", got["results"], got["pos"], arcs="consecutive", xrange=(0, 600))
+            default = plt.gca().get_xlim()                                  # the library's own default: tight around the occurrences
+            PL.plot_self_similarity_arcs("abcdef", got["results"], got["pos"], arcs="consecutive", xrange=got["xrange"])
             chosen = plt.gca().get_xlim()
         finally:
             PL.open_file_with_default_software = keep
             plt.close("all")
-        self.assertEqual(default, (100 - 150, 340 + 150))                    # starts at the first occurrence, as before
-        self.assertEqual(chosen, (0, 600))
+        self.assertEqual(default, (100 - 150, 340 + 150))
+        self.assertEqual(chosen, (0, len(self.txt)))
 
 
 class LogoTests(unittest.TestCase):

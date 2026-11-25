@@ -2057,14 +2057,15 @@ def self_similarity_arcs_input(txt, file_path='', alphabet=None):
         return
 
     # The stretch of the text to use: only its occurrences, extensions and spacing are looked at, and the plot's
-    # axis is that stretch.  Without one the axis is as wide as the occurrences are.
-    xrange = _ask_range(len(txt), alphabet)
-    offset = xrange[0] if xrange else 0
-    work = txt[xrange[0]:xrange[1]] if xrange else txt
+    # axis is that stretch.  The default is all of the text, so the axis always starts at 0 and ends with the text.
+    asked = _ask_range(len(txt), alphabet)
+    xrange = asked or (0, len(txt))
+    offset = xrange[0]
+    work = txt[xrange[0]:xrange[1]]
     positions_all = find_all_matches(seq, work, ret='pos')
     if len(positions_all) < 3:
         print(fmttxt([f'Seed "{_show(seq, alphabet)}" found {len(positions_all)} time(s)'
-                      + (f' between {xrange[0]} and {xrange[1]}' if xrange else '') + ' — need ≥ 3.',
+                      + (f' between {xrange[0]} and {xrange[1]}' if asked else '') + ' — need ≥ 3.',
                       'Fewer than 3 occurrences give at most one gap, which the '
                       'spacing-significance test below cannot evaluate.'],
                      ['bold', ''], ['red', 'yellow']))
