@@ -1647,7 +1647,7 @@ _HOP_ARC_DEFAULT_COLOR = "#888888"  # hop >= 5 (beyond the 4-bucket legend)
 
 def plot_self_similarity_arcs(seed, results, positions, unit=None,
                                spacing_stats=None, arcs='consecutive',
-                               label_threshold=15, file='', scale=1, alphabet=None):
+                               label_threshold=15, file='', scale=1, alphabet=None, xrange=None):
     """Semicircular arc diagram of pairwise Hamming-bounded extensions.
 
     Visualises the output of find_longest_extensions() for a single seed
@@ -1702,6 +1702,10 @@ def plot_self_similarity_arcs(seed, results, positions, unit=None,
                    string shown as the alphabet's labels, and "nt" in the axis,
                    legend and title text becomes the alphabet's unit name (for
                    example "codons").
+        xrange:    Optional ``(start, end)`` for the x-axis, in the units of ``positions``.  By default the axis
+                   runs from 150 before the first occurrence to 150 after the last, so a seed that first occurs far
+                   into the text does not start at 0; give ``(0, len(text))`` to see the whole text, or a stretch to
+                   look at one region.
     """
     show, show_marked, uname, sep = _display(alphabet)
     if not results or len(positions) < 2:
@@ -1788,7 +1792,7 @@ def plot_self_similarity_arcs(seed, results, positions, unit=None,
               loc="upper left", bbox_to_anchor=(1.01, 1.02), borderaxespad=0)
 
     ax.axhline(0, color="#cccccc", lw=0.8, zorder=1)
-    ax.set_xlim(min(positions) - 150, max(positions) + 150)
+    ax.set_xlim(*(xrange if xrange else (min(positions) - 150, max(positions) + 150)))
     ax.set_ylim(-55, max((r['pos2'] - r['pos1']) / 2 for r in drawn) * 1.25)
     ax.set_xlabel(f"Position ({uname})", fontsize=11)
     ax.set_ylabel(f"Arc height = spacing / 2 ({uname})", fontsize=10)

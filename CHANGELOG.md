@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Added
+
+- **A range for the self-similarity arc plot.** The x-axis ran from 150 before the first occurrence of the seed to 150 after the
+  last, so a seed that first occurs deep into a text (`theyoungman`, first at 8,751 of 15,984) started there while one near the
+  beginning started at 0. The menu now asks for a range (`start, end`, blank for as before); only the occurrences, extensions and
+  spacing test inside it are used and the axis is exactly that range (`0, N` shows the whole text).
+  `plot_self_similarity_arcs(..., xrange=(start, end))`. Tests 448 to 453.
+
 ### Fixed
 
 - **Wildcards in the unit profile and the arc plot for letters and codons.** The motif prompt of the unit profile (*Logo*, other

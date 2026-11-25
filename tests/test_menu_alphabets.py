@@ -423,7 +423,7 @@ class MenuOverCodonsTests(MenuCase):
 
     def test_arcs(self):
         out, files = self.run_fn(lambda: M.self_similarity_arcs_input(self.txt, self.fp, A),
-                                 [CORE_NT[:12], "", "", "arcs", ""])
+                                 [CORE_NT[:12], "", "", "", "arcs", ""])      # seed, range, rate, arc mode, file
         self.check(out, files)
         self.assertIn("arcs.png", files)
         self.assertEqual(plt.gca().get_xlabel(), "Position (codons)")

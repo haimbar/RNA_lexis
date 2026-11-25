@@ -397,6 +397,30 @@ def _query_to_internal(raw, alphabet, wildcard=False):
     return '.'.join(out)
 
 
+def _ask_range(n, alphabet):
+    """Ask for a stretch of the text, ``(start, end)`` in units, or None for all of it.
+
+    Answers: blank (all), or two whole numbers ``start, end`` with ``0 <= start < end``; an ``end`` past the
+    end of the text is the end of the text.  Anything else says so and gives None.
+    """
+    raw = safe_input(fmttxt([f"Range of the text to use ({_unit(alphabet)} from 0 to {n}; leave blank for all, or use 'start, end')",
+                             "[Default: all]"], ['bold', ''], ['yellow', 'cyan']) + " ").strip()
+    if not raw:
+        return None
+    try:
+        parts = [float(x) for x in raw.replace(';', ',').split(',')]
+        if len(parts) != 2 or any(not math.isfinite(x) or x != int(x) for x in parts):
+            raise ValueError
+        start, end = int(parts[0]), min(int(parts[1]), n)
+        if start < 0 or start >= end:
+            raise ValueError
+    except (ValueError, OverflowError):
+        print(fmttxt([f"'{raw[:40]}' is not a range: use two whole numbers 'start, end' with 0 <= start < end. "
+                      "Using all of the text."], ['bold'], ['red']))
+        return None
+    return (start, end)
+
+
 def _wildcard_hint(alphabet):
     """What to tell the user at a motif prompt that accepts ``.``: ``" (. is any one letter)"`` and so on."""
     if alphabet is None:
@@ -2032,9 +2056,15 @@ def self_similarity_arcs_input(txt, file_path='', alphabet=None):
     if not seq.replace('.', ''):
         return
 
-    positions_all = find_all_matches(seq, txt, ret='pos')
+    # The stretch of the text to use: only its occurrences, extensions and spacing are looked at, and the plot's
+    # axis is that stretch.  Without one the axis is as wide as the occurrences are.
+    xrange = _ask_range(len(txt), alphabet)
+    offset = xrange[0] if xrange else 0
+    work = txt[xrange[0]:xrange[1]] if xrange else txt
+    positions_all = find_all_matches(seq, work, ret='pos')
     if len(positions_all) < 3:
-        print(fmttxt([f'Seed "{_show(seq, alphabet)}" found {len(positions_all)} time(s) — need ≥ 3.',
+        print(fmttxt([f'Seed "{_show(seq, alphabet)}" found {len(positions_all)} time(s)'
+                      + (f' between {xrange[0]} and {xrange[1]}' if xrange else '') + ' — need ≥ 3.',
                       'Fewer than 3 occurrences give at most one gap, which the '
                       'spacing-significance test below cannot evaluate.'],
                      ['bold', ''], ['red', 'yellow']))
@@ -2049,7 +2079,10 @@ def self_similarity_arcs_input(txt, file_path='', alphabet=None):
 
     print(fmttxt([f'Computing extensions for {len(positions_all)} occurrence(s)...'],
                  [''], ['cyan']))
-    results = find_longest_extensions(seq, txt, mutr=mutr)
+    results = find_longest_extensions(seq, work, mutr=mutr)
+    for r in results:                                    # back to positions in the whole text
+        r['pos1'] += offset
+        r['pos2'] += offset
     positions = sorted(set(r['pos1'] for r in results) | set(r['pos2'] for r in results))
     print(fmttxt([f'{len(results)} pair(s) among {len(positions)} occurrence(s).'],
                  [''], ['white']))
@@ -2057,7 +2090,7 @@ def self_similarity_arcs_input(txt, file_path='', alphabet=None):
     # Same test as "Motif spacing / periodicity test" (Sequence operations).
     # The arc diagram itself doesn't require regular spacing to draw or
     # interpret -- shown here as reference context, not a gate on the plot.
-    spacing_stats = spacing_periodicity_test(positions_all, len(txt))
+    spacing_stats = spacing_periodicity_test(positions_all, len(work))
 
     # Full pairwise (n*(n-1)/2 arcs) becomes illegible fast as occurrences
     # grow -- default to consecutive-neighbor arcs only (n-1), with all
@@ -2070,7 +2103,7 @@ def self_similarity_arcs_input(txt, file_path='', alphabet=None):
     fn_out, scale = _prompt_save(plotly=False,
                                   session_dir=os.path.dirname(os.path.abspath(file_path)) if file_path else '')
     _spawn_plot(plot_self_similarity_arcs, seq, results, positions,
-                spacing_stats=spacing_stats, arcs=arcs, file=fn_out, scale=scale, alphabet=alphabet)
+                spacing_stats=spacing_stats, arcs=arcs, file=fn_out, scale=scale, alphabet=alphabet, xrange=xrange)
 
 
 def shared_motif_diagram_input(txt, strs, defvals, file_path='', alphabet=None, reading=None):

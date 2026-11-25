@@ -557,6 +557,83 @@ class WildcardMotifTests(unittest.TestCase):
         self.assertEqual(len(got["pos"]), 28)                                   # every occurrence of take, make, fake, bake
 
 
+class ArcRangeTests(unittest.TestCase):
+    """The self-similarity arc plot can be limited to a stretch of the text, and its axis is that stretch."""
+
+    def setUp(self):
+        self.a = latin()
+        self.txt = self.a.encode("x" * 100 + "".join("abcdef" + "x" * 54 for _ in range(5)) + "x" * 100)   # abcdef at 100, 160, ..., 340
+
+    def ask(self, answer, n=1000):
+        import contextlib
+        import rna_lexis.menu as M
+        saved = M.safe_input
+        M.safe_input = lambda prompt="": answer
+        try:
+            with contextlib.redirect_stdout(io.StringIO()) as out:
+                return M._ask_range(n, self.a), out.getvalue()
+        finally:
+            M.safe_input = saved
+
+    def test_the_range_answers(self):
+        self.assertEqual(self.ask("")[0], None)
+        self.assertEqual(self.ask("0, 300")[0], (0, 300))
+        self.assertEqual(self.ask(" 150;2000 ")[0], (150, 1000))            # past the end is the end
+        for bad in ("5", "a, b", "300, 100", "-5, 100", "10, 10", "1.5, 20", "nan, 5", "1, 2, 3"):
+            got, text = self.ask(bad)
+            self.assertIsNone(got, bad)
+            self.assertIn("is not a range", text)
+
+    def run_arcs(self, answers):
+        import contextlib
+        import rna_lexis.menu as M
+        it = iter(answers)
+        got = {}
+        saved = (M.safe_input, M._spawn_plot, M._prompt_save)
+        M.safe_input = lambda prompt="": next(it, "")
+        M._spawn_plot = lambda fn, seed, results, positions, **k: got.update(results=results, pos=positions, **k)
+        M._prompt_save = lambda **k: ("", 1)
+        try:
+            with contextlib.redirect_stdout(io.StringIO()) as out:
+                M.self_similarity_arcs_input(self.txt, "", self.a)
+        finally:
+            M.safe_input, M._spawn_plot, M._prompt_save = saved
+        got["out"] = out.getvalue()
+        return got
+
+    def test_without_a_range_every_occurrence_is_used_and_the_axis_is_as_before(self):
+        got = self.run_arcs(["abcdef", "", "", "", ""])
+        self.assertEqual(got["pos"], [100, 160, 220, 280, 340])
+        self.assertIsNone(got["xrange"])
+
+    def test_a_range_limits_the_occurrences_and_keeps_positions_in_the_whole_text(self):
+        got = self.run_arcs(["abcdef", "150, 300", "", "", ""])
+        self.assertEqual(got["pos"], [160, 220, 280])
+        self.assertEqual(got["xrange"], (150, 300))
+        self.assertEqual(sorted((r["pos1"], r["pos2"]) for r in got["results"]), [(160, 220), (160, 280), (220, 280)])
+
+    def test_too_few_occurrences_in_the_range_say_so(self):
+        got = self.run_arcs(["abcdef", "150, 230", "", "", ""])
+        self.assertNotIn("pos", got)
+        self.assertIn("found 2 time(s) between 150 and 230", got["out"])
+
+    def test_the_axis_is_the_range_when_one_is_given(self):
+        got = self.run_arcs(["abcdef", "", "", "", ""])
+        import rna_lexis.plots as PL
+        keep = PL.open_file_with_default_software
+        PL.open_file_with_default_software = lambda f: None
+        try:
+            PL.plot_self_similarity_arcs("abcdef", got["results"], got["pos"], arcs="consecutive")
+            default = plt.gca().get_xlim()
+            PL.plot_self_similarity_arcs("abcdef", got["results"], got["pos"], arcs="consecutive", xrange=(0, 600))
+            chosen = plt.gca().get_xlim()
+        finally:
+            PL.open_file_with_default_software = keep
+            plt.close("all")
+        self.assertEqual(default, (100 - 150, 340 + 150))                    # starts at the first occurrence, as before
+        self.assertEqual(chosen, (0, 600))
+
+
 class LogoTests(unittest.TestCase):
     """The letter logo: what it draws, and what it must not."""
 

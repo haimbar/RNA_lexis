@@ -422,6 +422,7 @@ Visualises pairwise Hamming-bounded extensions among every exact occurrence of a
 | Prompt | Default | Notes |
 |---|:---:|---|
 | Seed sequence | | Must occur at least **3** times in the text; blank to cancel |
+| Range of the text to use | all | Blank, or `start, end` (in letters, codons, ... from 0). Only the occurrences, extensions and spacing test inside the range are used, and the x-axis is exactly that range. With no range the axis runs from 150 before the first occurrence to 150 after the last, so a seed that first occurs far into the text starts there, not at 0; give `0, N` (N = the length of the text, shown in the prompt) to see it from the start |
 | Mutation rate: 1 per N letters | 6 | Controls how divergent the flanking context may be during extension (same meaning as in *Motif extensions*) |
 | Consecutive-neighbor arcs only, or all pairwise arcs? | Consecutive | See "Decluttering", below |
 | Output file | *(screen only)* | Leave blank to display interactively |
